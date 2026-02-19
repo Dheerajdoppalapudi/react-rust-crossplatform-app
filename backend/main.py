@@ -1,8 +1,11 @@
 import os
 import uuid
 from fastapi import FastAPI, UploadFile, File, Form
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
+
+from services.excel_formatter import format_excel
 
 app = FastAPI(title="Falcon API")
 
@@ -15,7 +18,9 @@ app.add_middleware(
 )
 
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
+FORMATTED_DIR = os.path.join(os.path.dirname(__file__), "formatted")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+os.makedirs(FORMATTED_DIR, exist_ok=True)
 
 
 @app.get("/api/health")
@@ -77,3 +82,39 @@ async def chat_with_files(
         reply = message
 
     return {"reply": reply, "files": saved}
+
+
+@app.post("/api/excel-formatting")
+async def excel_formatting(file: UploadFile = File(...)):
+    if not file.filename.endswith((".xlsx", ".xls")):
+        return {"error": "Only Excel files (.xlsx, .xls) are accepted"}
+
+    # Save uploaded file
+    ext = os.path.splitext(file.filename)[1]
+    upload_name = f"{uuid.uuid4().hex}{ext}"
+    upload_path = os.path.join(UPLOAD_DIR, upload_name)
+    content = await file.read()
+    with open(upload_path, "wb") as f:
+        f.write(content)
+
+    # Format and save to formatted dir
+    original_stem = os.path.splitext(file.filename)[0]
+    output_name = f"{original_stem}_formatted_{uuid.uuid4().hex[:8]}{ext}"
+    output_path = os.path.join(FORMATTED_DIR, output_name)
+
+    try:
+        result = format_excel(upload_path, output_path)
+    except Exception as e:
+        return {"error": f"Formatting failed: {str(e)}"}
+
+    return FileResponse(
+        path=output_path,
+        filename=output_name,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "X-Sheets-Processed": str(result["sheets_processed"]),
+            "X-Total-Rows": str(result["total_rows"]),
+            "X-LLM-Enhanced": str(result["llm_enhanced"]),
+            "X-Theme-Applied": result.get("theme_applied") or "rule-based-only",
+        },
+    )

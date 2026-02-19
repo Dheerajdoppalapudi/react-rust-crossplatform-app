@@ -1,5 +1,6 @@
-import { Box, Typography } from '@mui/material'
+import { Box, Typography, Button } from '@mui/material'
 import InsertDriveFileOutlinedIcon from '@mui/icons-material/InsertDriveFileOutlined'
+import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined'
 
 const FileAttachment = ({ file }) => {
   const isImage = file.type?.startsWith('image/')
@@ -59,6 +60,7 @@ const FileAttachment = ({ file }) => {
 const ChatMessage = ({ message }) => {
   const isUser = message.role === 'user'
   const hasFiles = message.files && message.files.length > 0
+  const hasDownloads = message.downloads && message.downloads.length > 0
 
   return (
     <Box sx={{ display: 'flex', justifyContent: isUser ? 'flex-end' : 'flex-start' }}>
@@ -106,6 +108,36 @@ const ChatMessage = ({ message }) => {
             >
               {message.content}
             </Typography>
+          </Box>
+        )}
+
+        {/* Download buttons for formatted Excel files */}
+        {hasDownloads && (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            {message.downloads.map((dl, i) => (
+              <Button
+                key={i}
+                variant="outlined"
+                size="small"
+                startIcon={<FileDownloadOutlinedIcon />}
+                href={dl.url}
+                download={dl.filename}
+                sx={{
+                  textTransform: 'none',
+                  borderColor: '#001AFF',
+                  color: '#001AFF',
+                  borderRadius: '8px',
+                  justifyContent: 'flex-start',
+                  maxWidth: 320,
+                  '&:hover': {
+                    borderColor: '#0015cc',
+                    backgroundColor: 'rgba(0,26,255,0.04)',
+                  },
+                }}
+              >
+                {dl.filename}
+              </Button>
+            ))}
           </Box>
         )}
       </Box>

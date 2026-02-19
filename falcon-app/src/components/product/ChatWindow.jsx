@@ -20,6 +20,9 @@ const ChatWindow = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
+  const isExcelFile = (file) =>
+    file.name.endsWith('.xlsx') || file.name.endsWith('.xls')
+
   const handleSend = async (text, files = []) => {
     const fileData = files.map((f) => ({
       name: f.name,
@@ -33,8 +36,58 @@ const ChatWindow = () => {
     setLoading(true)
 
     try {
-      const res = await api.chatWithFiles(text, files)
-      const botMsg = { role: 'assistant', content: res.reply }
+      const excelFiles = files.filter(isExcelFile)
+      const otherFiles = files.filter((f) => !isExcelFile(f))
+
+      // If there are Excel files, send each to the excel-formatting endpoint
+      const excelResults = []
+      for (const file of excelFiles) {
+        const res = await api.excelFormatting(file)
+        if (res.error) {
+          excelResults.push({ error: res.error })
+        } else {
+          excelResults.push({
+            downloadUrl: res.downloadUrl,
+            filename: res.filename,
+            sheetsProcessed: res.sheetsProcessed,
+            totalRows: res.totalRows,
+            llmEnhanced: res.llmEnhanced === 'True',
+            themeApplied: res.themeApplied,
+          })
+        }
+      }
+
+      // Send remaining files + text to the regular chat endpoint
+      let chatReply = ''
+      if (text || otherFiles.length > 0) {
+        const res = await api.chatWithFiles(text, otherFiles)
+        chatReply = res.reply
+      }
+
+      // Build assistant message with download info
+      const contentParts = []
+      const downloads = []
+
+      for (let i = 0; i < excelResults.length; i++) {
+        const r = excelResults[i]
+        if (r.error) {
+          contentParts.push(`Failed to format ${excelFiles[i].name}: ${r.error}`)
+        } else {
+          const enhancedLabel = r.llmEnhanced ? `Theme: ${r.themeApplied}` : 'Rule-based formatting'
+          contentParts.push(
+            `Formatted ${r.filename} (${r.sheetsProcessed} sheet(s), ${r.totalRows} rows — ${enhancedLabel})`
+          )
+          downloads.push({ url: r.downloadUrl, filename: r.filename })
+        }
+      }
+
+      if (chatReply) contentParts.push(chatReply)
+
+      const botMsg = {
+        role: 'assistant',
+        content: contentParts.join('\n\n'),
+        downloads,
+      }
       setMessages((prev) => [...prev, botMsg])
     } catch {
       const botMsg = { role: 'assistant', content: 'Sorry, could not reach the server.' }
