@@ -1,4 +1,5 @@
 import os
+import json
 import uuid
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.responses import FileResponse
@@ -6,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
 
 from services.excel_formatter import format_excel
+from services.excalidraw.excalidraw_enhancer import enhance
 
 app = FastAPI(title="Falcon API")
 
@@ -31,6 +33,38 @@ def health_check():
 @app.post("/api/chat")
 async def chat(message: str = Form("")):
     return {"reply": message}
+
+
+@app.post("/api/image_generation")
+async def image_generation(message: str = Form("")):
+    excalidraw_dir = os.path.join(os.path.dirname(__file__), "services", "excalidraw")
+
+    # 1. Load prompt template and inject description
+    template_path = os.path.join(excalidraw_dir, "prompt_template.md")
+    with open(template_path) as f:
+        prompt = f.read().replace("{{DIAGRAM_DESCRIPTION}}", message)
+
+    # 2. --- API CALL PLACEHOLDER ---
+    # Send `prompt` to the LLM and assign the returned slim JSON string to `slim_json_str`
+    # Example: slim_json_str = await call_llm(prompt)
+    slim_json_str = None  # TODO: replace with actual API call
+
+    if not slim_json_str:
+        return {"status": "api_not_implemented", "prompt": prompt}
+
+    # 3. Write slim JSON to sample_slim.json
+    slim = json.loads(slim_json_str)
+    slim_path = os.path.join(excalidraw_dir, "sample_slim.json")
+    with open(slim_path, "w") as f:
+        json.dump(slim, f, indent=2)
+
+    # 4. Enhance to full excalidraw format → sample_output.excalidraw
+    result = enhance(slim)
+    output_path = os.path.join(excalidraw_dir, "sample_output.excalidraw")
+    with open(output_path, "w") as f:
+        json.dump(result, f, indent=2)
+
+    return {"excalidraw": result, "elements_count": len(result["elements"])}
 
 
 @app.post("/api/upload")

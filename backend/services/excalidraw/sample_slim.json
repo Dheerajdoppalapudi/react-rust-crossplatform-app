@@ -1,0 +1,22 @@
+{
+"elements": [
+{ "type": "text", "x": 430, "y": 30, "text": "Request: My System → Web Server", "fontSize": 32 },
+{ "id": "client", "type": "rectangle", "x": 80, "y": 180, "width": 220, "height": 90, "label": "My System", "backgroundColor": "#a5d8ff", "roughness": 0 },
+{ "id": "net", "type": "cloud", "x": 360, "y": 150, "width": 220, "height": 140, "label": "Internet", "backgroundColor": "#a5d8ff", "roughness": 0 },
+{ "id": "dns", "type": "cylinder", "x": 650, "y": 120, "width": 160, "height": 90, "label": "DNS", "backgroundColor": "#d0bfff", "roughness": 0 },
+{ "id": "lb", "type": "rectangle", "x": 650, "y": 250, "width": 200, "height": 80, "label": "Load Balancer", "backgroundColor": "#ffec99", "roughness": 0 },
+{ "id": "app", "type": "rectangle", "x": 910, "y": 210, "width": 240, "height": 160, "label": "Web Server", "backgroundColor": "#b2f2bb", "strokeStyle": "dashed", "roughness": 0 },
+{ "id": "req", "type": "note", "x": 130, "y": 310, "width": 260, "height": 90, "label": "HTTP request\n(GET/POST)", "backgroundColor": "#ffec99", "roughness": 0 },
+{ "id": "resp", "type": "note", "x": 920, "y": 410, "width": 260, "height": 90, "label": "HTTP response\n(status + body)", "backgroundColor": "#ffec99", "roughness": 0 },
+{ "type": "arrow", "from": "client", "to": "dns", "label": "lookup", "elbowed": true },
+{ "type": "arrow", "from": "dns", "to": "client", "label": "IP", "elbowed": true },
+{ "type": "arrow", "from": "client", "to": "net", "label": "send", "elbowed": true },
+{ "type": "arrow", "from": "net", "to": "lb", "label": "route", "elbowed": true },
+{ "type": "arrow", "from": "lb", "to": "app", "label": "forward", "elbowed": true },
+{ "type": "arrow", "from": "app", "to": "lb", "label": "return", "elbowed": true },
+{ "type": "arrow", "from": "lb", "to": "net", "elbowed": true },
+{ "type": "arrow", "from": "net", "to": "client", "elbowed": true },
+{ "type": "line", "from": "client", "to": "req", "elbowed": true },
+{ "type": "line", "from": "app", "to": "resp", "elbowed": true }
+]
+}
