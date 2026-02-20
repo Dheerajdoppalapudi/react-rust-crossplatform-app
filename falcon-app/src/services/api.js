@@ -68,4 +68,14 @@ export const api = {
     })
     return res.json()
   },
+
+  imageGeneration: async (message) => {
+    const formData = new FormData()
+    formData.append('message', message)
+    const res = await fetch(`${API_BASE}/api/image_generation`, {
+      method: 'POST',
+      body: formData,
+    })
+    return res.json()
+  },
 }

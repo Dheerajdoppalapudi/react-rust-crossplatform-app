@@ -23,7 +23,7 @@ const ChatWindow = () => {
   const isExcelFile = (file) =>
     file.name.endsWith('.xlsx') || file.name.endsWith('.xls')
 
-  const handleSend = async (text, files = []) => {
+  const handleSend = async (text, files = [], mode = null) => {
     const fileData = files.map((f) => ({
       name: f.name,
       size: formatSize(f.size),
@@ -31,11 +31,26 @@ const ChatWindow = () => {
       url: URL.createObjectURL(f),
     }))
 
-    const userMsg = { role: 'user', content: text, files: fileData }
+    const userMsg = { role: 'user', content: text, files: fileData, mode }
     setMessages((prev) => [...prev, userMsg])
     setLoading(true)
 
     try {
+      // Image generation mode
+      if (mode === 'image_generation') {
+        const res = await api.imageGeneration(text)
+        const botMsg = {
+          role: 'assistant',
+          content: res.excalidraw
+            ? `Diagram generated (${res.elements_count} elements)`
+            : res.status === 'api_not_implemented'
+            ? 'Image generation API is not yet connected.'
+            : 'Something went wrong with image generation.',
+        }
+        setMessages((prev) => [...prev, botMsg])
+        return
+      }
+
       const excelFiles = files.filter(isExcelFile)
       const otherFiles = files.filter((f) => !isExcelFile(f))
 

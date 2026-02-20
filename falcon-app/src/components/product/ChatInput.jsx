@@ -5,17 +5,26 @@ import AttachFileIcon from '@mui/icons-material/AttachFile'
 import InsertDriveFileOutlinedIcon from '@mui/icons-material/InsertDriveFileOutlined'
 import CloseIcon from '@mui/icons-material/Close'
 
+const MODES = [
+  { key: 'image_generation', label: 'Image Generation' },
+]
+
 const ChatInput = ({ onSend, disabled }) => {
   const [value, setValue] = useState('')
   const [files, setFiles] = useState([])
+  const [mode, setMode] = useState(null) // null = default chat
   const fileInputRef = useRef(null)
 
   const handleSend = () => {
     const text = value.trim()
     if (!text && files.length === 0) return
-    onSend(text, files)
+    onSend(text, files, mode)
     setValue('')
     setFiles([])
+  }
+
+  const toggleMode = (key) => {
+    setMode((prev) => (prev === key ? null : key))
   }
 
   const handleKeyDown = (e) => {
@@ -106,6 +115,30 @@ const ChatInput = ({ onSend, disabled }) => {
               ))}
             </Box>
           )}
+
+          {/* Mode chips */}
+          <Box sx={{ px: 2, pt: 1.5, pb: 0, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+            {MODES.map(({ key, label }) => (
+              <Chip
+                key={key}
+                label={label}
+                size="small"
+                clickable
+                onClick={() => toggleMode(key)}
+                sx={{
+                  fontSize: 12,
+                  height: 26,
+                  borderRadius: '6px',
+                  backgroundColor: mode === key ? '#1a1a1a' : 'transparent',
+                  color: mode === key ? '#fff' : '#666',
+                  border: mode === key ? '1px solid #1a1a1a' : '1px solid #d0d0d0',
+                  '&:hover': {
+                    backgroundColor: mode === key ? '#333' : 'rgba(0,0,0,0.04)',
+                  },
+                }}
+              />
+            ))}
+          </Box>
 
           {/* Input row */}
           <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: 0.5, px: 1.5, py: 1 }}>
