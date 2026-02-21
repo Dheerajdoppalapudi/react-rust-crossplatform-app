@@ -1,6 +1,8 @@
 import os
 import json
 import uuid
+import urllib.parse
+import webbrowser
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,6 +10,8 @@ from typing import Optional
 
 from services.excel_formatter import format_excel
 from services.excalidraw.excalidraw_enhancer import enhance
+from services.excalidraw.planner import create_plan, generate_all_frames
+from services.excalidraw.combiner import combine_frames
 
 app = FastAPI(title="Falcon API")
 
@@ -25,6 +29,52 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(FORMATTED_DIR, exist_ok=True)
 
 
+EXCALIDRAW_DIR = os.path.join(os.path.dirname(__file__), "services", "excalidraw")
+OUTPUT_FILE = os.path.join(EXCALIDRAW_DIR, "sample_output.excalidraw")
+
+
+def open_in_excalidraw(excalidraw_data: dict, excalidraw_url: str = "http://localhost:3000") -> bool:
+    """
+    Open the generated Excalidraw diagram in the local Excalidraw instance.
+    Uses URL encoding to pass the diagram data directly to Excalidraw.
+    """
+    try:
+        # Convert the excalidraw data to a compact JSON string (no spaces)
+        json_str = json.dumps(excalidraw_data, separators=(",", ":"))
+
+        # URL-encode the JSON so it survives being placed in a URL fragment
+        encoded_data = urllib.parse.quote(json_str)
+
+        # Excalidraw reads scene data from the URL hash
+        excalidraw_load_url = f"{excalidraw_url}#{encoded_data}"
+
+        print(f"Opening diagram in Excalidraw at: {excalidraw_url}")
+        print(f"Diagram data size: {len(json_str)} characters")
+
+        # Opens in the default browser on the same machine as the server
+        webbrowser.open(excalidraw_load_url)
+        return True
+    except Exception as e:
+        print(f"Failed to open in Excalidraw: {e}")
+        return False
+
+
+@app.get("/api/open_in_excalidraw")
+def open_excalidraw_endpoint():
+    """
+    Read sample_output.excalidraw and open it in the locally running
+    Excalidraw instance at http://localhost:3000.
+    """
+    if not os.path.exists(OUTPUT_FILE):
+        return {"success": False, "error": "No diagram found. Generate one first."}
+
+    with open(OUTPUT_FILE) as f:
+        excalidraw_data = json.load(f)
+
+    success = open_in_excalidraw(excalidraw_data)
+    return {"success": success}
+
+
 @app.get("/api/health")
 def health_check():
     return {"status": "ok"}
@@ -39,32 +89,44 @@ async def chat(message: str = Form("")):
 async def image_generation(message: str = Form("")):
     excalidraw_dir = os.path.join(os.path.dirname(__file__), "services", "excalidraw")
 
-    # 1. Load prompt template and inject description
+    # Load the frame-generation prompt template once (shared across all frames)
     template_path = os.path.join(excalidraw_dir, "prompt_template.md")
     with open(template_path) as f:
-        prompt = f.read().replace("{{DIAGRAM_DESCRIPTION}}", message)
+        prompt_template = f.read()
 
-    # 2. --- API CALL PLACEHOLDER ---
-    # Send `prompt` to the LLM and assign the returned slim JSON string to `slim_json_str`
-    # Example: slim_json_str = await call_llm(prompt)
-    slim_json_str = None  # TODO: replace with actual API call
+    # Stage 1 — Planning call (1 LLM call)
+    # Decides how many frames are needed, what each frame shows,
+    # what caption goes under each frame, and a shared visual style.
+    plan = await create_plan(message)
 
-    if not slim_json_str:
-        return {"status": "api_not_implemented", "prompt": prompt}
+    # Stage 2 — Frame generation (N parallel LLM calls)
+    # Each frame gets its own call, all running simultaneously via asyncio.gather.
+    frame_slims = await generate_all_frames(plan, prompt_template)
 
-    # 3. Write slim JSON to sample_slim.json
-    slim = json.loads(slim_json_str)
+    # Stage 3 — Combine
+    # Shift each frame's coordinates into its horizontal slot and merge
+    # everything into one slim JSON. Captions are added as text elements.
+    captions = [frame.caption for frame in plan.frames]
+    combined_slim = combine_frames(frame_slims, captions)
+
+    # Persist the combined slim JSON (useful for debugging)
     slim_path = os.path.join(excalidraw_dir, "sample_slim.json")
     with open(slim_path, "w") as f:
-        json.dump(slim, f, indent=2)
+        json.dump(combined_slim, f, indent=2)
 
-    # 4. Enhance to full excalidraw format → sample_output.excalidraw
-    result = enhance(slim)
+    # Stage 4 — Enhance
+    # The existing enhancer runs on the combined slim JSON exactly as before.
+    result = enhance(combined_slim)
     output_path = os.path.join(excalidraw_dir, "sample_output.excalidraw")
     with open(output_path, "w") as f:
         json.dump(result, f, indent=2)
 
-    return {"excalidraw": result, "elements_count": len(result["elements"])}
+    return {
+        "excalidraw": result,
+        "elements_count": len(result["elements"]),
+        "frame_count": plan.frame_count,
+        "captions": captions,
+    }
 
 
 @app.post("/api/upload")
