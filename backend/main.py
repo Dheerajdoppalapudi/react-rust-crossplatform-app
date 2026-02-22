@@ -10,7 +10,7 @@ from typing import Optional
 
 from services.excel_formatter import format_excel
 from services.excalidraw.excalidraw_enhancer import enhance
-from services.excalidraw.planner import create_plan, generate_components, generate_all_frames
+from services.excalidraw.planner import create_plan, generate_all_frames
 from services.excalidraw.combiner import combine_frames
 
 app = FastAPI(title="Falcon API")
@@ -95,18 +95,13 @@ async def image_generation(message: str = Form("")):
         prompt_template = f.read()
 
     # Stage 1 — Planning call (1 LLM call)
-    # Decides frame count, captions, shared style, and identifies
-    # recurring objects (components) that need a consistent visual definition.
+    # Decides how many frames are needed, what each frame shows,
+    # what caption goes under each frame, and a shared visual style.
     plan = await create_plan(message)
 
-    # Stage 2a — Component generation (parallel, one call per recurring object)
-    # Each component is drawn once in isolation and reused in every frame.
-    components_json = await generate_components(plan, prompt_template)
-
-    # Stage 2b/2c — Frame generation
-    # Frame 0 is generated first (establishes background style).
-    # Frames 1-N run in parallel, each receiving component JSONs + frame 0 as context.
-    frame_slims = await generate_all_frames(plan, prompt_template, components_json)
+    # Stage 2 — Frame generation (N parallel LLM calls)
+    # Each frame gets its own call, all running simultaneously via asyncio.gather.
+    frame_slims = await generate_all_frames(plan, prompt_template)
 
     # Stage 3 — Combine
     # Shift each frame's coordinates into its horizontal slot and merge
@@ -126,10 +121,23 @@ async def image_generation(message: str = Form("")):
     with open(output_path, "w") as f:
         json.dump(result, f, indent=2)
 
+    # Save narrations to narration.txt alongside the .excalidraw file.
+    # Format: one block per frame with the caption as a header and the
+    # teaching-voice narration as the body, separated by blank lines.
+    narration_path = os.path.join(excalidraw_dir, "narration.txt")
+    narration_lines = []
+    for i, frame in enumerate(plan.frames):
+        narration_lines.append(f"Frame {i + 1}: {frame.caption}")
+        narration_lines.append(frame.narration)
+        narration_lines.append("")  # blank line between frames
+    with open(narration_path, "w") as f:
+        f.write("\n".join(narration_lines).strip() + "\n")
+
     return {
         "excalidraw": result,
         "elements_count": len(result["elements"]),
         "frame_count": plan.frame_count,
+        "intent_type": plan.intent_type,
         "captions": captions,
     }
 

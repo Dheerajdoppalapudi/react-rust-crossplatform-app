@@ -27,10 +27,6 @@ FRAME_GAP = 200
 # How far below the frame's bottom edge the caption text appears.
 CAPTION_Y_OFFSET = 60
 
-# Vertical breathing room added above each frame's content after normalization.
-# Prevents frames from starting flush at y=0 on the canvas.
-FRAME_TOP_PADDING = 40
-
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -57,32 +53,28 @@ def _bbox(elements: list) -> tuple:
 
 def _normalize(elements: list) -> tuple:
     """
-    Shift elements so their bounding box starts at (0, FRAME_TOP_PADDING).
+    Shift elements so their bounding box starts at (0, 0).
 
     This removes whatever arbitrary offset the LLM placed the frame at
     (e.g. all elements starting at x=200) before we apply the slot offset.
-    The top padding gives visual breathing room above the frame content.
 
-    Returns (normalized_elements, frame_width, frame_height) where:
-      frame_width  = actual pixel width of the content (used to center captions)
-      frame_height = bottom y of the content including top padding
-                     (used to position the caption below the frame)
+    Returns (normalized_elements, frame_height) where frame_height is the
+    pixel height of the frame — used to position the caption below it.
     """
     if not elements:
-        return [], 800, 600 + FRAME_TOP_PADDING
+        return [], 600
 
-    min_x, min_y, max_x, max_y = _bbox(elements)
-    frame_width = max_x - min_x
-    frame_height = (max_y - min_y) + FRAME_TOP_PADDING
+    min_x, min_y, _, max_y = _bbox(elements)
+    frame_height = max_y - min_y
 
     normalized = []
     for el in elements:
         el = dict(el)  # shallow copy — don't mutate the original
         el["x"] = el.get("x", 0) - min_x
-        el["y"] = el.get("y", 0) - min_y + FRAME_TOP_PADDING
+        el["y"] = el.get("y", 0) - min_y
         normalized.append(el)
 
-    return normalized, frame_width, frame_height
+    return normalized, frame_height
 
 
 def _shift_xy(elements: list, dx: float, dy: float = 0) -> list:
@@ -185,8 +177,8 @@ def combine_frames(frame_slims: list, captions: list) -> dict:
         # Step 1 — prefix all string IDs to avoid cross-frame collisions
         elements = _prefix_ids(elements, prefix)
 
-        # Step 2 — normalize: origin → (0, FRAME_TOP_PADDING), returns actual dimensions
-        elements, frame_width, frame_height = _normalize(elements)
+        # Step 2 — normalize: move the frame's origin to (0, 0)
+        elements, frame_height = _normalize(elements)
 
         # Step 3 — fix any integer from/to refs to be absolute in combined list
         elements = _fix_int_refs(elements, running_count)
@@ -198,11 +190,11 @@ def combine_frames(frame_slims: list, captions: list) -> dict:
         all_elements.extend(elements)
         running_count += len(elements)
 
-        # Step 5 — add the caption text below this frame, centered on actual content
+        # Step 5 — add the caption text below this frame
         if caption:
             caption_el = {
                 "type": "text",
-                "x": slot_x + frame_width / 2,   # centered on real content, not slot
+                "x": slot_x + FRAME_SLOT_WIDTH / 2,
                 "y": frame_height + CAPTION_Y_OFFSET,
                 "text": caption,
                 "fontSize": 20,
