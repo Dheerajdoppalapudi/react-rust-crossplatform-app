@@ -12,6 +12,10 @@ from services.excel_formatter import format_excel
 from services.excalidraw.excalidraw_enhancer import enhance
 from services.excalidraw.planner import create_plan, generate_all_frames
 from services.excalidraw.combiner import combine_frames
+from services.excalidraw.mermaid_generator import generate_mermaid_frames, _sidecar_available
+
+# Intent types that use the Mermaid path (auto-layout, no coordinate invention)
+MERMAID_INTENT_TYPES = {"process", "architecture", "timeline"}
 
 app = FastAPI(title="Falcon API")
 
@@ -89,19 +93,35 @@ async def chat(message: str = Form("")):
 async def image_generation(message: str = Form("")):
     excalidraw_dir = os.path.join(os.path.dirname(__file__), "services", "excalidraw")
 
-    # Load the frame-generation prompt template once (shared across all frames)
-    template_path = os.path.join(excalidraw_dir, "prompt_template.md")
-    with open(template_path) as f:
+    # Load prompt templates (both paths read up front, only one is used per request)
+    with open(os.path.join(excalidraw_dir, "prompt_template.md")) as f:
         prompt_template = f.read()
+    with open(os.path.join(excalidraw_dir, "mermaid_prompt.md")) as f:
+        mermaid_prompt_template = f.read()
 
     # Stage 1 — Planning call (1 LLM call)
     # Decides how many frames are needed, what each frame shows,
-    # what caption goes under each frame, and a shared visual style.
+    # what caption goes under each frame, shared visual style, and intent_type.
     plan = await create_plan(message)
 
     # Stage 2 — Frame generation (N parallel LLM calls)
-    # Each frame gets its own call, all running simultaneously via asyncio.gather.
-    frame_slims = await generate_all_frames(plan, prompt_template)
+    # Route based on intent_type:
+    #   Mermaid path  → process, architecture, timeline
+    #                   LLM writes Mermaid syntax → Node sidecar converts to elements
+    #                   Auto-layout: no coordinate hallucination, no overlaps
+    #   Slim JSON path → concept_analogy, math, comparison
+    #                   LLM writes element coordinates → enhancer fills defaults
+    use_mermaid = (
+        plan.intent_type in MERMAID_INTENT_TYPES
+        and _sidecar_available()
+    )
+    if use_mermaid:
+        print(f"[main] Using Mermaid path for intent_type='{plan.intent_type}'")
+        frame_slims = await generate_mermaid_frames(plan, mermaid_prompt_template)
+    else:
+        if plan.intent_type in MERMAID_INTENT_TYPES:
+            print(f"[main] Mermaid sidecar unavailable — falling back to slim JSON path")
+        frame_slims = await generate_all_frames(plan, prompt_template)
 
     # Stage 3 — Combine
     # Shift each frame's coordinates into its horizontal slot and merge
@@ -138,6 +158,7 @@ async def image_generation(message: str = Form("")):
         "elements_count": len(result["elements"]),
         "frame_count": plan.frame_count,
         "intent_type": plan.intent_type,
+        "render_path": "mermaid" if use_mermaid else "slim_json",
         "captions": captions,
     }
 
