@@ -10,7 +10,7 @@ from typing import Optional
 
 from services.excel_formatter import format_excel
 from services.excalidraw.excalidraw_enhancer import enhance
-from services.excalidraw.planner import create_plan, generate_all_frames
+from services.excalidraw.planner import create_plan, generate_components, generate_all_frames
 from services.excalidraw.combiner import combine_frames
 
 app = FastAPI(title="Falcon API")
@@ -95,13 +95,18 @@ async def image_generation(message: str = Form("")):
         prompt_template = f.read()
 
     # Stage 1 — Planning call (1 LLM call)
-    # Decides how many frames are needed, what each frame shows,
-    # what caption goes under each frame, and a shared visual style.
+    # Decides frame count, captions, shared style, and identifies
+    # recurring objects (components) that need a consistent visual definition.
     plan = await create_plan(message)
 
-    # Stage 2 — Frame generation (N parallel LLM calls)
-    # Each frame gets its own call, all running simultaneously via asyncio.gather.
-    frame_slims = await generate_all_frames(plan, prompt_template)
+    # Stage 2a — Component generation (parallel, one call per recurring object)
+    # Each component is drawn once in isolation and reused in every frame.
+    components_json = await generate_components(plan, prompt_template)
+
+    # Stage 2b/2c — Frame generation
+    # Frame 0 is generated first (establishes background style).
+    # Frames 1-N run in parallel, each receiving component JSONs + frame 0 as context.
+    frame_slims = await generate_all_frames(plan, prompt_template, components_json)
 
     # Stage 3 — Combine
     # Shift each frame's coordinates into its horizontal slot and merge
