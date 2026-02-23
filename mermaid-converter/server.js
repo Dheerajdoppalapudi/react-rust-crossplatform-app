@@ -1,34 +1,55 @@
 import express from 'express';
 import { JSDOM } from 'jsdom';
 
-// @excalidraw/mermaid-to-excalidraw uses DOMPurify internally which requires
-// a browser DOM. Set up jsdom globals BEFORE the package is imported so that
-// DOMPurify finds window/document and initialises correctly.
-const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>');
-global.window = dom.window;
-global.document = dom.window.document;
-global.navigator = dom.window.navigator;
+// Set up a jsdom browser environment before any package that needs DOM is imported.
+const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
+  pretendToBeVisual: true,
+});
 
-// Dynamic import so the module evaluates AFTER the globals above are set.
-// Static top-level imports are hoisted and would run before the DOM is ready.
+const { window } = dom;
+
+global.window    = window;
+global.document  = window.document;
+global.navigator = window.navigator;
+
+// Mermaid calls SVG layout methods that jsdom doesn't implement.
+// Patch them on Element.prototype (covers all SVG element subclasses) before
+// parseMermaidToExcalidraw is imported so every element instance inherits them.
+
+// getBBox — returns the bounding box of an element; used for node sizing.
+window.Element.prototype.getBBox = function () {
+  const text = this.textContent || '';
+  return { x: 0, y: 0, width: Math.max(text.length * 8, 50), height: 20 };
+};
+
+// getTotalLength — returns path length; used for edge routing.
+window.Element.prototype.getTotalLength = function () {
+  return 100;
+};
+
+// getComputedTextLength — used for text-overflow measurement.
+window.Element.prototype.getComputedTextLength = function () {
+  return (this.textContent || '').length * 8;
+};
+
+// getPointAtLength — used with getTotalLength for path midpoints.
+window.Element.prototype.getPointAtLength = function () {
+  return { x: 0, y: 0 };
+};
+
+// Dynamic import — evaluated AFTER all globals and patches are in place.
 const { parseMermaidToExcalidraw } = await import('@excalidraw/mermaid-to-excalidraw');
 
 const app = express();
 app.use(express.json({ limit: '1mb' }));
 
-// Health check — Python calls this to verify the sidecar is up
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
-// Main conversion endpoint
-// POST { mermaid: "<mermaid syntax string>" }
-// Returns { elements: [...] }  — full Excalidraw element objects
 app.post('/convert', async (req, res) => {
   const { mermaid } = req.body;
-  if (!mermaid) {
-    return res.status(400).json({ error: 'mermaid field required' });
-  }
+  if (!mermaid) return res.status(400).json({ error: 'mermaid field required' });
   try {
     const { elements } = await parseMermaidToExcalidraw(mermaid, { fontSize: 16 });
     res.json({ elements });
@@ -38,6 +59,4 @@ app.post('/convert', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
-  console.log(`Mermaid converter running on :${PORT}`);
-});
+app.listen(PORT, () => console.log(`Mermaid converter running on :${PORT}`));
