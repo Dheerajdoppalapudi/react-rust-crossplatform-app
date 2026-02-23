@@ -127,7 +127,7 @@ async def create_plan(user_prompt: str) -> GenerationPlan:
     Returns a GenerationPlan with frame_count, shared_style, and one
     FramePlan per frame (each containing description + caption).
     """
-    template_path = os.path.join(os.path.dirname(__file__), "planning_prompt.md")
+    template_path = os.path.join(os.path.dirname(__file__), "prompts", "planning_prompt.md")
     with open(template_path) as f:
         prompt = f.read().replace("{{USER_PROMPT}}", user_prompt)
 

@@ -586,6 +586,8 @@ def enhance(slim):
         label = s.get("label")
         if not label or s["type"] == "text":
             continue
+        if not isinstance(label, str):
+            continue  # Mermaid-converted elements may have dict labels — skip them
 
         el = full_elements[i]
         if s["type"] in ("arrow", "line"):

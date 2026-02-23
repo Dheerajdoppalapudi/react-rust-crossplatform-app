@@ -96,31 +96,68 @@ def _shift_xy(elements: list, dx: float, dy: float = 0) -> list:
 
 def _prefix_ids(elements: list, prefix: str) -> list:
     """
-    Add a frame-specific prefix to every element ID and to all arrow
-    from/to string references within those elements.
+    Add a frame-specific prefix to EVERY element ID and to ALL cross-element
+    references within those elements.
 
     This prevents ID collisions when frames are merged — if frame 0 has
     an element id="car" and frame 1 also has id="car", after prefixing
     they become "f0_car" and "f1_car" and the enhancer resolves them
     independently.
 
+    Slim JSON elements only use id / from / to.
+
+    Already-complete Excalidraw elements (produced by the Mermaid converter)
+    carry four additional reference fields that must all be updated in lockstep,
+    otherwise bound text elements become orphaned and disappear:
+
+      containerId        — text element pointing to its parent shape
+      boundElements[].id — shape/arrow listing its bound text or arrow children
+      startBinding.elementId — arrow pointing to its start-anchor shape
+      endBinding.elementId   — arrow pointing to its end-anchor shape
+
     Only string IDs are prefixed. Integer from/to refs (index-based) are
-    left unchanged — they already point into the correct position in their
-    own frame's element list, and after _fix_int_refs they will be adjusted
-    to absolute indices in the combined list.
+    left unchanged — they are adjusted to absolute indices by _fix_int_refs.
     """
+    # Collect every string ID that exists in this frame so we only update
+    # references that actually point to something within the frame.
+    frame_ids = {el.get("id") for el in elements if isinstance(el.get("id"), str)}
+
     result = []
     for el in elements:
         el = dict(el)
 
-        if "id" in el and isinstance(el["id"], str):
+        # Primary ID
+        if isinstance(el.get("id"), str):
             el["id"] = f"{prefix}{el['id']}"
 
-        if "from" in el and isinstance(el["from"], str):
+        # Slim-JSON arrow references
+        if isinstance(el.get("from"), str):
             el["from"] = f"{prefix}{el['from']}"
-
-        if "to" in el and isinstance(el["to"], str):
+        if isinstance(el.get("to"), str):
             el["to"] = f"{prefix}{el['to']}"
+
+        # Text element → parent shape (Mermaid path)
+        if isinstance(el.get("containerId"), str) and el["containerId"] in frame_ids:
+            el["containerId"] = f"{prefix}{el['containerId']}"
+
+        # Shape / arrow → bound children (Mermaid path)
+        if isinstance(el.get("boundElements"), list):
+            new_bound = []
+            for ref in el["boundElements"]:
+                ref = dict(ref)
+                if isinstance(ref.get("id"), str) and ref["id"] in frame_ids:
+                    ref["id"] = f"{prefix}{ref['id']}"
+                new_bound.append(ref)
+            el["boundElements"] = new_bound
+
+        # Arrow → anchor shapes (Mermaid path)
+        for bkey in ("startBinding", "endBinding"):
+            binding = el.get(bkey)
+            if isinstance(binding, dict):
+                binding = dict(binding)
+                if isinstance(binding.get("elementId"), str) and binding["elementId"] in frame_ids:
+                    binding["elementId"] = f"{prefix}{binding['elementId']}"
+                el[bkey] = binding
 
         result.append(el)
     return result

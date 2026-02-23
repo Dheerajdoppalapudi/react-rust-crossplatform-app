@@ -94,9 +94,9 @@ async def image_generation(message: str = Form("")):
     excalidraw_dir = os.path.join(os.path.dirname(__file__), "services", "excalidraw")
 
     # Load prompt templates (both paths read up front, only one is used per request)
-    with open(os.path.join(excalidraw_dir, "prompt_template.md")) as f:
+    with open(os.path.join(excalidraw_dir, "prompts", "prompt_template.md")) as f:
         prompt_template = f.read()
-    with open(os.path.join(excalidraw_dir, "mermaid_prompt.md")) as f:
+    with open(os.path.join(excalidraw_dir, "prompts", "mermaid_prompt.md")) as f:
         mermaid_prompt_template = f.read()
 
     # Stage 1 — Planning call (1 LLM call)
