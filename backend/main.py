@@ -6,6 +6,7 @@ import webbrowser
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.concurrency import run_in_threadpool
 from typing import Optional
 
 from services.beautification_agent.excel_formatter import format_excel
@@ -224,8 +225,7 @@ async def excel_formatting(file: UploadFile = File(...)):
     upload_name = f"{uuid.uuid4().hex}{ext}"
     upload_path = os.path.join(UPLOAD_DIR, upload_name)
     content = await file.read()
-    with open(upload_path, "wb") as f:
-        f.write(content)
+    await run_in_threadpool(lambda: open(upload_path, "wb").write(content))
 
     # Format and save to formatted dir
     original_stem = os.path.splitext(file.filename)[0]
@@ -233,7 +233,7 @@ async def excel_formatting(file: UploadFile = File(...)):
     output_path = os.path.join(FORMATTED_DIR, output_name)
 
     try:
-        result = format_excel(upload_path, output_path)
+        result = await run_in_threadpool(format_excel, upload_path, output_path)
     except Exception as e:
         return {"error": f"Formatting failed: {str(e)}"}
 
