@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
 
-from services.excel_formatter import format_excel
+from services.beautification_agent.excel_formatter import format_excel
 from services.excalidraw.excalidraw_enhancer import enhance
 from services.excalidraw.planner import create_plan, generate_all_frames
 from services.excalidraw.combiner import combine_frames
