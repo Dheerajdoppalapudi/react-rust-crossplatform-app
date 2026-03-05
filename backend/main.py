@@ -13,10 +13,12 @@ from services.beautification_agent.excel_formatter import format_excel
 from services.excalidraw.excalidraw_enhancer import enhance
 from services.excalidraw.planner import create_plan, generate_all_frames
 from services.excalidraw.combiner import combine_frames
-from services.excalidraw.mermaid_generator import generate_mermaid_frames, _sidecar_available
+from services.excalidraw.mermaid.mermaid_generator import generate_mermaid_frames, _sidecar_available
+from services.excalidraw.manim.manim_generator import generate_manim_frames, manim_available
 
-# Intent types that use the Mermaid path (auto-layout, no coordinate invention)
+# Intent types routed to each generator
 MERMAID_INTENT_TYPES = {"process", "architecture", "timeline"}
+MANIM_INTENT_TYPES   = {"math"}
 
 app = FastAPI(title="Falcon API")
 
@@ -35,7 +37,9 @@ os.makedirs(FORMATTED_DIR, exist_ok=True)
 
 
 EXCALIDRAW_DIR = os.path.join(os.path.dirname(__file__), "services", "excalidraw")
-OUTPUT_FILE = os.path.join(EXCALIDRAW_DIR, "sample_output.excalidraw")
+OUTPUT_DIR     = os.path.join(EXCALIDRAW_DIR, "output")
+OUTPUT_FILE    = os.path.join(OUTPUT_DIR, "sample_output.excalidraw")
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 
 def open_in_excalidraw(excalidraw_data: dict, excalidraw_url: str = "http://localhost:3000") -> bool:
@@ -92,26 +96,53 @@ async def chat(message: str = Form("")):
 
 @app.post("/api/image_generation")
 async def image_generation(message: str = Form("")):
-    excalidraw_dir = os.path.join(os.path.dirname(__file__), "services", "excalidraw")
+    prompts_dir = os.path.join(EXCALIDRAW_DIR, "prompts")
 
-    # Load prompt templates (both paths read up front, only one is used per request)
-    with open(os.path.join(excalidraw_dir, "prompts", "prompt_template.md")) as f:
+    with open(os.path.join(prompts_dir, "prompt_template.md")) as f:
         prompt_template = f.read()
-    with open(os.path.join(excalidraw_dir, "prompts", "mermaid_prompt.md")) as f:
+    with open(os.path.join(prompts_dir, "mermaid_prompt.md")) as f:
         mermaid_prompt_template = f.read()
+    with open(os.path.join(prompts_dir, "manim_prompt.md")) as f:
+        manim_prompt_template = f.read()
 
-    # Stage 1 — Planning call (1 LLM call)
-    # Decides how many frames are needed, what each frame shows,
-    # what caption goes under each frame, shared visual style, and intent_type.
+    # Stage 1 — Planning (1 LLM call)
     plan = await create_plan(message)
 
-    # Stage 2 — Frame generation (N parallel LLM calls)
-    # Route based on intent_type:
-    #   Mermaid path  → process, architecture, timeline
-    #                   LLM writes Mermaid syntax → Node sidecar converts to elements
-    #                   Auto-layout: no coordinate hallucination, no overlaps
-    #   Slim JSON path → concept_analogy, math, comparison
-    #                   LLM writes element coordinates → enhancer fills defaults
+    captions = [frame.caption for frame in plan.frames]
+    narration_lines = []
+    for i, frame in enumerate(plan.frames):
+        narration_lines.append(f"Frame {i + 1}: {frame.caption}")
+        narration_lines.append(frame.narration)
+        narration_lines.append("")
+
+    # Stage 2 — Frame generation (N parallel LLM calls), routed by intent_type
+    #
+    #   Manim path   → math
+    #                  LLM writes Manim Python → subprocess renders PNG per frame
+    #                  Returns image paths directly (skips combiner + enhancer)
+    #
+    #   Mermaid path → process, architecture, timeline
+    #                  LLM writes Mermaid syntax → Node sidecar → elements
+    #
+    #   Slim JSON    → everything else
+    #                  LLM writes element coordinates → enhancer fills defaults
+
+    if plan.intent_type in MANIM_INTENT_TYPES and manim_available():
+        print(f"[main] Using Manim path for intent_type='{plan.intent_type}'")
+        manim_output_dir = os.path.join(OUTPUT_DIR, "manim")
+        png_paths = await generate_manim_frames(plan, manim_prompt_template, manim_output_dir)
+
+        with open(os.path.join(OUTPUT_DIR, "narration.txt"), "w") as f:
+            f.write("\n".join(narration_lines).strip() + "\n")
+
+        return {
+            "render_path": "manim",
+            "frame_count": plan.frame_count,
+            "intent_type": plan.intent_type,
+            "captions": captions,
+            "images": png_paths,
+        }
+
     use_mermaid = (
         plan.intent_type in MERMAID_INTENT_TYPES
         and _sidecar_available()
@@ -121,37 +152,21 @@ async def image_generation(message: str = Form("")):
         frame_slims = await generate_mermaid_frames(plan, mermaid_prompt_template)
     else:
         if plan.intent_type in MERMAID_INTENT_TYPES:
-            print(f"[main] Mermaid sidecar unavailable — falling back to slim JSON path")
+            print("[main] Mermaid sidecar unavailable — falling back to slim JSON path")
         frame_slims = await generate_all_frames(plan, prompt_template)
 
-    # Stage 3 — Combine
-    # Shift each frame's coordinates into its horizontal slot and merge
-    # everything into one slim JSON. Captions are added as text elements.
-    captions = [frame.caption for frame in plan.frames]
+    # Stage 3 — Combine frames
     combined_slim = combine_frames(frame_slims, captions)
 
-    # Persist the combined slim JSON (useful for debugging)
-    slim_path = os.path.join(excalidraw_dir, "sample_slim.json")
-    with open(slim_path, "w") as f:
+    with open(os.path.join(OUTPUT_DIR, "sample_slim.json"), "w") as f:
         json.dump(combined_slim, f, indent=2)
 
     # Stage 4 — Enhance
-    # The existing enhancer runs on the combined slim JSON exactly as before.
     result = enhance(combined_slim)
-    output_path = os.path.join(excalidraw_dir, "sample_output.excalidraw")
-    with open(output_path, "w") as f:
+    with open(OUTPUT_FILE, "w") as f:
         json.dump(result, f, indent=2)
 
-    # Save narrations to narration.txt alongside the .excalidraw file.
-    # Format: one block per frame with the caption as a header and the
-    # teaching-voice narration as the body, separated by blank lines.
-    narration_path = os.path.join(excalidraw_dir, "narration.txt")
-    narration_lines = []
-    for i, frame in enumerate(plan.frames):
-        narration_lines.append(f"Frame {i + 1}: {frame.caption}")
-        narration_lines.append(frame.narration)
-        narration_lines.append("")  # blank line between frames
-    with open(narration_path, "w") as f:
+    with open(os.path.join(OUTPUT_DIR, "narration.txt"), "w") as f:
         f.write("\n".join(narration_lines).strip() + "\n")
 
     return {

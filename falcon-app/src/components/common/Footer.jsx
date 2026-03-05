@@ -1,19 +1,27 @@
-import { Box, Typography } from '@mui/material'
+import { Box, Typography, useTheme } from '@mui/material'
 
 const Footer = () => {
+  const theme = useTheme()
+
   return (
     <Box
       component="footer"
       sx={{
-        py: 0.5,
+        height: 36,
         px: 3,
-        textAlign: 'center',
-        borderTop: '1px solid #e0e0e0',
-        backgroundColor: '#fff',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        borderTop: `1px solid ${theme.palette.divider}`,
+        backgroundColor: theme.palette.background.paper,
+        flexShrink: 0,
       }}
     >
-      <Typography variant="caption" color="text.secondary">
-        &copy; {new Date().getFullYear()} Falcon. All rights reserved.
+      <Typography sx={{ fontSize: 11.5, color: theme.palette.text.secondary }}>
+        © {new Date().getFullYear()} Falcon
+      </Typography>
+      <Typography sx={{ fontSize: 11.5, color: theme.palette.text.secondary, opacity: 0.4 }}>
+        v0.1.0
       </Typography>
     </Box>
   )
