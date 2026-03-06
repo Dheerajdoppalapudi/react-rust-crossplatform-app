@@ -1,0 +1,25 @@
+User Request
+      │
+      ▼
+Prompt Normalizer
+      │
+      ▼
+Cache Check (Redis)
+      │
+      ├── Found → return image
+      │
+      ▼
+Queue (Kafka)
+      │
+      ▼
+GPU Workers
+   Stable Diffusion
+      │
+      ▼
+Upscaler
+      │
+      ▼
+CDN Storage
+      │
+      ▼
+Return URL

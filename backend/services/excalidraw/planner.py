@@ -18,11 +18,24 @@ import asyncio
 import json
 import os
 import re
+import time
+from contextvars import ContextVar
 from typing import List
 
 from pydantic import BaseModel
 
 from services.llm_service import default_llm_service
+
+# Per-request lifecycle log. main.py sets this before each pipeline run.
+# Every LLM call appends an entry automatically; main.py adds stage events.
+request_log: ContextVar[list | None] = ContextVar("request_log", default=None)
+
+
+def _log(entry: dict):
+    """Append a timestamped entry to the active request log (no-op if not set)."""
+    log = request_log.get()
+    if log is not None:
+        log.append({"timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), **entry})
 
 
 # ---------------------------------------------------------------------------
@@ -82,6 +95,13 @@ def call_llm(prompt: str) -> str:
     result = default_llm_service.make_single_prompt_request(prompt)
     if result is None:
         raise RuntimeError("LLM service returned None — check server connectivity and credentials.")
+    _log({
+        "event": "llm_call",
+        "prompt_preview": prompt[:600] + ("…" if len(prompt) > 600 else ""),
+        "response_preview": result[:600] + ("…" if len(result) > 600 else ""),
+        "full_prompt": prompt,
+        "full_response": result,
+    })
     return result
 
 
