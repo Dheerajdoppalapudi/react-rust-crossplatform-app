@@ -71,68 +71,117 @@ illustration	SVG (cairosvg render)	Slim JSON	PNG paths
 concept_analogy	SVG (cairosvg render)	Slim JSON	PNG paths
 comparison	SVG (cairosvg render)	Slim JSON	PNG paths
 
+Intent → Renderer routing table:
+Intent type	Renderer	Output
+math	Manim (--save_last_frame)	PNG
+illustration	SVG → cairosvg	PNG
+concept_analogy	SVG → cairosvg	PNG
+comparison	SVG → cairosvg	PNG
+process	Mermaid (mmdc)	PNG
+architecture	Mermaid (mmdc)	PNG
+timeline	Mermaid (mmdc)	PNG
+anything else	Slim JSON	.excalidraw
+
+
+
+
+If TTS fails for a frame, fall back to a duration estimate: word_count × 0.45 seconds (average speaking pace)
+If a frame PNG is None (render failed), show a placeholder "Frame unavailable" card instead of crashing
+If ffmpeg isn't installed, detect early and give a clear error
 
 
 
 User Prompt
-     │
-     ▼
-┌─────────────────────────────────────┐
-│  Stage 1: Planning (1 LLM call)     │
-│  planning_prompt.md + user prompt   │
-│  → GenerationPlan {                 │
-│      intent_type,                   │
-│      frame_count,                   │
-│      shared_style,                  │
-│      element_vocabulary,            │
-│      frames[]: {description,        │
-│                 narration,          │
-│                 caption}            │
-│    }                                │
-└──────────────┬──────────────────────┘
-               │
-               ▼ intent_type?
-    ┌──────────┴───────────┐──────────────────────┐──────────────────────┐
-    │                      │                      │                      │
-    ▼                      ▼                      ▼                      ▼
-  math              process /              illustration /          anything else
-  + manim OK?    architecture /          concept_analogy /         (or fallback)
-    │             timeline               comparison
-    │             + sidecar OK?          + cairosvg OK?
-    │                  │                      │
-    ▼                  ▼                      ▼
- Manim path        Mermaid path           SVG path
- (per frame)       (per frame)            (per frame)
-    │                  │                      │
-    │  LLM →           │  LLM →               │  LLM →
-    │  Python code      │  Mermaid text         │  SVG markup
-    │  ↓                │  ↓                    │  ↓
-    │  subprocess       │  Node sidecar         │  cairosvg
-    │  manim render     │  /convert             │  svg2png
-    │  ↓                │  ↓                    │  ↓
-    │  PNG file         │  Excalidraw elements  │  PNG file
-    │                   │                       │
-    ▼                   ▼                       ▼
- [PNG paths]     [Slim JSON dicts]         [PNG paths]
-                        │
-                 Slim JSON fallback ←───── all failed
-                 (slim JSON path)          availability checks
-                        │
-                        ▼
-               Stage 3: combine_frames()
-               (stitch N frames side-by-side,
-                add captions, fix IDs)
-                        │
-                        ▼
-               Stage 4: enhance()
-               (slim JSON → full .excalidraw)
-                        │
-                        ▼
-               .excalidraw JSON file
-
-     ┌──────────────────────────────────────┐
-     │  Always saved alongside output:      │
-     │  - narration.txt (per-frame scripts) │
-     │  - activity_log.json                 │
-     │  - session in SQLite DB              │
-     └──────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────────┐
+│  POST /api/generate  (main.py)          │
+│  PLANNER LLM call                       │
+│  → intent_type, N frames,               │
+│    shared_style, element_vocabulary     │
+└─────────────────┬───────────────────────┘
+                  │
+        ┌─────────▼──────────┐
+        │  Route by intent   │
+        └──┬──────┬──────┬───┘
+           │      │      │
+         math  illust/ process/
+               concept/ arch/
+               compar. timeline
+                       + fallback
+           ▼      ▼      ▼
+      ┌────────┐ ┌────┐ ┌────────┐ ┌──────────┐
+      │ Manim  │ │SVG │ │Mermaid │ │ Slim JSON│
+      │        │ │    │ │        │ │          │
+      │LLM→.py │ │LLM→│ │LLM→    │ │LLM→      │
+      │        │ │SVG │ │.mmd    │ │.excali-  │
+      │manim   │ │    │ │        │ │draw JSON │
+      │render  │ │cairo│ │mmdc   │ │          │
+      │ -ql    │ │svg→│ │CLI→    │ │          │
+      │        │ │PNG │ │PNG     │ │          │
+      └───┬────┘ └─┬──┘ └───┬────┘ └────┬─────┘
+          │        │        │            │
+        .mp4      PNG      PNG        null PNG
+    (animation)            │      (placeholder
+          │        │       │       card later)
+          └────────┴───────┘
+                   │
+                   ▼
+           frames.json saved
+           {path, caption} × N
+           (path is .mp4 for Manim,
+            .png for all others)
+                   │
+    ───────────────────────────────
+    POST /api/generate_video/{id}
+    ───────────────────────────────
+                   │
+          ┌────────▼─────────┐
+          │  frame_exporter  │
+          │                  │
+          │ PNG → letterbox  │
+          │ 1920×1080        │
+          │ + subtitle burn  │
+          │                  │
+          │ MP4 → passed     │
+          │ through as-is    │
+          └────────┬─────────┘
+                   │
+          ┌────────▼─────────┐
+          │  tts_service     │
+          │                  │
+          │ narration.txt    │
+          │ → per-frame text │
+          │ gTTS → .mp3      │
+          │ (parallel)       │
+          └────────┬─────────┘
+                   │
+          ┌────────▼─────────────────────────┐
+          │  video_assembler                  │
+          │                                   │
+          │  per frame:                       │
+          │  ┌──────────┬────────────────┐    │
+          │  │  .png    │     .mp4       │    │
+          │  │          │  (Manim)       │    │
+          │  │ImageClip │VideoFileClip   │    │
+          │  │Ken Burns │plays animation │    │
+          │  │1.0→1.02x │                │    │
+          │  │          │ if audio >     │    │
+          │  │          │ animation:     │    │
+          │  │          │ freeze last    │    │
+          │  │          │ frame to fill  │    │
+          │  └────┬─────┴───────┬────────┘    │
+          │       └──────┬──────┘             │
+          │              │ attach TTS audio   │
+          │              │ crossfade 0.4s     │
+          │              ▼                    │
+          │      concatenate all clips        │
+          │      export H.264 + AAC .mp4      │
+          └──────────────┬────────────────────┘
+                         │
+                         ▼
+              video_path saved to DB
+                         │
+                         ▼
+         GET /api/sessions/{id}/video
+         → FileResponse streams .mp4

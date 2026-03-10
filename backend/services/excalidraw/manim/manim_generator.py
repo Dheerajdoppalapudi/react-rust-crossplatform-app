@@ -100,8 +100,7 @@ def _render_frame(code: str, frame_index: int, output_dir: str) -> Optional[str]
 
     cmd = [
         "manim", "render",
-        "-ql",                   # low quality — fast, sufficient for slides
-        "--save_last_frame",     # PNG of the final frame only (no full video)
+        "-ql",                   # low quality (480p15) — fast render
         "--media_dir", media_dir,
         scene_file,
         "GeneratedScene",
@@ -122,13 +121,13 @@ def _render_frame(code: str, frame_index: int, output_dir: str) -> Optional[str]
             )
             return None
 
-        pngs = list(Path(media_dir).rglob("*.png"))
-        if not pngs:
-            print(f"[manim] Frame {frame_index}: render OK but no PNG found")
+        mp4s = list(Path(media_dir).rglob("*.mp4"))
+        if not mp4s:
+            print(f"[manim] Frame {frame_index}: render OK but no .mp4 found")
             return None
 
-        # Pick the most recently written PNG
-        return str(max(pngs, key=lambda p: p.stat().st_mtime))
+        # Pick the most recently written .mp4
+        return str(max(mp4s, key=lambda p: p.stat().st_mtime))
 
     except subprocess.TimeoutExpired:
         print(f"[manim] Frame {frame_index} timed out (90 s)")

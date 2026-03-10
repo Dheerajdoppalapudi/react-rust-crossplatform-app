@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 import sqlite3
@@ -8,7 +9,7 @@ import webbrowser
 from datetime import datetime, timezone
 
 from fastapi import FastAPI, UploadFile, File, Form
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from services.excalidraw.excalidraw_enhancer import enhance
@@ -17,6 +18,9 @@ from services.excalidraw.combiner import combine_frames
 from services.excalidraw.mermaid.mermaid_generator import generate_mermaid_frames, _sidecar_available
 from services.excalidraw.manim.manim_generator import generate_manim_frames, manim_available
 from services.excalidraw.svg.svg_generator import generate_svg_frames, svg_available
+from services.video.frame_exporter import export_frames
+from services.video.tts_service import parse_narration, generate_audio
+from services.video.video_assembler import assemble, moviepy_available
 
 # Intent types routed to each generator
 MERMAID_INTENT_TYPES = {"process", "architecture", "timeline"}
@@ -65,9 +69,15 @@ def _init_db():
                 frame_count   INTEGER,
                 output_dir    TEXT,
                 ui_output_file TEXT,
-                api_call_count INTEGER DEFAULT 0
+                api_call_count INTEGER DEFAULT 0,
+                video_path    TEXT
             )
         """)
+        # Add video_path to existing DBs that pre-date this column
+        try:
+            conn.execute("ALTER TABLE sessions ADD COLUMN video_path TEXT")
+        except Exception:
+            pass  # column already exists — safe to ignore
         conn.commit()
 
 
@@ -199,6 +209,9 @@ async def image_generation(message: str = Form("")):
             with open(ui_output_file, "w") as f:
                 f.write(py_content)
 
+            with open(os.path.join(output_dir, "frames.json"), "w") as f:
+                json.dump({"render_path": "manim", "images": png_paths, "captions": captions}, f, indent=2)
+
             result_payload = {
                 "session_id": session_id,
                 "render_path": "manim",
@@ -214,6 +227,9 @@ async def image_generation(message: str = Form("")):
             svg_output_dir = os.path.join(output_dir, "svg")
             png_paths = await generate_svg_frames(plan, svg_prompt_template, svg_output_dir)
             _log({"event": "stage_complete", "stage": "frame_generation", "path": "svg"})
+
+            with open(os.path.join(output_dir, "frames.json"), "w") as f:
+                json.dump({"render_path": "svg", "images": png_paths, "captions": captions}, f, indent=2)
 
             ui_output_file = os.path.join(output_dir, "final_output.json")
             with open(ui_output_file, "w") as f:
@@ -260,6 +276,10 @@ async def image_generation(message: str = Form("")):
             ui_output_file = os.path.join(output_dir, "final_output.json")
             with open(ui_output_file, "w") as f:
                 json.dump(excalidraw_result, f, indent=2)
+
+            # No real PNGs for this path — store nulls so video uses placeholders
+            with open(os.path.join(output_dir, "frames.json"), "w") as f:
+                json.dump({"render_path": path_label, "images": [None] * plan.frame_count, "captions": captions}, f, indent=2)
 
             result_payload = {
                 "session_id": session_id,
@@ -359,6 +379,122 @@ def get_session_log(session_id: str):
     with open(log_path) as f:
         log = json.load(f)
     return {"log": log}
+
+
+# ── Video generation ───────────────────────────────────────────────────────────
+
+@app.post("/api/generate_video/{session_id}")
+async def generate_video(
+    session_id: str,
+    use_openai_tts: bool = False,
+):
+    """
+    Generate a video for an existing session.
+
+    Reads the session's frames.json + narration.txt, runs TTS on each frame's
+    narration, normalizes all frames to 1920×1080 PNGs, and assembles a final
+    .mp4 with Ken Burns zoom + crossfade transitions.
+
+    Query param:
+      use_openai_tts=true   → use OpenAI TTS instead of gTTS (requires OPENAI_API_KEY)
+    """
+    if not moviepy_available():
+        return JSONResponse({"error": "moviepy not installed — run: pip install moviepy"}, status_code=503)
+
+    with _get_db() as conn:
+        row = conn.execute(
+            "SELECT output_dir, frame_count, status, render_path FROM sessions WHERE id = ?",
+            (session_id,),
+        ).fetchone()
+
+    if not row:
+        return JSONResponse({"error": "Session not found"}, status_code=404)
+    if row["status"] != "done":
+        return JSONResponse({"error": f"Session not ready (status: {row['status']})"}, status_code=400)
+
+    output_dir = row["output_dir"]
+    if not output_dir or not os.path.isdir(output_dir):
+        return JSONResponse({"error": "Session output directory missing"}, status_code=404)
+
+    # ── Load captions from frames.json ────────────────────────────────────────
+    frames_json_path = os.path.join(output_dir, "frames.json")
+    if not os.path.exists(frames_json_path):
+        return JSONResponse({"error": "frames.json not found — re-run image generation"}, status_code=404)
+
+    with open(frames_json_path) as f:
+        frames_data = json.load(f)
+    captions = frames_data.get("captions", [])
+
+    # ── Load narration text ────────────────────────────────────────────────────
+    narration_path = os.path.join(output_dir, "narration.txt")
+    if not os.path.exists(narration_path):
+        return JSONResponse({"error": "narration.txt not found"}, status_code=404)
+
+    with open(narration_path) as f:
+        narration_txt = f.read()
+    narration_texts = parse_narration(narration_txt)
+
+    # Pad/trim narration list to match caption count
+    while len(narration_texts) < len(captions):
+        narration_texts.append("")
+    narration_texts = narration_texts[: len(captions)]
+
+    # ── Stage 1: Normalize frames → 1920×1080 PNGs with subtitle bars ─────────
+    try:
+        normalized_pngs = await asyncio.to_thread(export_frames, output_dir, captions)
+    except Exception as e:
+        return JSONResponse({"error": f"Frame export failed: {e}"}, status_code=500)
+
+    # ── Stage 2: TTS — narration text → per-frame .mp3 ────────────────────────
+    try:
+        audio_paths = await asyncio.to_thread(
+            generate_audio, narration_texts, output_dir, use_openai_tts
+        )
+    except Exception as e:
+        return JSONResponse({"error": f"TTS generation failed: {e}"}, status_code=500)
+
+    # ── Stage 3: Assemble video ────────────────────────────────────────────────
+    video_path = os.path.join(output_dir, "final_video.mp4")
+    try:
+        await asyncio.to_thread(
+            assemble, normalized_pngs, audio_paths, narration_texts, video_path
+        )
+    except Exception as e:
+        return JSONResponse({"error": f"Video assembly failed: {e}"}, status_code=500)
+
+    # ── Persist video path to DB ───────────────────────────────────────────────
+    _update_session(session_id, video_path=video_path)
+
+    return {
+        "session_id": session_id,
+        "video_path": video_path,
+        "frame_count": len(normalized_pngs),
+        "tts_backend": "openai" if use_openai_tts else "gtts",
+    }
+
+
+@app.get("/api/sessions/{session_id}/video")
+def get_session_video(session_id: str):
+    """Stream the generated .mp4 video for a session."""
+    with _get_db() as conn:
+        row = conn.execute(
+            "SELECT video_path FROM sessions WHERE id = ?", (session_id,)
+        ).fetchone()
+
+    if not row:
+        return JSONResponse({"error": "Session not found"}, status_code=404)
+    if not row["video_path"]:
+        return JSONResponse({"error": "Video not yet generated for this session"}, status_code=404)
+
+    video_path = row["video_path"]
+    if not os.path.exists(video_path):
+        return JSONResponse({"error": "Video file missing from disk"}, status_code=404)
+
+    return FileResponse(
+        video_path,
+        media_type="video/mp4",
+        filename=f"lesson_{session_id[:8]}.mp4",
+    )
 
 
 # ── Upload ────────────────────────────────────────────────────────────────────

@@ -7,3 +7,6 @@ manim
 pydantic
 requests
 cairosvg
+moviepy
+gtts
+Pillow
