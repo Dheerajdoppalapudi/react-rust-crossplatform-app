@@ -35,10 +35,10 @@ Use this decision table. The "Rendered by" column matters: Mermaid = auto-layout
 | process         | See HOW something works step-by-step: request flows, protocols, algorithms, state machines       | Mermaid     |
 | architecture    | See WHAT components exist and how they connect: system maps, infrastructure, org charts          | Mermaid     |
 | timeline        | See events ordered in TIME: history, evolution, chronological stages                             | Mermaid     |
-| concept_analogy | Understand an ABSTRACT idea through a real-world metaphor: recursion = mirrors, RAM = desk space | Slim JSON   |
-| math            | See an equation, formula, geometric proof, or numerical construction                             | Slim JSON   |
-| comparison      | See two+ things contrasted SIDE BY SIDE: TCP vs UDP, pros vs cons, before vs after              | Slim JSON   |
-| illustration    | DRAW something — a robot, animal, scene, object, character, action pose, any creative visual     | Slim JSON   |
+| concept_analogy | Understand an ABSTRACT idea through a real-world metaphor: recursion = mirrors, RAM = desk space | SVG         |
+| math            | See an equation, formula, geometric proof, or numerical construction                             | Manim       |
+| comparison      | See two+ things contrasted SIDE BY SIDE: TCP vs UDP, pros vs cons, before vs after              | SVG         |
+| illustration    | DRAW something — a robot, animal, cell, scene, object, character, action pose, any creative visual | SVG       |
 
 **Disambiguation — resolve ambiguous prompts here:**
 - "Explain recursion" → concept_analogy (abstract idea needing analogy)
@@ -114,23 +114,23 @@ Write descriptions that convey LOGICAL STRUCTURE:
 - For sequences: who sends what message to whom, in what order?
 Keep it concise — Mermaid handles layout automatically.
 
-### For concept_analogy / math / comparison (→ Slim JSON path):
-Write descriptions that specify PIXEL-LEVEL LAYOUT:
-- Give every named shape a string id, position (x, y), size (width, height), backgroundColor.
-- Reference vocabulary entities by key: "Draw the browser (id='browser', rectangle, backgroundColor #a5d8ff, width 180, height 70, label 'Browser') at x=80, y=200."
-- Specify all connections: "an arrow from id='browser' to id='dns' labeled 'lookup'."
+### For concept_analogy / comparison (→ SVG path):
+Write descriptions that specify the SCENE COMPOSITION in natural language:
+- For concept_analogy: describe the metaphor scene (mirrors, containers, desks) and the real concept it maps to. Name the key shapes, their relative sizes, fill colors, and nesting/arrangement. Specify the primary color from shared_style for main shapes.
+- For comparison: describe what goes in the LEFT panel and what goes in the RIGHT panel. List 4–6 bullet-point properties per side. Name the two things being compared as panel titles. Specify contrasting fill colors for the two panels.
+- Reference vocabulary entities by key: "Draw the 'browser' entity (rectangle, fill #a5d8ff) centered in the left panel."
 - Specify what is NEW or HIGHLIGHTED in this frame (for sequential frames).
+- Do NOT specify pixel coordinates — the SVG renderer handles layout. Focus on composition, color, content, and hierarchy.
 
-### For illustration (→ Slim JSON path):
+### For illustration (→ SVG path):
 Write descriptions that specify the VISUAL COMPOSITION:
-- Plan the scene: what major parts are in it? Where do they go on the canvas?
-- Use REAL-WORLD spatial layout: head above body, wheels at bottom of car, wings on sides of bird.
-- Specify EVERY part: shape type, width, height, backgroundColor, position, id.
-- Mandate fillStyle solid on ALL shapes to prevent hachure overlap on touching/overlapping shapes.
-- Use freeform lines (points arrays) for limbs, curves, arcs, tails, trajectories.
-- Use angle for tilted body parts that show motion or posture.
-- Canvas min 800×600. Keep everything within x: 60–1400, y: 60–900.
-- Label only the 3–5 most important parts; place labels outside crowded areas.
+- Plan the scene: what major parts are in it? Where do they roughly sit on the canvas (top, center, left, right)?
+- Use REAL-WORLD spatial language: "head above body", "wheels at bottom corners", "arms extending diagonally outward from sides of torso".
+- Name EVERY part with its shape type and fill color. Use the primary color from shared_style for the main body.
+- For motion/pose: describe the angle and position (e.g., "body tilted 45° with arms flung upward", "fully inverted at peak of backflip").
+- For biology/science: name each organelle or component with its typical color (nucleus = purple, chloroplast = green, mitochondria = pink/red).
+- Label only the 3–5 most important parts. Say where labels go relative to their shapes.
+- For multi-frame sequences: clearly describe what is DIFFERENT from the previous frame (position, pose, highlighted element).
 
 ────────────────────────────────────────────────────────────────────
 ## narration Rules
@@ -156,13 +156,14 @@ This is the spoken script a teacher would deliver while pointing at this frame o
 ## Anti-Patterns — Never Do These
 
 - ❌ Wrong intent type: classifying "draw a robot doing a flip" as "process" → produces a flowchart, not a picture
-- ❌ Vague descriptions: "Show some connected boxes" — no IDs, sizes, positions, or label text
-- ❌ Cross-frame references: "Add the browser from frame 1" — each frame is generated in isolation
+- ❌ Vague descriptions: "Show some connected things" — no part names, colors, or composition details
+- ❌ Cross-frame references: "Add the robot from frame 1" — each frame is generated in isolation
 - ❌ Pixel coords in Mermaid-path descriptions: Mermaid ignores them; describe logical structure instead
-- ❌ Missing vocabulary for multi-frame entities: robot drawn differently in each frame
-- ❌ No fillStyle solid on illustration shapes: causes double-hachure artifacts on overlapping parts
+- ❌ Pixel coords in SVG-path descriptions: use spatial language ("centered", "left third", "above") not exact numbers
+- ❌ Missing vocabulary for multi-frame entities: robot drawn differently in each frame — define it in element_vocabulary
 - ❌ Too many frames: a 2-step concept split into 6 frames loses the viewer
 - ❌ Generic captions: "Frame 1", "Part A" — always be specific and meaningful
+- ❌ Missing color guidance in SVG descriptions: always specify which shapes use the primary fill from shared_style
 
 ────────────────────────────────────────────────────────────────────
 ## Examples
@@ -253,20 +254,20 @@ This is the spoken script a teacher would deliver while pointing at this frame o
   "intent_type": "illustration",
   "shared_style": { "strokeColor": "#1e1e1e", "backgroundColor": "#a5d8ff", "roughness": 1 },
   "element_vocabulary": {
-    "head":  "ellipse, backgroundColor #c0c0c0, width 50, height 50, fillStyle solid",
-    "visor": "rectangle, backgroundColor #1971c2, width 30, height 12, fillStyle solid",
-    "body":  "rectangle, backgroundColor #a5d8ff, width 65, height 85, fillStyle solid"
+    "head":  "rounded rectangle, fill #c0c0c0 (silver), width 140, height 115",
+    "visor": "rectangle, fill #1971c2 (blue), width 96, height 28, inside head",
+    "body":  "rectangle, fill #a5d8ff (primary), width 190, height 155"
   },
   "frames": [
     {
       "index": 0,
-      "description": "Draw a robot standing upright on a flat ground line. Use fillStyle solid on ALL parts. Head: ellipse (id='head', backgroundColor #c0c0c0, width 50, height 50, fillStyle solid) at x=237,y=75. Visor slit: rectangle (id='visor', backgroundColor #1971c2, width 30, height 12, fillStyle solid) at x=222,y=94. Body: rectangle (id='body', backgroundColor #a5d8ff, width 65, height 85, fillStyle solid) at x=217,y=130. Left arm: line from x=217,y=150 with points [[0,0],[-35,55]], strokeWidth 3. Right arm: line from x=282,y=150 with points [[0,0],[35,55]], strokeWidth 3. Left leg: line from x=232,y=215 with points [[0,0],[-18,75]], strokeWidth 3. Right leg: line from x=267,y=215 with points [[0,0],[18,75]], strokeWidth 3. Ground: line from x=140,y=290 with points [[0,0],[220,0]], strokeWidth 2. Text 'Ready!' at x=215,y=35, fontSize 20.",
+      "description": "Draw a robot standing upright on a ground line, centered horizontally on the canvas. The robot uses vocabulary entities: 'head' (silver rounded rectangle) at the top, 'visor' (blue rectangle) centered inside the head, 'body' (#a5d8ff rectangle, primary fill) directly below the head. Arms: two thick lines extending diagonally downward from the body sides, arms relaxed at approximately 45° outward. Legs: two thick lines extending straight downward from the body bottom, slightly spread. Ground: horizontal gray line below the feet. Dashed flight trajectory arc behind the robot is NOT shown yet. Label 'Ready Position' centered below the robot. Add a small annotation 'Ready!' above the head.",
       "narration": "Here is our robot, standing tall and ready to perform. Notice its silver head with a blue visor, its compact blue body, and its arms hanging relaxed at its sides. In the very next moment, it will launch into a spectacular backflip.",
       "caption": "Step 1: Ready Position"
     },
     {
       "index": 1,
-      "description": "Draw the same robot fully inverted at the peak of its backflip. Use fillStyle solid on ALL parts. Body: rectangle (id='body', backgroundColor #a5d8ff, width 65, height 85, fillStyle solid, angle=3.14159) at x=217,y=120. Head: ellipse (id='head', backgroundColor #c0c0c0, width 50, height 50, fillStyle solid) at x=237,y=210. Visor: rectangle (id='visor', backgroundColor #1971c2, width 30, height 12, fillStyle solid) at x=222,y=226. Arms flung wide upward: line from x=217,y=145 with points [[0,0],[-60,-55]], strokeWidth 3. Line from x=282,y=145 with points [[0,0],[60,-55]], strokeWidth 3. Legs kicked overhead: line from x=232,y=120 with points [[0,0],[-22,-75]], strokeWidth 3. Line from x=267,y=120 with points [[0,0],[22,-75]], strokeWidth 3. Flight arc: line at x=120,y=175 with points [[0,0],[65,-100],[175,-100],[240,0]], strokeStyle dashed, strokeColor #1971c2, strokeWidth 2. Text 'Flip!' at x=215,y=30, fontSize 20.",
+      "description": "Draw the same robot fully inverted at the peak of its backflip, centered horizontally on the canvas. Use vocabulary entities: 'body' (#a5d8ff, rotated 180°, so it appears upside-down) in the upper-center area. 'head' (silver) is now BELOW the body. 'visor' (blue) is inside the head, also inverted. Arms: two thick lines flung wide upward from the body sides (angled steeply upward, like a victory pose). Legs: two thick lines kicked high overhead above the body. Draw a dashed curved arc (blue #1971c2) tracing the parabolic flight path from lower-left to lower-right, peaking above the robot. Label 'Peak of Flip!' above the arc. Canvas background is white.",
       "narration": "At the peak of the backflip, the robot is fully inverted — arms spread wide, legs kicked high over its head. The dashed arc traces the flight path from launch to landing, showing the graceful parabola this mechanical acrobat carves through the air.",
       "caption": "Step 2: Peak of the Flip"
     }

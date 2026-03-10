@@ -1,3 +1,5 @@
+process flow worth giving a shot
+---------------------------------------
 User Request
       │
       ▼
@@ -23,3 +25,114 @@ CDN Storage
       │
       ▼
 Return URL
+
+
+Current process flow diagram
+User Prompt
+    ↓
+create_plan() — 1 LLM call
+    classifies intent_type, decides frame_count,
+    writes frame descriptions + narration + captions
+    ↓
+Route by intent_type:
+    ├── process / architecture / timeline
+    │       → generate_mermaid_frames()
+    │         LLM writes Mermaid text → Node sidecar → Excalidraw elements
+    │
+    ├── math
+    │       → generate_manim_frames()
+    │         LLM writes Python/Manim → subprocess renders → PNG
+    │
+    └── concept_analogy / comparison / illustration
+            → generate_all_frames()
+              LLM writes raw slim JSON (x, y, width, height coords) → enhance()
+    ↓
+combine_frames() — stitch frames side by side
+    ↓
+enhance() — slim JSON → full .excalidraw format
+    ↓
+Return .excalidraw + narration text per frame
+
+
+Drawbacks of illustrations flow:
+      LLMs are very bad at spatial reasoning in pixel coordinates. They don't "see" a canvas. They're pattern-matching from training data, not reasoning about space.
+      The shape vocabulary is too primitive. Rectangles + ellipses + lines can't make a convincing robot doing a flip, let alone explain thermodynamics with a meaningful visual.
+      There's no feedback loop. The LLM generates blind — it can't see the output and fix proportions.
+      Thermodynamics-style concept diagrams (molecules, heat flow, pressure) are particularly bad here because they need curves, gradients, and accurate spatial metaphors that require real drawing tools.
+
+
+
+Intent Type	Primary Path	Fallback	Output Format
+process	Mermaid (Node sidecar)	Slim JSON	.excalidraw JSON
+architecture	Mermaid (Node sidecar)	Slim JSON	.excalidraw JSON
+timeline	Mermaid (Node sidecar)	Slim JSON	.excalidraw JSON
+math	Manim (subprocess render)	Slim JSON	PNG paths
+illustration	SVG (cairosvg render)	Slim JSON	PNG paths
+concept_analogy	SVG (cairosvg render)	Slim JSON	PNG paths
+comparison	SVG (cairosvg render)	Slim JSON	PNG paths
+
+
+
+
+User Prompt
+     │
+     ▼
+┌─────────────────────────────────────┐
+│  Stage 1: Planning (1 LLM call)     │
+│  planning_prompt.md + user prompt   │
+│  → GenerationPlan {                 │
+│      intent_type,                   │
+│      frame_count,                   │
+│      shared_style,                  │
+│      element_vocabulary,            │
+│      frames[]: {description,        │
+│                 narration,          │
+│                 caption}            │
+│    }                                │
+└──────────────┬──────────────────────┘
+               │
+               ▼ intent_type?
+    ┌──────────┴───────────┐──────────────────────┐──────────────────────┐
+    │                      │                      │                      │
+    ▼                      ▼                      ▼                      ▼
+  math              process /              illustration /          anything else
+  + manim OK?    architecture /          concept_analogy /         (or fallback)
+    │             timeline               comparison
+    │             + sidecar OK?          + cairosvg OK?
+    │                  │                      │
+    ▼                  ▼                      ▼
+ Manim path        Mermaid path           SVG path
+ (per frame)       (per frame)            (per frame)
+    │                  │                      │
+    │  LLM →           │  LLM →               │  LLM →
+    │  Python code      │  Mermaid text         │  SVG markup
+    │  ↓                │  ↓                    │  ↓
+    │  subprocess       │  Node sidecar         │  cairosvg
+    │  manim render     │  /convert             │  svg2png
+    │  ↓                │  ↓                    │  ↓
+    │  PNG file         │  Excalidraw elements  │  PNG file
+    │                   │                       │
+    ▼                   ▼                       ▼
+ [PNG paths]     [Slim JSON dicts]         [PNG paths]
+                        │
+                 Slim JSON fallback ←───── all failed
+                 (slim JSON path)          availability checks
+                        │
+                        ▼
+               Stage 3: combine_frames()
+               (stitch N frames side-by-side,
+                add captions, fix IDs)
+                        │
+                        ▼
+               Stage 4: enhance()
+               (slim JSON → full .excalidraw)
+                        │
+                        ▼
+               .excalidraw JSON file
+
+     ┌──────────────────────────────────────┐
+     │  Always saved alongside output:      │
+     │  - narration.txt (per-frame scripts) │
+     │  - activity_log.json                 │
+     │  - session in SQLite DB              │
+     └──────────────────────────────────────┘

@@ -1,9 +1,9 @@
 fastapi
 uvicorn[standard]
 python-multipart
-openpyxl
 langchain
 langchain-openai
 manim
 pydantic
 requests
+cairosvg

@@ -16,10 +16,12 @@ from services.excalidraw.planner import create_plan, generate_all_frames, reques
 from services.excalidraw.combiner import combine_frames
 from services.excalidraw.mermaid.mermaid_generator import generate_mermaid_frames, _sidecar_available
 from services.excalidraw.manim.manim_generator import generate_manim_frames, manim_available
+from services.excalidraw.svg.svg_generator import generate_svg_frames, svg_available
 
 # Intent types routed to each generator
 MERMAID_INTENT_TYPES = {"process", "architecture", "timeline"}
 MANIM_INTENT_TYPES   = {"math"}
+SVG_INTENT_TYPES     = {"illustration", "concept_analogy", "comparison"}
 
 app = FastAPI(title="Falcon API")
 
@@ -153,6 +155,8 @@ async def image_generation(message: str = Form("")):
         mermaid_prompt_template = f.read()
     with open(os.path.join(prompts_dir, "manim_prompt.md")) as f:
         manim_prompt_template = f.read()
+    with open(os.path.join(prompts_dir, "svg_prompt.md")) as f:
+        svg_prompt_template = f.read()
 
     try:
         # ── Stage 1: Planning ────────────────────────────────────────────────
@@ -205,6 +209,26 @@ async def image_generation(message: str = Form("")):
                 "ui_file_type": "python",
             }
 
+        elif plan.intent_type in SVG_INTENT_TYPES and svg_available():
+            _log({"event": "stage_start", "stage": "frame_generation", "path": "svg", "frame_count": plan.frame_count})
+            svg_output_dir = os.path.join(output_dir, "svg")
+            png_paths = await generate_svg_frames(plan, svg_prompt_template, svg_output_dir)
+            _log({"event": "stage_complete", "stage": "frame_generation", "path": "svg"})
+
+            ui_output_file = os.path.join(output_dir, "final_output.json")
+            with open(ui_output_file, "w") as f:
+                json.dump({"render_path": "svg", "images": png_paths, "captions": captions}, f, indent=2)
+
+            result_payload = {
+                "session_id": session_id,
+                "render_path": "svg",
+                "frame_count": plan.frame_count,
+                "intent_type": plan.intent_type,
+                "captions": captions,
+                "images": png_paths,
+                "ui_file_type": "images",
+            }
+
         else:
             use_mermaid = plan.intent_type in MERMAID_INTENT_TYPES and _sidecar_available()
             path_label  = "mermaid" if use_mermaid else "slim_json"
@@ -215,6 +239,8 @@ async def image_generation(message: str = Form("")):
             else:
                 if plan.intent_type in MERMAID_INTENT_TYPES:
                     _log({"event": "info", "message": "Mermaid sidecar unavailable — falling back to slim JSON"})
+                elif plan.intent_type in SVG_INTENT_TYPES:
+                    _log({"event": "info", "message": "cairosvg unavailable — falling back to slim JSON"})
                 frame_slims = await generate_all_frames(plan, prompt_template)
             _log({"event": "stage_complete", "stage": "frame_generation", "path": path_label})
 
