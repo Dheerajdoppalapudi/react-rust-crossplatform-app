@@ -1,5 +1,7 @@
 import asyncio
 import json
+import logging
+import logging.handlers
 import os
 import sqlite3
 import time
@@ -10,6 +12,53 @@ from datetime import datetime, timezone
 
 from dotenv import load_dotenv
 load_dotenv()
+
+# ---------------------------------------------------------------------------
+# Logging setup — run once at import time
+# ---------------------------------------------------------------------------
+
+LOG_FORMAT = "%(asctime)s  %(levelname)-8s  %(name)s:%(lineno)d  %(message)s"
+LOG_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
+
+def _setup_logging() -> None:
+    """
+    Configure root logger with:
+      - StreamHandler  → console (INFO and above)
+      - RotatingFileHandler → logs/app.log (DEBUG and above, 5 MB × 3 backups)
+    All third-party loggers (uvicorn, httpx, openai) are left at their
+    default levels so they don't flood the console.
+    """
+    log_dir = os.path.join(os.path.dirname(__file__), "logs")
+    os.makedirs(log_dir, exist_ok=True)
+
+    formatter = logging.Formatter(LOG_FORMAT, datefmt=LOG_DATE_FORMAT)
+
+    # Console handler — INFO+
+    console = logging.StreamHandler()
+    console.setLevel(logging.INFO)
+    console.setFormatter(formatter)
+
+    # Rotating file handler — DEBUG+ (captures everything for post-mortem)
+    file_handler = logging.handlers.RotatingFileHandler(
+        os.path.join(log_dir, "app.log"),
+        maxBytes=5 * 1024 * 1024,   # 5 MB per file
+        backupCount=3,
+        encoding="utf-8",
+    )
+    file_handler.setLevel(logging.DEBUG)
+    file_handler.setFormatter(formatter)
+
+    root = logging.getLogger()
+    root.setLevel(logging.DEBUG)
+    root.addHandler(console)
+    root.addHandler(file_handler)
+
+    # Quiet down noisy third-party loggers
+    for noisy in ("httpx", "httpcore", "openai", "uvicorn.access"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
+
+_setup_logging()
+logger = logging.getLogger(__name__)
 
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.responses import JSONResponse, FileResponse
@@ -160,6 +209,8 @@ async def image_generation(message: str = Form("")):
     token = request_log.set(lifecycle_log)
 
     _log({"event": "request_received", "prompt": message, "session_id": session_id})
+    logger.info("Request received  session=%s  prompt=%r", session_id, message[:120])
+    logger.debug("Full prompt: %s", message)
 
     prompts_dir = os.path.join(EXCALIDRAW_DIR, "prompts")
     with open(os.path.join(prompts_dir, "prompt_template.md")) as f:
@@ -182,6 +233,10 @@ async def image_generation(message: str = Form("")):
             "frame_count": plan.frame_count,
             "layout": plan.layout,
         })
+        logger.info(
+            "Planning complete  session=%s  intent=%s  frames=%d  layout=%s",
+            session_id, plan.intent_type, plan.frame_count, plan.layout,
+        )
 
         captions = [frame.caption for frame in plan.frames]
         narration_lines = []
@@ -195,10 +250,12 @@ async def image_generation(message: str = Form("")):
 
         # ── Stage 2: Frame generation ────────────────────────────────────────
         if plan.intent_type in MANIM_INTENT_TYPES and manim_available():
+            logger.info("Render path → manim  session=%s", session_id)
             _log({"event": "stage_start", "stage": "frame_generation", "path": "manim", "frame_count": plan.frame_count})
             manim_output_dir = os.path.join(output_dir, "manim")
             png_paths = await generate_manim_frames(plan, manim_prompt_template, manim_output_dir)
             _log({"event": "stage_complete", "stage": "frame_generation", "path": "manim"})
+            logger.info("Manim frames generated  session=%s  paths=%s", session_id, png_paths)
 
             # Save Python code (last frame LLM responses) as final output
             manim_calls = [e for e in lifecycle_log if e.get("event") == "llm_call"]
@@ -226,10 +283,12 @@ async def image_generation(message: str = Form("")):
             }
 
         elif plan.intent_type in SVG_INTENT_TYPES and svg_available():
+            logger.info("Render path → svg  session=%s", session_id)
             _log({"event": "stage_start", "stage": "frame_generation", "path": "svg", "frame_count": plan.frame_count})
             svg_output_dir = os.path.join(output_dir, "svg")
             png_paths = await generate_svg_frames(plan, svg_prompt_template, svg_output_dir)
             _log({"event": "stage_complete", "stage": "frame_generation", "path": "svg"})
+            logger.info("SVG frames generated  session=%s  paths=%s", session_id, png_paths)
 
             with open(os.path.join(output_dir, "frames.json"), "w") as f:
                 json.dump({"render_path": "svg", "images": png_paths, "captions": captions}, f, indent=2)
@@ -252,6 +311,27 @@ async def image_generation(message: str = Form("")):
             use_mermaid = plan.intent_type in MERMAID_INTENT_TYPES and _sidecar_available()
             path_label  = "mermaid" if use_mermaid else "slim_json"
 
+            if use_mermaid:
+                logger.info("Render path → mermaid  session=%s", session_id)
+            else:
+                if plan.intent_type in MANIM_INTENT_TYPES:
+                    logger.warning(
+                        "Manim not available — falling back to slim_json  session=%s  intent=%s",
+                        session_id, plan.intent_type,
+                    )
+                elif plan.intent_type in MERMAID_INTENT_TYPES:
+                    logger.warning(
+                        "Mermaid sidecar unavailable — falling back to slim_json  session=%s  intent=%s",
+                        session_id, plan.intent_type,
+                    )
+                elif plan.intent_type in SVG_INTENT_TYPES:
+                    logger.warning(
+                        "cairosvg unavailable — falling back to slim_json  session=%s  intent=%s",
+                        session_id, plan.intent_type,
+                    )
+                else:
+                    logger.info("Render path → slim_json  session=%s  intent=%s", session_id, plan.intent_type)
+
             _log({"event": "stage_start", "stage": "frame_generation", "path": path_label, "frame_count": plan.frame_count})
             if use_mermaid:
                 frame_slims = await generate_mermaid_frames(plan, mermaid_prompt_template)
@@ -262,6 +342,7 @@ async def image_generation(message: str = Form("")):
                     _log({"event": "info", "message": "cairosvg unavailable — falling back to slim JSON"})
                 frame_slims = await generate_all_frames(plan, prompt_template)
             _log({"event": "stage_complete", "stage": "frame_generation", "path": path_label})
+            logger.info("Frame generation complete  session=%s  path=%s", session_id, path_label)
 
             # ── Stage 3: Combine ─────────────────────────────────────────────
             _log({"event": "stage_start", "stage": "combine_frames"})
@@ -302,6 +383,13 @@ async def image_generation(message: str = Form("")):
         # ── Save activity log ─────────────────────────────────────────────────
         duration_ms = int((time.time() - start_time) * 1000)
         _log({"event": "request_complete", "duration_ms": duration_ms, "session_id": session_id})
+        logger.info(
+            "Request complete  session=%s  render_path=%s  duration_ms=%d  llm_calls=%d",
+            session_id,
+            result_payload.get("render_path"),
+            duration_ms,
+            _count_llm_calls(lifecycle_log),
+        )
 
         with open(os.path.join(output_dir, "activity_log.json"), "w") as f:
             json.dump(lifecycle_log, f, indent=2)
@@ -322,6 +410,7 @@ async def image_generation(message: str = Form("")):
         return result_payload
 
     except Exception as exc:
+        logger.error("Request failed  session=%s  error=%s", session_id, exc, exc_info=True)
         _log({"event": "error", "error": str(exc)})
         with open(os.path.join(output_dir, "activity_log.json"), "w") as f:
             json.dump(lifecycle_log, f, indent=2)
@@ -401,7 +490,10 @@ async def generate_video(
     Query param:
       use_openai_tts=false  → fall back to gTTS (free, no API key needed)
     """
+    logger.info("Video generation requested  session=%s  openai_tts=%s", session_id, use_openai_tts)
+
     if not moviepy_available():
+        logger.error("moviepy not installed  session=%s", session_id)
         return JSONResponse({"error": "moviepy not installed — run: pip install moviepy"}, status_code=503)
 
     with _get_db() as conn:
@@ -443,31 +535,45 @@ async def generate_video(
     narration_texts = narration_texts[: len(captions)]
 
     # ── Stage 1: Normalize frames → 1920×1080 PNGs with subtitle bars ─────────
+    logger.info("Video stage 1/3: frame export  session=%s  frames=%d", session_id, len(captions))
     try:
         normalized_pngs = await asyncio.to_thread(export_frames, output_dir, captions)
+        logger.info("Frame export done  session=%s  exported=%d", session_id, len(normalized_pngs))
     except Exception as e:
+        logger.error("Frame export failed  session=%s", session_id, exc_info=True)
         return JSONResponse({"error": f"Frame export failed: {e}"}, status_code=500)
 
     # ── Stage 2: TTS — narration text → per-frame .mp3 ────────────────────────
+    logger.info("Video stage 2/3: TTS  session=%s  backend=%s", session_id, "openai" if use_openai_tts else "gtts")
     try:
         audio_paths = await asyncio.to_thread(
             generate_audio, narration_texts, output_dir, use_openai_tts
         )
+        audio_ok = sum(1 for p in audio_paths if p)
+        logger.info("TTS done  session=%s  generated=%d/%d", session_id, audio_ok, len(audio_paths))
     except Exception as e:
+        logger.error("TTS generation failed  session=%s", session_id, exc_info=True)
         return JSONResponse({"error": f"TTS generation failed: {e}"}, status_code=500)
 
     # ── Stage 3: Assemble video ────────────────────────────────────────────────
     video_path = os.path.join(output_dir, "final_video.mp4")
+    logger.info("Video stage 3/3: assembly  session=%s  output=%s", session_id, video_path)
     try:
         await asyncio.to_thread(
             assemble, normalized_pngs, audio_paths, narration_texts, video_path
         )
+        logger.info("Video assembly complete  session=%s  path=%s", session_id, video_path)
     except Exception as e:
+        logger.error("Video assembly failed  session=%s", session_id, exc_info=True)
         return JSONResponse({"error": f"Video assembly failed: {e}"}, status_code=500)
 
     # ── Persist video path to DB ───────────────────────────────────────────────
     _update_session(session_id, video_path=video_path)
 
+    logger.info(
+        "Video generation done  session=%s  frames=%d  tts=%s",
+        session_id, len(normalized_pngs), "openai" if use_openai_tts else "gtts",
+    )
     return {
         "session_id": session_id,
         "video_path": video_path,

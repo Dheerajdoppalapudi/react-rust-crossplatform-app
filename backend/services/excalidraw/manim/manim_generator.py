@@ -18,11 +18,25 @@ import asyncio
 import os
 import re
 import subprocess
+import sys
 from pathlib import Path
 from typing import Optional
 
 from services.excalidraw.planner import GenerationPlan, FramePlan, call_llm
 
+
+# ---------------------------------------------------------------------------
+# Resolve manim CLI path relative to the running Python interpreter
+# so it works regardless of whether the venv is "activated" in the shell.
+# e.g. /path/to/env/bin/python → /path/to/env/bin/manim
+# ---------------------------------------------------------------------------
+
+def _manim_cmd() -> str:
+    """Return the absolute path to the manim CLI in the current Python env."""
+    candidate = Path(sys.executable).parent / "manim"
+    if candidate.exists():
+        return str(candidate)
+    return "manim"  # fallback to PATH lookup
 
 
 # ---------------------------------------------------------------------------
@@ -33,7 +47,7 @@ def manim_available() -> bool:
     """Return True if the manim CLI is installed and reachable."""
     try:
         result = subprocess.run(
-            ["manim", "--version"],
+            [_manim_cmd(), "--version"],
             capture_output=True,
             timeout=5,
         )
@@ -64,7 +78,7 @@ def _generate_manim_code(
     prompt_template: str,
 ) -> str:
     """Synchronous LLM call. Returns raw Manim Python code string."""
-    primary_color = plan.shared_style.get("strokeColor", "#4F86C6")
+    primary_color = getattr(plan.shared_style, "strokeColor", "#4F86C6")
     prompt = (
         prompt_template
         .replace("{{DIAGRAM_DESCRIPTION}}", frame.description)
@@ -99,8 +113,8 @@ def _render_frame(code: str, frame_index: int, output_dir: str) -> Optional[str]
     media_dir = os.path.join(frame_dir, "media")
 
     cmd = [
-        "manim", "render",
-        "-ql",                   # low quality (480p15) — fast render
+        _manim_cmd(), "render",
+        "-qh",                   # high quality (1080p60) — matches final video resolution
         "--media_dir", media_dir,
         scene_file,
         "GeneratedScene",

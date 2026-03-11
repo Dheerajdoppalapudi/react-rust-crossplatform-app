@@ -15,7 +15,7 @@ Pipeline per frame:
 
 Final output: 1920×1080, 24 fps, H.264 video + AAC audio.
 
-Requires: pip install moviepy
+Requires: pip install moviepy  (version 2.x)
 """
 
 import os
@@ -48,7 +48,8 @@ def _make_clip(frame_path: str, audio_path: Optional[str], duration: Optional[fl
 
     Returns a moviepy VideoClip ready for concatenation.
     """
-    from moviepy.editor import ImageClip, AudioFileClip, VideoFileClip, concatenate_videoclips
+    from moviepy import ImageClip, AudioFileClip, VideoFileClip, concatenate_videoclips
+    from moviepy.video.fx import CrossFadeIn, CrossFadeOut
 
     # Determine target duration from audio
     if audio_path and os.path.exists(audio_path):
@@ -61,25 +62,28 @@ def _make_clip(frame_path: str, audio_path: Optional[str], duration: Optional[fl
     is_video = frame_path.lower().endswith(".mp4")
 
     if is_video:
-        base_clip = VideoFileClip(frame_path).resize((1920, 1080))
+        base_clip = VideoFileClip(frame_path).resized((1920, 1080))
         anim_duration = base_clip.duration
 
         if anim_duration < target_duration:
             # Freeze last frame to fill the remaining time
             freeze_duration = target_duration - anim_duration
-            last_frame = ImageClip(base_clip.get_frame(anim_duration - 0.001)).set_duration(freeze_duration)
+            last_frame = (
+                ImageClip(base_clip.get_frame(anim_duration - 0.001))
+                .with_duration(freeze_duration)
+            )
             clip = concatenate_videoclips([base_clip, last_frame])
         else:
             # Animation is longer than audio — trim to audio length
-            clip = base_clip.subclip(0, target_duration)
+            clip = base_clip.subclipped(0, target_duration)
     else:
-        # Static PNG: apply Ken Burns zoom
-        clip = ImageClip(frame_path).set_duration(target_duration)
-        clip = clip.resize(lambda t: 1 + 0.02 * (t / target_duration))
+        # Static PNG: apply Ken Burns zoom (1.0 → 1.02 over clip duration)
+        clip = ImageClip(frame_path).with_duration(target_duration)
+        clip = clip.resized(lambda t: 1 + 0.02 * (t / target_duration))
 
     # Attach audio
     if audio_clip is not None:
-        clip = clip.set_audio(audio_clip)
+        clip = clip.with_audio(audio_clip)
 
     return clip
 
@@ -104,7 +108,8 @@ def assemble(
     Returns:
         output_path (the same value passed in).
     """
-    from moviepy.editor import concatenate_videoclips
+    from moviepy import concatenate_videoclips
+    from moviepy.video.fx import CrossFadeIn, CrossFadeOut
 
     if not frame_paths:
         raise ValueError("No frames to assemble — frame_paths is empty")
@@ -118,9 +123,9 @@ def assemble(
 
         # Apply crossfade transitions
         if i > 0:
-            clip = clip.crossfadein(FADE_DURATION)
+            clip = clip.with_effects([CrossFadeIn(FADE_DURATION)])
         if i < len(frame_paths) - 1:
-            clip = clip.crossfadeout(FADE_DURATION)
+            clip = clip.with_effects([CrossFadeOut(FADE_DURATION)])
 
         clips.append(clip)
 
@@ -147,9 +152,9 @@ def assemble(
 
 
 def moviepy_available() -> bool:
-    """Return True if moviepy is installed."""
+    """Return True if moviepy 2.x is installed."""
     try:
-        import moviepy.editor  # noqa: F401
+        import moviepy  # noqa: F401
         return True
     except ImportError:
         return False
