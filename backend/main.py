@@ -8,6 +8,9 @@ import urllib.parse
 import webbrowser
 from datetime import datetime, timezone
 
+from dotenv import load_dotenv
+load_dotenv()
+
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -386,7 +389,7 @@ def get_session_log(session_id: str):
 @app.post("/api/generate_video/{session_id}")
 async def generate_video(
     session_id: str,
-    use_openai_tts: bool = False,
+    use_openai_tts: bool = True,
 ):
     """
     Generate a video for an existing session.
@@ -396,7 +399,7 @@ async def generate_video(
     .mp4 with Ken Burns zoom + crossfade transitions.
 
     Query param:
-      use_openai_tts=true   → use OpenAI TTS instead of gTTS (requires OPENAI_API_KEY)
+      use_openai_tts=false  → fall back to gTTS (free, no API key needed)
     """
     if not moviepy_available():
         return JSONResponse({"error": "moviepy not installed — run: pip install moviepy"}, status_code=503)

@@ -172,6 +172,13 @@ def export_frames(
     for i, (src_path, caption) in enumerate(zip(png_paths, captions)):
         out_path = os.path.join(video_frames_dir, f"frame_{i:03d}.png")
 
+        # MP4 frames (Manim animations) are passed through directly —
+        # the video assembler handles them as VideoFileClip.
+        # Letterboxing and subtitle burning are skipped for video frames.
+        if src_path and src_path.lower().endswith(".mp4") and os.path.exists(src_path):
+            output_paths.append(src_path)
+            continue
+
         if src_path and os.path.exists(src_path):
             img = Image.open(src_path)
         else:

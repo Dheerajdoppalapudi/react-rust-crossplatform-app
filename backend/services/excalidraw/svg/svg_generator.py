@@ -25,7 +25,7 @@ from typing import Optional
 try:
     import cairosvg
     _CAIROSVG_AVAILABLE = True
-except ImportError:
+except (ImportError, OSError):
     _CAIROSVG_AVAILABLE = False
 
 from services.excalidraw.planner import GenerationPlan, FramePlan, call_llm

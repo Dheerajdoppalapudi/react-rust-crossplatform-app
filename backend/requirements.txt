@@ -1,8 +1,10 @@
 fastapi
 uvicorn[standard]
+python-dotenv
 python-multipart
 langchain
 langchain-openai
+openai
 manim
 pydantic
 requests

@@ -112,7 +112,7 @@ def _openai_tts_generate(text: str, out_path: str) -> bool:
 def generate_audio(
     narration_texts: list[str],
     output_dir: str,
-    use_openai: bool = False,
+    use_openai: bool = True,
 ) -> list[Optional[str]]:
     """
     Generate one .mp3 audio file per frame narration.

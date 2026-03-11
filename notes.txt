@@ -185,3 +185,57 @@ User Prompt
                          ▼
          GET /api/sessions/{id}/video
          → FileResponse streams .mp4
+
+
+
+cd "/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend"
+source env/bin/activate
+uvicorn main:app --reload --port 8001
+Test prompt — this will hit the SVG path (illustration intent):
+
+
+POST http://localhost:8001/api/image_generation
+
+{
+  "message": "Explain how photosynthesis works in a plant cell"
+}
+Or for math (Manim path):
+
+
+{ "message": "Show how the Pythagorean theorem works geometrically" }
+Then generate the video with the session_id from the first response:
+
+
+POST http://localhost:8001/api/generate_video/{session_id}
+Stream the final video:
+
+
+GET http://localhost:8001/api/sessions/{session_id}/video
+Output folder structure:
+
+
+backend/outputs/{session_id}/
+├── frames.json          ← PNG/MP4 paths + captions per frame
+├── narration.txt        ← per-frame narration text
+├── activity_log.json    ← timing + debug log
+├── svg/                 ← (SVG path)
+│   ├── frame_0/
+│   │   ├── frame.svg
+│   │   └── frame.png
+│   └── frame_1/...
+├── manim/               ← (Manim path)
+│   └── frame_0/
+│       ├── scene.py
+│       └── media/videos/.../GeneratedScene.mp4
+├── video_frames/        ← normalized 1920×1080 PNGs (built by generate_video)
+├── audio/               ← per-frame .mp3 narration files
+│   ├── frame_000.mp3
+│   └── frame_001.mp3
+└── video/
+    └── output.mp4       ← final assembled video
+Use a REST client like Bruno, Postman, or just curl:
+
+
+curl -X POST http://localhost:8001/api/image_generation \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Explain how photosynthesis works in a plant cell"}'

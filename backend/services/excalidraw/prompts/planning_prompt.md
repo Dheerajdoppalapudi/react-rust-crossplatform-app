@@ -52,6 +52,18 @@ Use this decision table. The "Rendered by" column matters: Mermaid = auto-layout
 - "What is RAM?" → concept_analogy (abstract → desktop analogy)
 - "Draw RAM as a desk" → illustration (visual rendering)
 
+**Biology / natural science — always illustration, NOT process:**
+The key test: does the prompt involve drawing a biological structure, organism, cell, anatomy, or natural scene? → **illustration** (even if "explain" or "how" appears in the prompt).
+- "Explain how photosynthesis works in a plant cell" → illustration (draw the cell with chloroplast, CO₂, O₂, glucose)
+- "How does the heart pump blood?" → illustration (anatomical diagram of heart chambers and vessels)
+- "Explain how a neuron fires" → illustration (draw the neuron with axon, dendrites, synapse)
+- "How does mitosis work?" → illustration (draw cell stages: prophase → metaphase → anaphase → telophase)
+- "Explain DNA replication" → illustration (draw the double helix unwinding)
+- "What is the water cycle?" → illustration (draw clouds, rain, river, evaporation in a scene)
+- "Show the food chain" → illustration (draw organisms in a scene)
+- "Explain how a volcano erupts" → illustration (draw cross-section of volcano)
+Reserve `process` for purely mechanical/digital step-by-step flows: request/response cycles, algorithms, state machines, software pipelines.
+
 ────────────────────────────────────────────────────────────────────
 ## STEP 2 — Decide frame_count
 
