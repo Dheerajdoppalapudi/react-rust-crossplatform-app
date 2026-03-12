@@ -13,10 +13,13 @@ Subtitle (caption text) is burned as a semi-transparent bar at the bottom.
 """
 
 import json
+import logging
 import os
 from typing import Optional
 
 from PIL import Image, ImageDraw, ImageFont
+
+logger = logging.getLogger(__name__)
 
 # Target video resolution
 VIDEO_W = 1920
@@ -176,14 +179,18 @@ def export_frames(
         # the video assembler handles them as VideoFileClip.
         # Letterboxing and subtitle burning are skipped for video frames.
         if src_path and src_path.lower().endswith(".mp4") and os.path.exists(src_path):
+            logger.debug("Frame %d: passing through Manim .mp4  path=%s", i, src_path)
             output_paths.append(src_path)
             continue
 
         if src_path and os.path.exists(src_path):
+            logger.debug("Frame %d: loading PNG  path=%s", i, src_path)
             img = Image.open(src_path)
         else:
             if src_path:
-                print(f"[frame_exporter] Frame {i}: PNG not found at {src_path} — using placeholder")
+                logger.warning("Frame %d: PNG not found at %s — using placeholder", i, src_path)
+            else:
+                logger.debug("Frame %d: no PNG path — using placeholder", i)
             img = _make_placeholder(caption, i)
 
         img = _letterbox(img)

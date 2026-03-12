@@ -1,0 +1,79 @@
+2026-03-12 01:39:44  DEBUG     python_multipart.multipart:629  Calling on_part_begin with no data
+2026-03-12 01:39:44  DEBUG     python_multipart.multipart:626  Calling on_header_field with data[42:61]
+2026-03-12 01:39:44  DEBUG     python_multipart.multipart:626  Calling on_header_value with data[63:88]
+2026-03-12 01:39:44  DEBUG     python_multipart.multipart:629  Calling on_header_end with no data
+2026-03-12 01:39:44  DEBUG     python_multipart.multipart:629  Calling on_headers_finished with no data
+2026-03-12 01:39:44  DEBUG     python_multipart.multipart:626  Calling on_part_data with data[92:144]
+2026-03-12 01:39:44  DEBUG     python_multipart.multipart:629  Calling on_part_end with no data
+2026-03-12 01:39:44  DEBUG     python_multipart.multipart:629  Calling on_end with no data
+2026-03-12 01:39:44  INFO      main:212  Request received  session=c0e7ec42fa144d7d8d48a8652fe47ee6  prompt='Show how the Pythagorean theorem works geometrically'
+2026-03-12 01:39:44  DEBUG     main:213  Full prompt: Show how the Pythagorean theorem works geometrically
+2026-03-12 01:39:52  INFO      main:236  Planning complete  session=c0e7ec42fa144d7d8d48a8652fe47ee6  intent=math  frames=2  layout=horizontal
+2026-03-12 01:39:54  INFO      main:253  Render path → manim  session=c0e7ec42fa144d7d8d48a8652fe47ee6
+2026-03-12 01:40:06  DEBUG     services.excalidraw.manim.manim_generator:127  Rendering Manim frame 0  dir=/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/c0e7ec42fa144d7d8d48a8652fe47ee6/manim/frame_0
+2026-03-12 01:40:09  ERROR     services.excalidraw.manim.manim_generator:137  Manim render failed  frame=0
+STDERR:
+                           │
+│   1845 │   │   │   │   │   if errno_num != 0:                                                    │
+│   1846 │   │   │   │   │   │   err_msg = os.strerror(errno_num)                                  │
+│ ❱ 1847 │   │   │   │   │   raise child_exception_type(errno_num, err_msg, err_filename)          │
+│   1848 │   │   │   │   raise child_exception_type(err_msg)                                       │
+│   1849                                                                                           │
+│   1850                                                                                           │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+FileNotFoundError: [Errno 2] No such file or directory: 'latex'
+
+2026-03-12 01:40:10  DEBUG     services.excalidraw.manim.manim_generator:127  Rendering Manim frame 1  dir=/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/c0e7ec42fa144d7d8d48a8652fe47ee6/manim/frame_1
+2026-03-12 01:40:13  ERROR     services.excalidraw.manim.manim_generator:137  Manim render failed  frame=1
+STDERR:
+                           │
+│   1845 │   │   │   │   │   if errno_num != 0:                                                    │
+│   1846 │   │   │   │   │   │   err_msg = os.strerror(errno_num)                                  │
+│ ❱ 1847 │   │   │   │   │   raise child_exception_type(errno_num, err_msg, err_filename)          │
+│   1848 │   │   │   │   raise child_exception_type(err_msg)                                       │
+│   1849                                                                                           │
+│   1850                                                                                           │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+FileNotFoundError: [Errno 2] No such file or directory: 'latex'
+
+2026-03-12 01:40:13  INFO      services.excalidraw.manim.manim_generator:217  Manim generation complete  ok=0/2
+2026-03-12 01:40:13  INFO      main:258  Manim frames generated  session=c0e7ec42fa144d7d8d48a8652fe47ee6  paths=[None, None]
+2026-03-12 01:40:13  INFO      main:386  Request complete  session=c0e7ec42fa144d7d8d48a8652fe47ee6  render_path=manim  duration_ms=28430  llm_calls=3
+2026-03-12 01:43:18  DEBUG     python_multipart.multipart:629  Calling on_part_begin with no data
+2026-03-12 01:43:18  DEBUG     python_multipart.multipart:626  Calling on_header_field with data[42:61]
+2026-03-12 01:43:18  DEBUG     python_multipart.multipart:626  Calling on_header_value with data[63:88]
+2026-03-12 01:43:18  DEBUG     python_multipart.multipart:629  Calling on_header_end with no data
+2026-03-12 01:43:18  DEBUG     python_multipart.multipart:629  Calling on_headers_finished with no data
+2026-03-12 01:43:18  DEBUG     python_multipart.multipart:626  Calling on_part_data with data[92:144]
+2026-03-12 01:43:18  DEBUG     python_multipart.multipart:629  Calling on_part_end with no data
+2026-03-12 01:43:18  DEBUG     python_multipart.multipart:629  Calling on_end with no data
+2026-03-12 01:43:18  INFO      main:212  Request received  session=1bb3f1235f8f4485ab039c079b3c7f3a  prompt='Show how the Pythagorean theorem works geometrically'
+2026-03-12 01:43:18  DEBUG     main:213  Full prompt: Show how the Pythagorean theorem works geometrically
+2026-03-12 01:43:29  INFO      main:236  Planning complete  session=1bb3f1235f8f4485ab039c079b3c7f3a  intent=math  frames=2  layout=horizontal
+2026-03-12 01:43:31  INFO      main:253  Render path → manim  session=1bb3f1235f8f4485ab039c079b3c7f3a
+2026-03-12 01:43:40  DEBUG     services.excalidraw.manim.manim_generator:127  Rendering Manim frame 1  dir=/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/1bb3f1235f8f4485ab039c079b3c7f3a/manim/frame_1
+2026-03-12 01:43:44  DEBUG     services.excalidraw.manim.manim_generator:127  Rendering Manim frame 0  dir=/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/1bb3f1235f8f4485ab039c079b3c7f3a/manim/frame_0
+2026-03-12 01:43:48  INFO      services.excalidraw.manim.manim_generator:150  Manim frame 1 rendered → /Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/1bb3f1235f8f4485ab039c079b3c7f3a/manim/frame_1/media/videos/scene/1080p60/GeneratedScene.mp4
+2026-03-12 01:43:50  INFO      services.excalidraw.manim.manim_generator:150  Manim frame 0 rendered → /Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/1bb3f1235f8f4485ab039c079b3c7f3a/manim/frame_0/media/videos/scene/1080p60/GeneratedScene.mp4
+2026-03-12 01:43:50  INFO      services.excalidraw.manim.manim_generator:217  Manim generation complete  ok=2/2
+2026-03-12 01:43:50  INFO      main:258  Manim frames generated  session=1bb3f1235f8f4485ab039c079b3c7f3a  paths=['/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/1bb3f1235f8f4485ab039c079b3c7f3a/manim/frame_0/media/videos/scene/1080p60/GeneratedScene.mp4', '/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/1bb3f1235f8f4485ab039c079b3c7f3a/manim/frame_1/media/videos/scene/1080p60/GeneratedScene.mp4']
+2026-03-12 01:43:50  INFO      main:386  Request complete  session=1bb3f1235f8f4485ab039c079b3c7f3a  render_path=manim  duration_ms=32121  llm_calls=3
+2026-03-12 01:47:05  DEBUG     python_multipart.multipart:629  Calling on_part_begin with no data
+2026-03-12 01:47:05  DEBUG     python_multipart.multipart:626  Calling on_header_field with data[42:61]
+2026-03-12 01:47:05  DEBUG     python_multipart.multipart:626  Calling on_header_value with data[63:88]
+2026-03-12 01:47:05  DEBUG     python_multipart.multipart:629  Calling on_header_end with no data
+2026-03-12 01:47:05  DEBUG     python_multipart.multipart:629  Calling on_headers_finished with no data
+2026-03-12 01:47:05  DEBUG     python_multipart.multipart:626  Calling on_part_data with data[92:193]
+2026-03-12 01:47:05  DEBUG     python_multipart.multipart:629  Calling on_part_end with no data
+2026-03-12 01:47:05  DEBUG     python_multipart.multipart:629  Calling on_end with no data
+2026-03-12 01:47:05  INFO      main:212  Request received  session=07c5b6a02f9247c19700bbf8e423bc65  prompt='explain how the Pythagorean theorem works geometrically keep it simple it is for a grade 6-7 students'
+2026-03-12 01:47:05  DEBUG     main:213  Full prompt: explain how the Pythagorean theorem works geometrically keep it simple it is for a grade 6-7 students
+2026-03-12 01:47:17  INFO      main:236  Planning complete  session=07c5b6a02f9247c19700bbf8e423bc65  intent=math  frames=2  layout=horizontal
+2026-03-12 01:47:19  INFO      main:253  Render path → manim  session=07c5b6a02f9247c19700bbf8e423bc65
+2026-03-12 01:47:31  DEBUG     services.excalidraw.manim.manim_generator:127  Rendering Manim frame 0  dir=/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/07c5b6a02f9247c19700bbf8e423bc65/manim/frame_0
+2026-03-12 01:47:32  DEBUG     services.excalidraw.manim.manim_generator:127  Rendering Manim frame 1  dir=/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/07c5b6a02f9247c19700bbf8e423bc65/manim/frame_1
+2026-03-12 01:47:40  INFO      services.excalidraw.manim.manim_generator:150  Manim frame 0 rendered → /Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/07c5b6a02f9247c19700bbf8e423bc65/manim/frame_0/media/videos/scene/1080p60/GeneratedScene.mp4
+2026-03-12 01:47:41  INFO      services.excalidraw.manim.manim_generator:150  Manim frame 1 rendered → /Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/07c5b6a02f9247c19700bbf8e423bc65/manim/frame_1/media/videos/scene/1080p60/GeneratedScene.mp4
+2026-03-12 01:47:41  INFO      services.excalidraw.manim.manim_generator:217  Manim generation complete  ok=2/2
+2026-03-12 01:47:41  INFO      main:258  Manim frames generated  session=07c5b6a02f9247c19700bbf8e423bc65  paths=['/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/07c5b6a02f9247c19700bbf8e423bc65/manim/frame_0/media/videos/scene/1080p60/GeneratedScene.mp4', '/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/07c5b6a02f9247c19700bbf8e423bc65/manim/frame_1/media/videos/scene/1080p60/GeneratedScene.mp4']
+2026-03-12 01:47:41  INFO      main:386  Request complete  session=07c5b6a02f9247c19700bbf8e423bc65  render_path=manim  duration_ms=35964  llm_calls=3

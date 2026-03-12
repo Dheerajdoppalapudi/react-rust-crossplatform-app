@@ -19,9 +19,12 @@ If TTS fails for a frame, that entry in the returned list is None.
 The video assembler uses word-count-based timing as a fallback for None entries.
 """
 
+import logging
 import os
 import re
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -74,10 +77,10 @@ def _gtts_generate(text: str, out_path: str) -> bool:
         tts.save(out_path)
         return True
     except ImportError:
-        print("[tts_service] gtts not installed — run: pip install gtts")
+        logger.error("gtts not installed — run: pip install gtts")
         return False
     except Exception as e:
-        print(f"[tts_service] gTTS error: {e}")
+        logger.error("gTTS error: %s", e, exc_info=True)
         return False
 
 
@@ -98,10 +101,10 @@ def _openai_tts_generate(text: str, out_path: str) -> bool:
         response.stream_to_file(out_path)
         return True
     except ImportError:
-        print("[tts_service] openai not installed — run: pip install openai")
+        logger.error("openai not installed — run: pip install openai")
         return False
     except Exception as e:
-        print(f"[tts_service] OpenAI TTS error: {e}")
+        logger.error("OpenAI TTS error: %s", e, exc_info=True)
         return False
 
 
@@ -146,13 +149,16 @@ def generate_audio(
             continue
 
         if not text:
-            print(f"[tts_service] Frame {i}: empty narration text — skipping audio")
+            logger.warning("Frame %d: empty narration text — skipping audio", i)
             paths.append(None)
             continue
 
+        logger.debug("Generating audio for frame %d  chars=%d  path=%s", i, len(text), out_path)
         success = backend(text, out_path)
         paths.append(out_path if success else None)
         if not success:
-            print(f"[tts_service] Frame {i}: TTS failed — video will use estimated duration")
+            logger.warning("Frame %d: TTS failed — video will use estimated duration", i)
+        else:
+            logger.debug("Audio generated  frame=%d  path=%s", i, out_path)
 
     return paths

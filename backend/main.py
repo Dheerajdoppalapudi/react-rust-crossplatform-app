@@ -560,7 +560,7 @@ async def generate_video(
     logger.info("Video stage 3/3: assembly  session=%s  output=%s", session_id, video_path)
     try:
         await asyncio.to_thread(
-            assemble, normalized_pngs, audio_paths, narration_texts, video_path
+            assemble, normalized_pngs, audio_paths, narration_texts, video_path, captions
         )
         logger.info("Video assembly complete  session=%s  path=%s", session_id, video_path)
     except Exception as e:

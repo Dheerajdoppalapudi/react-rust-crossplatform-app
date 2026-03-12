@@ -4,8 +4,8 @@ Manim Generator — frame generation for math, physics, and science content.
 Pipeline per frame:
   1. LLM call  → Manim Python code  (parallel, via asyncio.gather)
   2. Write code to a temp .py file
-  3. subprocess: manim render -ql --save_last_frame scene.py GeneratedScene
-  4. Return absolute path to rendered PNG
+  3. subprocess: manim render -qh scene.py GeneratedScene
+  4. Return absolute path to the rendered .mp4 video
 
 All N frames run in parallel. Failed frames return None (same graceful
 fallback pattern as mermaid_generator).
@@ -15,6 +15,7 @@ intent_type is "math". Manim must be installed: pip install manim
 """
 
 import asyncio
+import logging
 import os
 import re
 import subprocess
@@ -23,6 +24,8 @@ from pathlib import Path
 from typing import Optional
 
 from services.excalidraw.planner import GenerationPlan, FramePlan, call_llm
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -88,20 +91,21 @@ def _generate_manim_code(
 
 
 # ---------------------------------------------------------------------------
-# Single frame: render Manim code → PNG path
+# Single frame: render Manim code → .mp4 path
 # ---------------------------------------------------------------------------
 
 def _render_frame(code: str, frame_index: int, output_dir: str) -> Optional[str]:
     """
-    Write Manim Python code to disk, run the renderer, return the PNG path.
+    Write Manim Python code to disk, run the renderer, return the .mp4 path.
 
     Directory layout under output_dir:
         frame_<N>/
             scene.py        ← generated code
             media/          ← Manim writes here
-                images/
+                videos/
                     scene/
-                        GeneratedScene_ManimCE_vX.X.X.png
+                        1080p60/
+                            GeneratedScene.mp4
     """
     frame_dir = os.path.join(output_dir, f"frame_{frame_index}")
     os.makedirs(frame_dir, exist_ok=True)
@@ -120,37 +124,40 @@ def _render_frame(code: str, frame_index: int, output_dir: str) -> Optional[str]
         "GeneratedScene",
     ]
 
+    logger.debug("Rendering Manim frame %d  dir=%s", frame_index, frame_dir)
     try:
         result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
-            timeout=90,
+            timeout=180,   # 1080p60 renders can take 2–3 min on slower machines
         )
 
         if result.returncode != 0:
-            print(
-                f"[manim] Frame {frame_index} render failed:\n"
-                f"{result.stderr[-600:]}"
+            logger.error(
+                "Manim render failed  frame=%d\nSTDERR:\n%s",
+                frame_index, result.stderr[-800:],
             )
             return None
 
         mp4s = list(Path(media_dir).rglob("*.mp4"))
         if not mp4s:
-            print(f"[manim] Frame {frame_index}: render OK but no .mp4 found")
+            logger.error("Manim render completed but no .mp4 found  frame=%d  media_dir=%s", frame_index, media_dir)
             return None
 
         # Pick the most recently written .mp4
-        return str(max(mp4s, key=lambda p: p.stat().st_mtime))
+        best = str(max(mp4s, key=lambda p: p.stat().st_mtime))
+        logger.info("Manim frame %d rendered → %s", frame_index, best)
+        return best
 
     except subprocess.TimeoutExpired:
-        print(f"[manim] Frame {frame_index} timed out (90 s)")
+        logger.error("Manim render timed out (180 s)  frame=%d", frame_index)
         return None
     except FileNotFoundError:
-        print("[manim] 'manim' not found — run: pip install manim")
+        logger.error("'manim' CLI not found — run: pip install manim")
         return None
     except Exception as e:
-        print(f"[manim] Frame {frame_index} unexpected error: {e}")
+        logger.error("Manim frame %d unexpected error: %s", frame_index, e, exc_info=True)
         return None
 
 
@@ -188,7 +195,7 @@ async def generate_manim_frames(
         output_dir:      Directory where per-frame subdirectories will be created.
 
     Returns:
-        List of absolute PNG paths, one per frame.
+        List of absolute .mp4 paths, one per frame.
         None entries indicate frames that failed to render.
     """
     tasks = [
@@ -201,9 +208,11 @@ async def generate_manim_frames(
     paths: list[Optional[str]] = []
     for i, result in enumerate(results):
         if isinstance(result, Exception):
-            print(f"[manim] Frame {i} exception: {result}")
+            logger.error("Manim frame %d raised exception: %s", i, result, exc_info=result)
             paths.append(None)
         else:
             paths.append(result)
 
+    ok = sum(1 for p in paths if p)
+    logger.info("Manim generation complete  ok=%d/%d", ok, len(paths))
     return paths
