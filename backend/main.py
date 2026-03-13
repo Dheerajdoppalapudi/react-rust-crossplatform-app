@@ -498,7 +498,7 @@ async def generate_video(
 
     with _get_db() as conn:
         row = conn.execute(
-            "SELECT output_dir, frame_count, status, render_path FROM sessions WHERE id = ?",
+            "SELECT output_dir, frame_count, status, render_path, video_path FROM sessions WHERE id = ?",
             (session_id,),
         ).fetchone()
 
@@ -506,6 +506,16 @@ async def generate_video(
         return JSONResponse({"error": "Session not found"}, status_code=404)
     if row["status"] != "done":
         return JSONResponse({"error": f"Session not ready (status: {row['status']})"}, status_code=400)
+
+    # ── Idempotency: return cached video if it already exists ──────────────────
+    if row["video_path"] and os.path.exists(row["video_path"]):
+        logger.info("Video already exists — returning cached  session=%s  path=%s", session_id, row["video_path"])
+        return {
+            "session_id":   session_id,
+            "video_path":   row["video_path"],
+            "frame_count":  row["frame_count"],
+            "tts_backend":  "cached",
+        }
 
     output_dir = row["output_dir"]
     if not output_dir or not os.path.isdir(output_dir):
@@ -580,6 +590,50 @@ async def generate_video(
         "frame_count": len(normalized_pngs),
         "tts_backend": "openai" if use_openai_tts else "gtts",
     }
+
+
+@app.get("/api/sessions/{session_id}/frames-meta")
+def get_session_frames_meta(session_id: str):
+    """Return the frames.json content (images paths, captions, render_path)."""
+    with _get_db() as conn:
+        row = conn.execute("SELECT output_dir FROM sessions WHERE id = ?", (session_id,)).fetchone()
+
+    if not row or not row["output_dir"]:
+        return JSONResponse({"error": "Session not found"}, status_code=404)
+
+    frames_json_path = os.path.join(row["output_dir"], "frames.json")
+    if not os.path.exists(frames_json_path):
+        return JSONResponse({"error": "frames.json not found"}, status_code=404)
+
+    with open(frames_json_path) as f:
+        return json.load(f)
+
+
+@app.get("/api/sessions/{session_id}/frame/{frame_index}")
+def get_session_frame(session_id: str, frame_index: int):
+    """Serve a rendered frame as a PNG image, or 404 if not a PNG."""
+    with _get_db() as conn:
+        row = conn.execute("SELECT output_dir FROM sessions WHERE id = ?", (session_id,)).fetchone()
+
+    if not row or not row["output_dir"]:
+        return JSONResponse({"error": "Session not found"}, status_code=404)
+
+    frames_json_path = os.path.join(row["output_dir"], "frames.json")
+    if not os.path.exists(frames_json_path):
+        return JSONResponse({"error": "frames.json not found"}, status_code=404)
+
+    with open(frames_json_path) as f:
+        frames_data = json.load(f)
+
+    images = frames_data.get("images", [])
+    if frame_index >= len(images):
+        return JSONResponse({"error": "Frame index out of range"}, status_code=404)
+
+    image_path = images[frame_index]
+    if image_path and image_path.lower().endswith(".png") and os.path.exists(image_path):
+        return FileResponse(image_path, media_type="image/png")
+
+    return JSONResponse({"error": "Frame image not available (non-PNG or missing)"}, status_code=404)
 
 
 @app.get("/api/sessions/{session_id}/video")

@@ -239,3 +239,40 @@ Use a REST client like Bruno, Postman, or just curl:
 curl -X POST http://localhost:8001/api/image_generation \
   -H "Content-Type: application/json" \
   -d '{"message": "Explain how photosynthesis works in a plant cell"}'
+
+
+
+
+
+  UI
+ │
+ │  POST /api/image_generation   { message: "Show Pythagorean theorem" }
+ │
+ ▼
+main.py
+  ├─ Creates session_id (UUID)
+  ├─ LLM call 1: planning_prompt → intent_type, frame_count, captions, narration
+  ├─ LLM call 2+N: generate frames (Manim code / SVG / Mermaid / slim JSON)
+  ├─ Renders frames to disk  (outputs/<session_id>/manim/ or svg/ or ...)
+  ├─ Saves to disk:
+  │     outputs/<session_id>/frames.json       ← image paths + captions
+  │     outputs/<session_id>/narration.txt     ← per-frame spoken text
+  │     outputs/<session_id>/activity_log.json
+  └─ Saves to DB: sessions table (session_id, status="done", render_path, ...)
+  │
+  └─ Returns { session_id, render_path, captions, images, ... }
+
+UI stores session_id
+ │
+ │  POST /api/generate_video/<session_id>
+ │
+ ▼
+main.py
+  ├─ Reads frames.json   → image/video file paths + captions
+  ├─ Reads narration.txt → per-frame spoken text
+  ├─ Stage 1: frame_exporter  → normalize all frames to 1920×1080
+  ├─ Stage 2: tts_service     → narration text → per-frame .mp3 audio
+  ├─ Stage 3: video_assembler → stitch frames + audio → final_video.mp4
+  └─ Saves video path to DB
+  │
+  └─ Returns { session_id, video_path }

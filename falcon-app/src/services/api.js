@@ -78,4 +78,33 @@ export const api = {
     })
     return res.json()
   },
+
+  getSessions: async () => {
+    const res = await fetch(`${API_BASE}/api/sessions`)
+    return res.json()
+  },
+
+  generateVideo: async (sessionId) => {
+    const res = await fetch(`${API_BASE}/api/generate_video/${sessionId}`, { method: 'POST' })
+    return res.json()
+  },
+
+  getFramesMeta: async (sessionId) => {
+    const res = await fetch(`${API_BASE}/api/sessions/${sessionId}/frames-meta`)
+    if (!res.ok) return null
+    return res.json()
+  },
+
+  checkVideoExists: async (sessionId) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/sessions/${sessionId}/video`, { method: 'HEAD' })
+      return res.ok
+    } catch {
+      return false
+    }
+  },
+
+  // URL builders (not async — just return the URL string)
+  getVideoUrl:  (sessionId)             => `${API_BASE}/api/sessions/${sessionId}/video`,
+  getFrameUrl:  (sessionId, frameIndex) => `${API_BASE}/api/sessions/${sessionId}/frame/${frameIndex}`,
 }
