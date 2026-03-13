@@ -488,3 +488,5 @@ Error opening input files: Invalid data found when processing input
 2026-03-14 01:14:26  DEBUG     python_multipart.multipart:629  Calling on_end with no data
 2026-03-14 01:14:26  INFO      main:212  Request received  session=253ab73130dc49d58202bf3dbef166c3  prompt='can you explain more detailedly?'
 2026-03-14 01:14:26  DEBUG     main:213  Full prompt: can you explain more detailedly?
+2026-03-14 01:25:22  INFO      main:493  Video generation requested  session=1ed28bd8cc9648a5b4d84ad85e8b81c6  openai_tts=True
+2026-03-14 01:25:22  INFO      main:512  Video already exists — returning cached  session=1ed28bd8cc9648a5b4d84ad85e8b81c6  path=/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/1ed28bd8cc9648a5b4d84ad85e8b81c6/final_video.mp4

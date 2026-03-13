@@ -44,7 +44,7 @@ const FULL_HEIGHT_PAGES = ['/product', '/studio']
 // ─── App ─────────────────────────────────────────────────────────────────────
 function App() {
   const [mode, setMode] = useState(() => localStorage.getItem('falcon-theme') || 'light')
-  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const location = useLocation()
   const isFullHeight = FULL_HEIGHT_PAGES.includes(location.pathname)
 
@@ -64,7 +64,7 @@ function App() {
     <ColorModeContext.Provider value={colorMode}>
       <ThemeProvider theme={theme}>
         <CssBaseline />
-        <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>
+        <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden', bgcolor: 'background.default' }}>
           <Navbar onToggleSidebar={() => setSidebarOpen((p) => !p)} />
           <Sidebar open={sidebarOpen} />
 
@@ -73,7 +73,7 @@ function App() {
               flexGrow: 1,
               display: 'flex',
               flexDirection: 'column',
-              minHeight: '100vh',
+              height: '100vh',        // exact viewport height — prevents page-level scroll
               overflow: 'hidden',
             }}
           >
