@@ -44,8 +44,13 @@ export default function Studio() {
 
   // True while the FIRST turn of a brand-new conversation is being submitted
   // (used to show the full-screen LoadingView before any turns exist)
-  const [isBootstrapping, setIsBootstrapping] = useState(false)
-  const [bootstrapStage, setBootstrapStage]   = useState('planning')
+  const [isBootstrapping, setIsBootstrapping]   = useState(false)
+  const [bootstrapStage, setBootstrapStage]     = useState('planning')
+  const [bootstrapPrompt, setBootstrapPrompt]   = useState('')
+  const [bootstrapFrames, setBootstrapFrames]   = useState(null)
+
+  // ── Pause context ─────────────────────────────────────────────────────────────
+  const [pauseContext, setPauseContext] = useState(null)
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -70,12 +75,14 @@ export default function Studio() {
   }, [])
 
   // Run video generation for a turn; updates videoPhase when done
-  const runVideoGenerationForTurn = useCallback(async (tempId, sessionId) => {
+  const runVideoGenerationForTurn = useCallback(async (tempId, sessionId, onDone) => {
     try {
       const data = await api.generateVideo(sessionId)
       setTurnVideoPhase(tempId, sessionId, data.video_path ? 'ready' : 'error')
     } catch {
       setTurnVideoPhase(tempId, sessionId, 'error')
+    } finally {
+      onDone?.()
     }
   }, [setTurnVideoPhase])
 
@@ -133,7 +140,7 @@ export default function Studio() {
 
   // ── Submit handler ────────────────────────────────────────────────────────────
   const handleGenerate = useCallback(async () => {
-    if (!prompt.trim() || isBootstrapping) return
+    if (!prompt.trim() || isBootstrapping || turns.some((t) => t.isLoading)) return
 
     const submittedPrompt = prompt.trim()
     setPrompt('')
@@ -145,6 +152,7 @@ export default function Studio() {
       // Show full-screen loader before we have any turns
       setIsBootstrapping(true)
       setBootstrapStage('planning')
+      setBootstrapPrompt(submittedPrompt)
       setTurns([])
       if (contentScrollRef.current) contentScrollRef.current.scrollTop = 0
     } else {
@@ -204,14 +212,19 @@ export default function Studio() {
 
       if (isFirstTurn) {
         setActiveConvId(data.conversation_id)
-        setIsBootstrapping(false)
+        setBootstrapStage('video')
+        setBootstrapFrames({ framesData, sessionId: data.session_id })
         setTurns([realTurn])
+        await fetchConversations()
+        runVideoGenerationForTurn(tempId, data.session_id, () => {
+          setIsBootstrapping(false)
+          setBootstrapFrames(null)
+        })
       } else {
         setTurns((prev) => prev.map((t) => t.tempId === tempId ? realTurn : t))
+        await fetchConversations()
+        runVideoGenerationForTurn(tempId, data.session_id)
       }
-
-      await fetchConversations()
-      runVideoGenerationForTurn(tempId, data.session_id)
     } catch (err) {
       console.error('[Studio] handleGenerate:', err)
       if (isFirstTurn) {
@@ -229,7 +242,8 @@ export default function Studio() {
       if (it1) clearTimeout(it1)
       if (it2) clearTimeout(it2)
     }
-  }, [prompt, isBootstrapping, activeConvId, fetchConversations, runVideoGenerationForTurn])
+  }, [prompt, isBootstrapping, turns, activeConvId, notesEnabled, pauseContext, fetchConversations, runVideoGenerationForTurn])
+
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleGenerate() }
@@ -243,9 +257,6 @@ export default function Studio() {
     if (contentScrollRef.current) contentScrollRef.current.scrollTop = 0
     inputRef.current?.focus()
   }
-
-  // ── Pause context ─────────────────────────────────────────────────────────────
-  const [pauseContext, setPauseContext] = useState(null)
 
   const handlePauseAsk = useCallback(({ sessionId, currentTime, duration }) => {
     const turn = turns.find((t) => t.id === sessionId)
@@ -264,6 +275,8 @@ export default function Studio() {
     intent_type:         lastTurn?.intent_type  ?? null,
     suggested_followups: lastTurn?.framesData?.suggested_followups ?? [],
   } : null
+
+  const isAnyGenerating = isBootstrapping || turns.some((t) => t.isLoading)
 
   // Decide what to render in the scrollable middle
   const showEmpty  = !isBootstrapping && turns.length === 0
@@ -380,7 +393,25 @@ export default function Studio() {
               '&::-webkit-scrollbar-thumb': { backgroundColor: theme.palette.divider, borderRadius: 2 },
             }}
           >
-            {showLoader && <LoadingView stage={bootstrapStage} />}
+            {showLoader && (
+              <>
+                {bootstrapPrompt && (
+                  <Box sx={{ display: 'flex', justifyContent: 'flex-end', px: 3, pt: 3, pb: 1.5 }}>
+                    <Box sx={{
+                      maxWidth: '68%', px: 2.5, py: 1.5,
+                      backgroundColor: isDark ? '#242424' : '#f1f5f9',
+                      color: theme.palette.text.primary,
+                      borderRadius: '18px 18px 4px 18px',
+                      fontSize: 14.5, lineHeight: 1.6,
+                      border: `1px solid ${isDark ? '#2e2e2e' : '#e2e8f0'}`,
+                    }}>
+                      {bootstrapPrompt}
+                    </Box>
+                  </Box>
+                )}
+                <LoadingView stage={bootstrapStage} framesData={bootstrapFrames} />
+              </>
+            )}
 
             {showEmpty && (
               <EmptyView onSuggestionClick={(s) => { setPrompt(s); inputRef.current?.focus() }} />
@@ -402,7 +433,7 @@ export default function Studio() {
             onSubmit={handleGenerate}
             onKeyDown={handleKeyDown}
             inputRef={inputRef}
-            isGenerating={isBootstrapping}
+            isGenerating={isAnyGenerating}
             activeConversation={activeConversationMeta}
             onNewConversation={handleNewConversation}
             pauseContext={pauseContext}

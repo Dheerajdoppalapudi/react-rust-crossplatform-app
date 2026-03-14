@@ -146,7 +146,7 @@ export default function PromptBar({
             }
             multiline
             maxRows={4}
-            disabled={isGenerating}
+            disabled={false}
             variant="standard"
             fullWidth
             slotProps={{ input: { disableUnderline: true } }}

@@ -1,164 +1,200 @@
 import { Box, Typography, keyframes, useTheme } from '@mui/material'
-import CheckIcon from '@mui/icons-material/Check'
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline'
+import { api } from '../../services/api'
 
 const pulse = keyframes`
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50%       { opacity: 0.5; transform: scale(0.85); }
-`
-const spin = keyframes`
-  from { transform: rotate(0deg); }
-  to   { transform: rotate(360deg); }
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
 `
 const fadeIn = keyframes`
-  from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; }
+  to   { opacity: 1; }
+`
+const shimmer = keyframes`
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+`
+const blink = keyframes`
+  0%, 100% { opacity: 0; }
+  50%       { opacity: 0.35; }
 `
 
-const STEPS = [
-  {
-    key:  'planning',
-    label: 'Analyzing your question',
-    sub:   'Deciding frame structure and visual approach',
-  },
-  {
-    key:  'generating',
-    label: 'Generating visual content',
-    sub:   'Creating AI-powered diagrams and animations',
-  },
-  {
-    key:  'rendering',
-    label: 'Rendering frames',
-    sub:   'Compiling the final output',
-  },
-]
+const FRAME_COUNT = 5
 
-function StepDot({ status, isDark }) {
-  // status: 'done' | 'active' | 'pending'
-  if (status === 'done') {
-    return (
-      <Box sx={{
-        width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
-        backgroundColor: '#22c55e',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}>
-        <CheckIcon sx={{ fontSize: 12, color: '#fff' }} />
-      </Box>
-    )
-  }
-  if (status === 'active') {
-    return (
-      <Box sx={{ position: 'relative', width: 20, height: 20, flexShrink: 0 }}>
-        {/* Outer pulsing ring */}
-        <Box sx={{
-          position: 'absolute', inset: -4,
-          borderRadius: '50%',
-          border: `2px solid ${isDark ? 'rgba(79,110,255,0.35)' : 'rgba(0,26,255,0.2)'}`,
-          animation: `${pulse} 1.4s ease-in-out infinite`,
-        }} />
-        {/* Spinning arc */}
-        <Box sx={{
-          position: 'absolute', inset: 0,
-          borderRadius: '50%',
-          border: '2px solid transparent',
-          borderTopColor: isDark ? '#4F6EFF' : '#001AFF',
-          animation: `${spin} 0.9s linear infinite`,
-        }} />
-        {/* Inner filled dot */}
-        <Box sx={{
-          position: 'absolute', inset: 4,
-          borderRadius: '50%',
-          backgroundColor: isDark ? '#4F6EFF' : '#001AFF',
-        }} />
-      </Box>
-    )
-  }
-  // pending
+function FrameSkeletonCards({ isDark }) {
+  const bg      = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)'
+  const shimBg  = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'
+
   return (
-    <Box sx={{
-      width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
-      border: `2px solid ${isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)'}`,
-    }} />
+    <Box sx={{ display: 'flex', gap: 1, mt: 1.25, mb: 0.5, flexWrap: 'wrap' }}>
+      {Array.from({ length: FRAME_COUNT }).map((_, i) => (
+        <Box
+          key={i}
+          sx={{
+            width: 72, height: 54,
+            borderRadius: '6px',
+            backgroundColor: bg,
+            overflow: 'hidden',
+            position: 'relative',
+            flexShrink: 0,
+            animation: `${fadeIn} 0.4s ease both`,
+            animationDelay: `${i * 0.12}s`,
+          }}
+        >
+          {/* shimmer sweep */}
+          <Box sx={{
+            position: 'absolute', inset: 0,
+            background: `linear-gradient(90deg, transparent 0%, ${shimBg} 50%, transparent 100%)`,
+            animation: `${shimmer} 1.6s ease-in-out infinite`,
+            animationDelay: `${i * 0.2}s`,
+          }} />
+          {/* frame number hint */}
+          <Typography sx={{
+            position: 'absolute', bottom: 4, right: 5,
+            fontSize: 9, fontWeight: 600,
+            color: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.18)',
+            userSelect: 'none',
+          }}>
+            {i + 1}
+          </Typography>
+        </Box>
+      ))}
+    </Box>
   )
 }
 
-export default function LoadingView({ stage, compact = false }) {
-  const theme   = useTheme()
-  const isDark  = theme.palette.mode === 'dark'
+const STEPS = [
+  { key: 'planning',   label: 'Analyzing your question' },
+  { key: 'generating', label: 'Generating visual content' },
+  { key: 'rendering',  label: 'Rendering frames' },
+  { key: 'video',      label: 'Rendering animation and narration' },
+]
+
+function ActualFrames({ sessionId, count, isDark }) {
+  const overlayColor = isDark ? 'rgba(255,255,255,1)' : 'rgba(0,0,0,1)'
+  return (
+    <Box sx={{ display: 'flex', gap: 1, mt: 1.25, mb: 0.5, flexWrap: 'wrap' }}>
+      {Array.from({ length: Math.min(count, 5) }).map((_, i) => (
+        <Box
+          key={i}
+          sx={{
+            width: 72, height: 54, borderRadius: '6px', overflow: 'hidden', flexShrink: 0,
+            position: 'relative',
+            animation: `${fadeIn} 0.4s ease both`,
+            animationDelay: `${i * 0.1}s`,
+            border: `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`,
+          }}
+        >
+          <img
+            src={api.getFrameUrl(sessionId, i)}
+            alt={`frame ${i + 1}`}
+            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+          />
+          {/* blink overlay */}
+          <Box sx={{
+            position: 'absolute', inset: 0,
+            backgroundColor: overlayColor,
+            animation: `${blink} 1.6s ease-in-out infinite`,
+            animationDelay: `${i * 0.2}s`,
+            borderRadius: '6px',
+          }} />
+        </Box>
+      ))}
+    </Box>
+  )
+}
+
+export default function LoadingView({ stage, compact = false, framesData = null }) {
+  const theme  = useTheme()
+  const isDark = theme.palette.mode === 'dark'
   const current = STEPS.findIndex((s) => s.key === stage)
+
+  const mutedColor   = isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)'
+  const activeColor  = isDark ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.8)'
+  const pendingColor = isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'
+  const lineColor    = isDark ? 'rgba(255,255,255,0.1)'  : 'rgba(0,0,0,0.1)'
 
   return (
     <Box sx={{
       flex:      compact ? undefined : 1,
-      minHeight: compact ? 140 : 360,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      py: compact ? 2 : 0,
+      minHeight: compact ? 100 : 260,
+      display: 'flex',
+      alignItems: 'flex-start',
+      py: compact ? 1.5 : 3,
+      px: compact ? 1.5 : 4,
     }}>
-      <Box sx={{
-        display: 'flex', flexDirection: 'column', gap: 0,
-        minWidth: compact ? 260 : 300,
-      }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0, maxWidth: 380 }}>
+
+        {/* Steps */}
         {STEPS.map((step, i) => {
-          const status = i < current ? 'done' : i === current ? 'active' : 'pending'
-          const isLast = i === STEPS.length - 1
+          const status        = i < current ? 'done' : i === current ? 'active' : 'pending'
+          const color         = status === 'active' ? activeColor : status === 'done' ? mutedColor : pendingColor
+          const showSkeletons = (step.key === 'generating' || step.key === 'rendering') && status === 'active' && !compact
+          const showFrames    = step.key === 'video' && status === 'active' && !compact
+          const showCards     = showSkeletons || showFrames
 
           return (
             <Box
               key={step.key}
               sx={{
-                display: 'flex', gap: 1.75,
-                animation: status !== 'pending' ? `${fadeIn} 0.3s ease both` : 'none',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 1.5,
+                opacity: status === 'pending' ? 0.4 : 1,
+                animation: status !== 'pending' ? `${fadeIn} 0.35s ease both` : 'none',
                 animationDelay: `${i * 0.08}s`,
               }}
             >
-              {/* Left: dot + connector line */}
-              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', pt: 0.2 }}>
-                <StepDot status={status} isDark={isDark} />
-                {!isLast && (
+              {/* Left: dot + line */}
+              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0, pt: '5px' }}>
+                <Box sx={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: color, flexShrink: 0 }} />
+                {i < STEPS.length - 1 && (
                   <Box sx={{
-                    width: 2, flex: 1, minHeight: compact ? 24 : 28, mt: 0.5,
-                    backgroundColor: i < current
-                      ? '#22c55e'
-                      : isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
-                    borderRadius: 1,
-                    transition: 'background-color 0.4s',
+                    width: 1.5,
+                    height: showCards ? (showFrames ? 100 : 90) : (compact ? 18 : 22),
+                    backgroundColor: lineColor,
+                    mt: 0.5,
                   }} />
                 )}
               </Box>
 
-              {/* Right: text */}
-              <Box sx={{ pb: isLast ? 0 : compact ? 2.5 : 3, pt: 0.1 }}>
+              {/* Right: label + cards */}
+              <Box sx={{ pb: i < STEPS.length - 1 ? (compact ? 0.5 : 0.75) : 0 }}>
                 <Typography sx={{
-                  fontSize: compact ? 13 : 14,
-                  fontWeight: status === 'active' ? 600 : status === 'done' ? 500 : 400,
-                  color: status === 'active'
-                    ? theme.palette.text.primary
-                    : status === 'done'
-                      ? (isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.4)')
-                      : (isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)'),
+                  fontSize: compact ? 12 : 13,
+                  color,
                   lineHeight: 1.4,
                   transition: 'color 0.3s',
                 }}>
                   {step.label}
                   {status === 'active' && (
-                    <Box component="span" sx={{
-                      display: 'inline-block', ml: 0.5,
-                      animation: `${pulse} 1s ease-in-out infinite`,
-                    }}>…</Box>
+                    <Box component="span" sx={{ animation: `${pulse} 1.2s ease-in-out infinite`, ml: 0.25 }}>
+                      …
+                    </Box>
                   )}
                 </Typography>
-
-                {status === 'active' && !compact && (
-                  <Typography sx={{
-                    fontSize: 12, color: theme.palette.text.secondary,
-                    opacity: 0.6, mt: 0.3, lineHeight: 1.5,
-                  }}>
-                    {step.sub}
-                  </Typography>
+                {showSkeletons && <FrameSkeletonCards isDark={isDark} />}
+                {showFrames && (
+                  framesData?.sessionId
+                    ? <ActualFrames sessionId={framesData.sessionId} count={framesData.framesData?.images?.length || 5} isDark={isDark} />
+                    : <FrameSkeletonCards isDark={isDark} />
                 )}
               </Box>
             </Box>
           )
         })}
+
+        {/* Done footer */}
+        {current === STEPS.length && (
+          <Box sx={{
+            display: 'flex', alignItems: 'center', gap: 0.75, mt: 1,
+            animation: `${fadeIn} 0.3s ease both`,
+          }}>
+            <CheckCircleOutlineIcon sx={{ fontSize: 14, color: mutedColor }} />
+            <Typography sx={{ fontSize: 12, color: mutedColor }}>Done</Typography>
+          </Box>
+        )}
+
       </Box>
     </Box>
   )
