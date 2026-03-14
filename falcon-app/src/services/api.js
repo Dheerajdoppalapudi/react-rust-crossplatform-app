@@ -69,10 +69,16 @@ export const api = {
     return res.json()
   },
 
-  imageGeneration: async (message, conversationId = null) => {
+  imageGeneration: async (message, conversationId = null, pauseContext = null, notesEnabled = false) => {
     const formData = new FormData()
     formData.append('message', message)
+    formData.append('notes_enabled', String(notesEnabled))
     if (conversationId) formData.append('conversation_id', conversationId)
+    if (pauseContext) {
+      formData.append('pause_session_id',  pauseContext.sessionId)
+      formData.append('pause_frame_index', pauseContext.frameIndex)
+      if (pauseContext.caption) formData.append('pause_caption', pauseContext.caption)
+    }
     const res = await fetch(`${API_BASE}/api/image_generation`, {
       method: 'POST',
       body: formData,

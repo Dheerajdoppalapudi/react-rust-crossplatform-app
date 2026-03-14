@@ -1,22 +1,22 @@
-import { Box, Typography, CircularProgress, Tooltip, IconButton } from '@mui/material'
+import { useState, useRef, useCallback } from 'react'
+import { Box, Typography, CircularProgress, Tooltip, IconButton, Chip } from '@mui/material'
 import MovieCreationOutlinedIcon from '@mui/icons-material/MovieCreationOutlined'
-import DownloadOutlinedIcon from '@mui/icons-material/DownloadOutlined'
+import DownloadOutlinedIcon      from '@mui/icons-material/DownloadOutlined'
+import QuestionAnswerOutlinedIcon from '@mui/icons-material/QuestionAnswerOutlined'
 import { useTheme } from '@mui/material'
 import { api } from '../../services/api'
 
+// ─── Generating placeholder ────────────────────────────────────────────────────
 function GeneratingState() {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
 
   return (
     <Box sx={{
-      aspectRatio: '16/9',
-      width: '100%',
+      aspectRatio: '16/9', width: '100%',
       display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center',
-      gap: 2.5,
-      borderRadius: '14px',
-      border: `1px solid ${theme.palette.divider}`,
+      alignItems: 'center', justifyContent: 'center', gap: 2.5,
+      borderRadius: '14px', border: `1px solid ${theme.palette.divider}`,
       backgroundColor: isDark ? '#0d0d0d' : '#f8fafc',
     }}>
       <Box sx={{ position: 'relative', display: 'inline-flex' }}>
@@ -37,8 +37,15 @@ function GeneratingState() {
   )
 }
 
-function ReadyState({ sessionId }) {
-  const videoUrl = api.getVideoUrl(sessionId)
+// ─── Video player with pause-to-ask overlay ────────────────────────────────────
+function ReadyState({ sessionId, onPauseAsk }) {
+  const videoUrl   = api.getVideoUrl(sessionId)
+  const videoRef   = useRef(null)
+  const [isPaused, setIsPaused] = useState(false)
+
+  const handlePause = () => setIsPaused(true)
+  const handlePlay  = () => setIsPaused(false)
+  const handleEnded = () => setIsPaused(false)
 
   const handleDownload = () => {
     const a = document.createElement('a')
@@ -47,14 +54,29 @@ function ReadyState({ sessionId }) {
     a.click()
   }
 
+  const handleAskHere = useCallback(() => {
+    const video = videoRef.current
+    if (!video) return
+    onPauseAsk?.({
+      sessionId,
+      currentTime: video.currentTime,
+      duration:    video.duration || 1,
+    })
+  }, [sessionId, onPauseAsk])
+
   return (
     <Box sx={{ position: 'relative', borderRadius: '14px', overflow: 'hidden', backgroundColor: '#000' }}>
       <video
+        ref={videoRef}
         src={videoUrl}
         controls
+        onPause={handlePause}
+        onPlay={handlePlay}
+        onEnded={handleEnded}
         style={{ width: '100%', aspectRatio: '16/9', display: 'block', objectFit: 'contain' }}
       />
-      {/* Download button overlay */}
+
+      {/* Download button — always visible */}
       <Box sx={{ position: 'absolute', top: 10, right: 10 }}>
         <Tooltip title="Download video">
           <IconButton
@@ -62,8 +84,7 @@ function ReadyState({ sessionId }) {
             size="small"
             sx={{
               backgroundColor: 'rgba(0,0,0,0.55)',
-              color: '#fff',
-              backdropFilter: 'blur(4px)',
+              color: '#fff', backdropFilter: 'blur(4px)',
               '&:hover': { backgroundColor: 'rgba(0,0,0,0.75)' },
             }}
           >
@@ -71,10 +92,41 @@ function ReadyState({ sessionId }) {
           </IconButton>
         </Tooltip>
       </Box>
+
+      {/* Pause-to-ask overlay — appears when video is paused */}
+      {isPaused && onPauseAsk && (
+        <Box sx={{
+          position: 'absolute',
+          bottom: 52,             // sits just above the native video controls bar
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 10,
+          pointerEvents: 'all',
+        }}>
+          <Chip
+            icon={<QuestionAnswerOutlinedIcon sx={{ fontSize: 14 }} />}
+            label="Ask about this moment"
+            onClick={handleAskHere}
+            sx={{
+              cursor: 'pointer',
+              fontWeight: 600, fontSize: 12.5,
+              backgroundColor: 'rgba(0,0,0,0.72)',
+              backdropFilter: 'blur(8px)',
+              color: '#fff',
+              border: '1px solid rgba(255,255,255,0.18)',
+              height: 34,
+              '&:hover': { backgroundColor: 'rgba(79,110,255,0.85)' },
+              transition: 'all 0.15s',
+              '& .MuiChip-icon': { color: '#fff' },
+            }}
+          />
+        </Box>
+      )}
     </Box>
   )
 }
 
+// ─── Error state ───────────────────────────────────────────────────────────────
 function ErrorState() {
   const theme = useTheme()
   return (
@@ -90,11 +142,12 @@ function ErrorState() {
   )
 }
 
-export default function VideoPanel({ sessionId, videoPhase }) {
+// ─── Public component ─────────────────────────────────────────────────────────
+export default function VideoPanel({ sessionId, videoPhase, onPauseAsk }) {
   return (
     <Box sx={{ px: 3, pt: 1.5, pb: 1 }}>
       {videoPhase === 'generating' && <GeneratingState />}
-      {videoPhase === 'ready'      && <ReadyState sessionId={sessionId} />}
+      {videoPhase === 'ready'      && <ReadyState sessionId={sessionId} onPauseAsk={onPauseAsk} />}
       {videoPhase === 'error'      && <ErrorState />}
     </Box>
   )

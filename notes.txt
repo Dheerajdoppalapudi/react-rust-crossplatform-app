@@ -276,3 +276,45 @@ main.py
   └─ Saves video path to DB
   │
   └─ Returns { session_id, video_path }
+
+
+
+USER PAUSES VIDEO
+  │
+  ├─ VideoPanel detects onPause → shows "Ask about this moment" chip overlay
+  │
+  └─ User clicks chip
+       │
+       ├─ VideoPanel reports: { sessionId, currentTime, duration }
+       │
+       └─ Studio.jsx: handlePauseAsk()
+            ├─ frameIndex = floor((currentTime / duration) * frameCount)
+            ├─ caption    = framesData.captions[frameIndex]
+            └─ setPauseContext({ sessionId, frameIndex, caption })
+                  │
+                  └─ PromptBar shows: "Paused at: [caption]" indicator
+                       placeholder changes to "Ask your question about this moment…"
+
+USER TYPES QUESTION + SUBMITS
+  │
+  └─ Studio.jsx: handleGenerate()
+       ├─ captures pauseContext (then clears it)
+       └─ api.imageGeneration(prompt, conversationId, pauseContext)
+              │
+              └─ POST /api/image_generation
+                   ├─ form: message, conversation_id, pause_session_id, pause_frame_index, pause_caption
+                   │
+                   └─ Backend:
+                        ├─ _build_conversation_context()
+                        │    ├─ All prior turns (older): prompt + captions only
+                        │    ├─ Most recent prior turn:  prompt + FULL narration
+                        │    └─ Pause context (if set):
+                        │         reads outputs/{pause_session_id}/narration.txt
+                        │         extracts narrations[pause_frame_index]
+                        │         appends: "User paused at frame N '[caption]'.
+                        │                  The lesson was saying: '[narration]'"
+                        │
+                        └─ create_plan(prompt, conversation_context)
+                             └─ planning_prompt.md with {{CONVERSATION_CONTEXT}} injected
+                                  → LLM generates targeted follow-up lesson
+                                    that builds on prior context + resolves pause moment

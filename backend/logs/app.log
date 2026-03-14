@@ -720,3 +720,172 @@ Error opening input files: Invalid data found when processing input
 2026-03-15 00:17:11  INFO      services.video.video_assembler:215  Concatenated 3 clips  total_duration=34.55s
 2026-03-15 00:18:19  INFO      main:660  Video assembly complete  session=dbb59326a0ab4fe8bf3eb9883e88c3a8  path=/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/dbb59326a0ab4fe8bf3eb9883e88c3a8/final_video.mp4
 2026-03-15 00:18:19  INFO      main:668  Video generation done  session=dbb59326a0ab4fe8bf3eb9883e88c3a8  frames=3  tts=openai
+2026-03-15 01:12:00  DEBUG     python_multipart.multipart:629  Calling on_part_begin with no data
+2026-03-15 01:12:00  DEBUG     python_multipart.multipart:626  Calling on_header_field with data[42:61]
+2026-03-15 01:12:00  DEBUG     python_multipart.multipart:626  Calling on_header_value with data[63:88]
+2026-03-15 01:12:00  DEBUG     python_multipart.multipart:629  Calling on_header_end with no data
+2026-03-15 01:12:00  DEBUG     python_multipart.multipart:629  Calling on_headers_finished with no data
+2026-03-15 01:12:00  DEBUG     python_multipart.multipart:626  Calling on_part_data with data[92:183]
+2026-03-15 01:12:00  DEBUG     python_multipart.multipart:629  Calling on_part_end with no data
+2026-03-15 01:12:00  DEBUG     python_multipart.multipart:629  Calling on_end with no data
+2026-03-15 01:12:00  INFO      main:407  Request received  session=e40de66db3084d80918c1bb078537bfc  prompt='can you explain how internet works in detail using illustrations and a detailed explanation'
+2026-03-15 01:12:00  DEBUG     main:408  Full prompt: can you explain how internet works in detail using illustrations and a detailed explanation
+2026-03-15 01:12:12  INFO      main:431  Planning complete  session=e40de66db3084d80918c1bb078537bfc  intent=illustration  frames=3  layout=horizontal
+2026-03-15 01:12:12  INFO      main:486  Render path → svg  session=e40de66db3084d80918c1bb078537bfc
+2026-03-15 01:12:24  INFO      main:491  SVG frames generated  session=e40de66db3084d80918c1bb078537bfc  paths=['/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/e40de66db3084d80918c1bb078537bfc/svg/frame_0/frame.png', '/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/e40de66db3084d80918c1bb078537bfc/svg/frame_1/frame.png', '/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/e40de66db3084d80918c1bb078537bfc/svg/frame_2/frame.png']
+2026-03-15 01:12:24  INFO      main:592  Request complete  session=e40de66db3084d80918c1bb078537bfc  render_path=svg  duration_ms=24151  llm_calls=4
+2026-03-15 01:12:24  INFO      main:735  Video generation requested  session=e40de66db3084d80918c1bb078537bfc  openai_tts=True
+2026-03-15 01:12:24  INFO      main:790  Video stage 1/3: frame export  session=e40de66db3084d80918c1bb078537bfc  frames=3
+2026-03-15 01:12:24  DEBUG     services.video.frame_exporter:187  Frame 0: loading PNG  path=/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/e40de66db3084d80918c1bb078537bfc/svg/frame_0/frame.png
+2026-03-15 01:12:24  DEBUG     PIL.PngImagePlugin:201  STREAM b'IHDR' 16 13
+2026-03-15 01:12:24  DEBUG     PIL.PngImagePlugin:201  STREAM b'bKGD' 41 6
+2026-03-15 01:12:24  DEBUG     PIL.PngImagePlugin:781  b'bKGD' 41 6 (unknown)
+2026-03-15 01:12:24  DEBUG     PIL.PngImagePlugin:201  STREAM b'IDAT' 59 8192
+2026-03-15 01:12:24  DEBUG     services.video.frame_exporter:187  Frame 1: loading PNG  path=/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/e40de66db3084d80918c1bb078537bfc/svg/frame_1/frame.png
+2026-03-15 01:12:24  DEBUG     PIL.PngImagePlugin:201  STREAM b'IHDR' 16 13
+2026-03-15 01:12:24  DEBUG     PIL.PngImagePlugin:201  STREAM b'bKGD' 41 6
+2026-03-15 01:12:24  DEBUG     PIL.PngImagePlugin:781  b'bKGD' 41 6 (unknown)
+2026-03-15 01:12:24  DEBUG     PIL.PngImagePlugin:201  STREAM b'IDAT' 59 8192
+2026-03-15 01:12:25  DEBUG     services.video.frame_exporter:187  Frame 2: loading PNG  path=/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/e40de66db3084d80918c1bb078537bfc/svg/frame_2/frame.png
+2026-03-15 01:12:25  DEBUG     PIL.PngImagePlugin:201  STREAM b'IHDR' 16 13
+2026-03-15 01:12:25  DEBUG     PIL.PngImagePlugin:201  STREAM b'bKGD' 41 6
+2026-03-15 01:12:25  DEBUG     PIL.PngImagePlugin:781  b'bKGD' 41 6 (unknown)
+2026-03-15 01:12:25  DEBUG     PIL.PngImagePlugin:201  STREAM b'IDAT' 59 8192
+2026-03-15 01:12:25  INFO      main:793  Frame export done  session=e40de66db3084d80918c1bb078537bfc  exported=3
+2026-03-15 01:12:25  INFO      main:799  Video stage 2/3: TTS  session=e40de66db3084d80918c1bb078537bfc  backend=openai
+2026-03-15 01:12:25  DEBUG     services.video.tts_service:156  Generating audio for frame 0  chars=297  path=/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/e40de66db3084d80918c1bb078537bfc/audio/frame_000.mp3
+2026-03-15 01:12:30  DEBUG     services.video.tts_service:162  Audio generated  frame=0  path=/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/e40de66db3084d80918c1bb078537bfc/audio/frame_000.mp3
+2026-03-15 01:12:30  DEBUG     services.video.tts_service:156  Generating audio for frame 1  chars=305  path=/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/e40de66db3084d80918c1bb078537bfc/audio/frame_001.mp3
+2026-03-15 01:12:36  DEBUG     services.video.tts_service:162  Audio generated  frame=1  path=/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/e40de66db3084d80918c1bb078537bfc/audio/frame_001.mp3
+2026-03-15 01:12:36  DEBUG     services.video.tts_service:156  Generating audio for frame 2  chars=348  path=/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/e40de66db3084d80918c1bb078537bfc/audio/frame_002.mp3
+2026-03-15 01:12:39  DEBUG     services.video.tts_service:162  Audio generated  frame=2  path=/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/e40de66db3084d80918c1bb078537bfc/audio/frame_002.mp3
+2026-03-15 01:12:39  INFO      main:805  TTS done  session=e40de66db3084d80918c1bb078537bfc  generated=3/3
+2026-03-15 01:12:39  INFO      main:812  Video stage 3/3: assembly  session=e40de66db3084d80918c1bb078537bfc  output=/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/e40de66db3084d80918c1bb078537bfc/final_video.mp4
+2026-03-15 01:12:39  DEBUG     services.video.video_assembler:200  Building clip 1/3  path=/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/e40de66db3084d80918c1bb078537bfc/video_frames/frame_000.png
+2026-03-15 01:12:39  DEBUG     PIL.PngImagePlugin:201  STREAM b'IHDR' 16 13
+2026-03-15 01:12:39  DEBUG     PIL.PngImagePlugin:201  STREAM b'IDAT' 41 65536
+2026-03-15 01:12:39  DEBUG     services.video.video_assembler:203  Clip 1 duration=18.74s
+2026-03-15 01:12:39  DEBUG     services.video.video_assembler:200  Building clip 2/3  path=/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/e40de66db3084d80918c1bb078537bfc/video_frames/frame_001.png
+2026-03-15 01:12:39  DEBUG     PIL.PngImagePlugin:201  STREAM b'IHDR' 16 13
+2026-03-15 01:12:39  DEBUG     PIL.PngImagePlugin:201  STREAM b'IDAT' 41 65536
+2026-03-15 01:12:39  DEBUG     services.video.video_assembler:203  Clip 2 duration=19.01s
+2026-03-15 01:12:40  DEBUG     services.video.video_assembler:200  Building clip 3/3  path=/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/e40de66db3084d80918c1bb078537bfc/video_frames/frame_002.png
+2026-03-15 01:12:40  DEBUG     PIL.PngImagePlugin:201  STREAM b'IHDR' 16 13
+2026-03-15 01:12:40  DEBUG     PIL.PngImagePlugin:201  STREAM b'IDAT' 41 65536
+2026-03-15 01:12:40  DEBUG     services.video.video_assembler:203  Clip 3 duration=21.65s
+2026-03-15 01:12:40  INFO      services.video.video_assembler:215  Concatenated 3 clips  total_duration=58.60s
+2026-03-15 01:14:32  INFO      main:817  Video assembly complete  session=e40de66db3084d80918c1bb078537bfc  path=/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/e40de66db3084d80918c1bb078537bfc/final_video.mp4
+2026-03-15 01:14:32  INFO      main:825  Video generation done  session=e40de66db3084d80918c1bb078537bfc  frames=3  tts=openai
+2026-03-15 01:19:13  DEBUG     python_multipart.multipart:629  Calling on_part_begin with no data
+2026-03-15 01:19:13  DEBUG     python_multipart.multipart:626  Calling on_header_field with data[42:61]
+2026-03-15 01:19:13  DEBUG     python_multipart.multipart:626  Calling on_header_value with data[63:88]
+2026-03-15 01:19:13  DEBUG     python_multipart.multipart:629  Calling on_header_end with no data
+2026-03-15 01:19:13  DEBUG     python_multipart.multipart:629  Calling on_headers_finished with no data
+2026-03-15 01:19:13  DEBUG     python_multipart.multipart:626  Calling on_part_data with data[92:146]
+2026-03-15 01:19:13  DEBUG     python_multipart.multipart:629  Calling on_part_end with no data
+2026-03-15 01:19:13  DEBUG     python_multipart.multipart:629  Calling on_part_begin with no data
+2026-03-15 01:19:13  DEBUG     python_multipart.multipart:626  Calling on_header_field with data[190:209]
+2026-03-15 01:19:13  DEBUG     python_multipart.multipart:626  Calling on_header_value with data[211:244]
+2026-03-15 01:19:13  DEBUG     python_multipart.multipart:629  Calling on_header_end with no data
+2026-03-15 01:19:13  DEBUG     python_multipart.multipart:629  Calling on_headers_finished with no data
+2026-03-15 01:19:13  DEBUG     python_multipart.multipart:626  Calling on_part_data with data[248:280]
+2026-03-15 01:19:13  DEBUG     python_multipart.multipart:629  Calling on_part_end with no data
+2026-03-15 01:19:13  DEBUG     python_multipart.multipart:629  Calling on_end with no data
+2026-03-15 01:19:13  INFO      main:397  Conversation context built  session=c02857d577c94e45a2c485acba0f183c  turn=2  chars=1683  has_pause=False
+2026-03-15 01:19:13  INFO      main:407  Request received  session=c02857d577c94e45a2c485acba0f183c  prompt='how routers work, can you explain using illustrations?'
+2026-03-15 01:19:13  DEBUG     main:408  Full prompt: how routers work, can you explain using illustrations?
+2026-03-15 01:19:22  INFO      main:431  Planning complete  session=c02857d577c94e45a2c485acba0f183c  intent=illustration  frames=2  layout=horizontal
+2026-03-15 01:19:22  INFO      main:486  Render path → svg  session=c02857d577c94e45a2c485acba0f183c
+2026-03-15 01:19:33  INFO      main:491  SVG frames generated  session=c02857d577c94e45a2c485acba0f183c  paths=['/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/c02857d577c94e45a2c485acba0f183c/svg/frame_0/frame.png', '/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/c02857d577c94e45a2c485acba0f183c/svg/frame_1/frame.png']
+2026-03-15 01:19:33  INFO      main:592  Request complete  session=c02857d577c94e45a2c485acba0f183c  render_path=svg  duration_ms=20199  llm_calls=3
+2026-03-15 01:19:34  INFO      main:735  Video generation requested  session=c02857d577c94e45a2c485acba0f183c  openai_tts=True
+2026-03-15 01:19:34  INFO      main:790  Video stage 1/3: frame export  session=c02857d577c94e45a2c485acba0f183c  frames=2
+2026-03-15 01:19:34  DEBUG     services.video.frame_exporter:187  Frame 0: loading PNG  path=/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/c02857d577c94e45a2c485acba0f183c/svg/frame_0/frame.png
+2026-03-15 01:19:34  DEBUG     PIL.PngImagePlugin:201  STREAM b'IHDR' 16 13
+2026-03-15 01:19:34  DEBUG     PIL.PngImagePlugin:201  STREAM b'bKGD' 41 6
+2026-03-15 01:19:34  DEBUG     PIL.PngImagePlugin:781  b'bKGD' 41 6 (unknown)
+2026-03-15 01:19:34  DEBUG     PIL.PngImagePlugin:201  STREAM b'IDAT' 59 8192
+2026-03-15 01:19:34  DEBUG     services.video.frame_exporter:187  Frame 1: loading PNG  path=/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/c02857d577c94e45a2c485acba0f183c/svg/frame_1/frame.png
+2026-03-15 01:19:34  DEBUG     PIL.PngImagePlugin:201  STREAM b'IHDR' 16 13
+2026-03-15 01:19:34  DEBUG     PIL.PngImagePlugin:201  STREAM b'bKGD' 41 6
+2026-03-15 01:19:34  DEBUG     PIL.PngImagePlugin:781  b'bKGD' 41 6 (unknown)
+2026-03-15 01:19:34  DEBUG     PIL.PngImagePlugin:201  STREAM b'IDAT' 59 8192
+2026-03-15 01:19:34  INFO      main:793  Frame export done  session=c02857d577c94e45a2c485acba0f183c  exported=2
+2026-03-15 01:19:34  INFO      main:799  Video stage 2/3: TTS  session=c02857d577c94e45a2c485acba0f183c  backend=openai
+2026-03-15 01:19:34  DEBUG     services.video.tts_service:156  Generating audio for frame 0  chars=334  path=/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/c02857d577c94e45a2c485acba0f183c/audio/frame_000.mp3
+2026-03-15 01:19:40  DEBUG     services.video.tts_service:162  Audio generated  frame=0  path=/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/c02857d577c94e45a2c485acba0f183c/audio/frame_000.mp3
+2026-03-15 01:19:40  DEBUG     services.video.tts_service:156  Generating audio for frame 1  chars=340  path=/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/c02857d577c94e45a2c485acba0f183c/audio/frame_001.mp3
+2026-03-15 01:19:46  DEBUG     services.video.tts_service:162  Audio generated  frame=1  path=/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/c02857d577c94e45a2c485acba0f183c/audio/frame_001.mp3
+2026-03-15 01:19:46  INFO      main:805  TTS done  session=c02857d577c94e45a2c485acba0f183c  generated=2/2
+2026-03-15 01:19:46  INFO      main:812  Video stage 3/3: assembly  session=c02857d577c94e45a2c485acba0f183c  output=/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/c02857d577c94e45a2c485acba0f183c/final_video.mp4
+2026-03-15 01:19:46  DEBUG     services.video.video_assembler:200  Building clip 1/2  path=/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/c02857d577c94e45a2c485acba0f183c/video_frames/frame_000.png
+2026-03-15 01:19:46  DEBUG     PIL.PngImagePlugin:201  STREAM b'IHDR' 16 13
+2026-03-15 01:19:46  DEBUG     PIL.PngImagePlugin:201  STREAM b'IDAT' 41 65536
+2026-03-15 01:19:46  DEBUG     services.video.video_assembler:203  Clip 1 duration=20.78s
+2026-03-15 01:19:46  DEBUG     services.video.video_assembler:200  Building clip 2/2  path=/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/c02857d577c94e45a2c485acba0f183c/video_frames/frame_001.png
+2026-03-15 01:19:46  DEBUG     PIL.PngImagePlugin:201  STREAM b'IHDR' 16 13
+2026-03-15 01:19:46  DEBUG     PIL.PngImagePlugin:201  STREAM b'IDAT' 41 65536
+2026-03-15 01:19:46  DEBUG     services.video.video_assembler:203  Clip 2 duration=20.81s
+2026-03-15 01:19:46  INFO      services.video.video_assembler:215  Concatenated 2 clips  total_duration=41.19s
+2026-03-15 01:21:08  INFO      main:817  Video assembly complete  session=c02857d577c94e45a2c485acba0f183c  path=/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/c02857d577c94e45a2c485acba0f183c/final_video.mp4
+2026-03-15 01:21:08  INFO      main:825  Video generation done  session=c02857d577c94e45a2c485acba0f183c  frames=2  tts=openai
+2026-03-15 01:29:54  DEBUG     python_multipart.multipart:629  Calling on_part_begin with no data
+2026-03-15 01:29:54  DEBUG     python_multipart.multipart:626  Calling on_header_field with data[42:61]
+2026-03-15 01:29:54  DEBUG     python_multipart.multipart:626  Calling on_header_value with data[63:88]
+2026-03-15 01:29:54  DEBUG     python_multipart.multipart:629  Calling on_header_end with no data
+2026-03-15 01:29:54  DEBUG     python_multipart.multipart:629  Calling on_headers_finished with no data
+2026-03-15 01:29:54  DEBUG     python_multipart.multipart:626  Calling on_part_data with data[92:133]
+2026-03-15 01:29:54  DEBUG     python_multipart.multipart:629  Calling on_part_end with no data
+2026-03-15 01:29:54  DEBUG     python_multipart.multipart:629  Calling on_part_begin with no data
+2026-03-15 01:29:54  DEBUG     python_multipart.multipart:626  Calling on_header_field with data[177:196]
+2026-03-15 01:29:54  DEBUG     python_multipart.multipart:626  Calling on_header_value with data[198:229]
+2026-03-15 01:29:54  DEBUG     python_multipart.multipart:629  Calling on_header_end with no data
+2026-03-15 01:29:54  DEBUG     python_multipart.multipart:629  Calling on_headers_finished with no data
+2026-03-15 01:29:54  DEBUG     python_multipart.multipart:626  Calling on_part_data with data[233:238]
+2026-03-15 01:29:54  DEBUG     python_multipart.multipart:629  Calling on_part_end with no data
+2026-03-15 01:29:54  DEBUG     python_multipart.multipart:629  Calling on_part_begin with no data
+2026-03-15 01:29:54  DEBUG     python_multipart.multipart:626  Calling on_header_field with data[282:301]
+2026-03-15 01:29:54  DEBUG     python_multipart.multipart:626  Calling on_header_value with data[303:336]
+2026-03-15 01:29:54  DEBUG     python_multipart.multipart:629  Calling on_header_end with no data
+2026-03-15 01:29:54  DEBUG     python_multipart.multipart:629  Calling on_headers_finished with no data
+2026-03-15 01:29:54  DEBUG     python_multipart.multipart:626  Calling on_part_data with data[340:372]
+2026-03-15 01:29:54  DEBUG     python_multipart.multipart:629  Calling on_part_end with no data
+2026-03-15 01:29:54  DEBUG     python_multipart.multipart:629  Calling on_end with no data
+2026-03-15 01:29:54  INFO      main:398  Conversation context built  session=af24a74de6fe4d5d9f1c32ff49f49eef  turn=3  chars=1508  has_pause=False
+2026-03-15 01:29:54  INFO      main:408  Request received  session=af24a74de6fe4d5d9f1c32ff49f49eef  prompt='what is ip addresses and how it is used ?'
+2026-03-15 01:29:54  DEBUG     main:409  Full prompt: what is ip addresses and how it is used ?
+2026-03-15 01:30:01  INFO      main:432  Planning complete  session=af24a74de6fe4d5d9f1c32ff49f49eef  intent=concept_analogy  frames=2  layout=horizontal
+2026-03-15 01:30:01  INFO      main:488  Render path → svg  session=af24a74de6fe4d5d9f1c32ff49f49eef
+2026-03-15 01:30:14  INFO      main:493  SVG frames generated  session=af24a74de6fe4d5d9f1c32ff49f49eef  paths=['/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/af24a74de6fe4d5d9f1c32ff49f49eef/svg/frame_0/frame.png', '/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/af24a74de6fe4d5d9f1c32ff49f49eef/svg/frame_1/frame.png']
+2026-03-15 01:30:14  INFO      main:594  Request complete  session=af24a74de6fe4d5d9f1c32ff49f49eef  render_path=svg  duration_ms=19411  llm_calls=3
+2026-03-15 01:30:14  INFO      main:737  Video generation requested  session=af24a74de6fe4d5d9f1c32ff49f49eef  openai_tts=True
+2026-03-15 01:30:14  INFO      main:792  Video stage 1/3: frame export  session=af24a74de6fe4d5d9f1c32ff49f49eef  frames=2
+2026-03-15 01:30:14  DEBUG     services.video.frame_exporter:187  Frame 0: loading PNG  path=/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/af24a74de6fe4d5d9f1c32ff49f49eef/svg/frame_0/frame.png
+2026-03-15 01:30:14  DEBUG     PIL.PngImagePlugin:201  STREAM b'IHDR' 16 13
+2026-03-15 01:30:14  DEBUG     PIL.PngImagePlugin:201  STREAM b'bKGD' 41 6
+2026-03-15 01:30:14  DEBUG     PIL.PngImagePlugin:781  b'bKGD' 41 6 (unknown)
+2026-03-15 01:30:14  DEBUG     PIL.PngImagePlugin:201  STREAM b'IDAT' 59 8192
+2026-03-15 01:30:14  DEBUG     services.video.frame_exporter:187  Frame 1: loading PNG  path=/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/af24a74de6fe4d5d9f1c32ff49f49eef/svg/frame_1/frame.png
+2026-03-15 01:30:14  DEBUG     PIL.PngImagePlugin:201  STREAM b'IHDR' 16 13
+2026-03-15 01:30:14  DEBUG     PIL.PngImagePlugin:201  STREAM b'bKGD' 41 6
+2026-03-15 01:30:14  DEBUG     PIL.PngImagePlugin:781  b'bKGD' 41 6 (unknown)
+2026-03-15 01:30:14  DEBUG     PIL.PngImagePlugin:201  STREAM b'IDAT' 59 8192
+2026-03-15 01:30:14  INFO      main:795  Frame export done  session=af24a74de6fe4d5d9f1c32ff49f49eef  exported=2
+2026-03-15 01:30:14  INFO      main:801  Video stage 2/3: TTS  session=af24a74de6fe4d5d9f1c32ff49f49eef  backend=openai
+2026-03-15 01:30:14  DEBUG     services.video.tts_service:156  Generating audio for frame 0  chars=335  path=/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/af24a74de6fe4d5d9f1c32ff49f49eef/audio/frame_000.mp3
+2026-03-15 01:30:19  DEBUG     services.video.tts_service:162  Audio generated  frame=0  path=/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/af24a74de6fe4d5d9f1c32ff49f49eef/audio/frame_000.mp3
+2026-03-15 01:30:19  DEBUG     services.video.tts_service:156  Generating audio for frame 1  chars=305  path=/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/af24a74de6fe4d5d9f1c32ff49f49eef/audio/frame_001.mp3
+2026-03-15 01:30:24  DEBUG     services.video.tts_service:162  Audio generated  frame=1  path=/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/af24a74de6fe4d5d9f1c32ff49f49eef/audio/frame_001.mp3
+2026-03-15 01:30:24  INFO      main:807  TTS done  session=af24a74de6fe4d5d9f1c32ff49f49eef  generated=2/2
+2026-03-15 01:30:24  INFO      main:814  Video stage 3/3: assembly  session=af24a74de6fe4d5d9f1c32ff49f49eef  output=/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/af24a74de6fe4d5d9f1c32ff49f49eef/final_video.mp4
+2026-03-15 01:30:24  DEBUG     services.video.video_assembler:200  Building clip 1/2  path=/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/af24a74de6fe4d5d9f1c32ff49f49eef/video_frames/frame_000.png
+2026-03-15 01:30:24  DEBUG     PIL.PngImagePlugin:201  STREAM b'IHDR' 16 13
+2026-03-15 01:30:24  DEBUG     PIL.PngImagePlugin:201  STREAM b'IDAT' 41 65536
+2026-03-15 01:30:24  DEBUG     services.video.video_assembler:203  Clip 1 duration=20.11s
+2026-03-15 01:30:24  DEBUG     services.video.video_assembler:200  Building clip 2/2  path=/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/af24a74de6fe4d5d9f1c32ff49f49eef/video_frames/frame_001.png
+2026-03-15 01:30:24  DEBUG     PIL.PngImagePlugin:201  STREAM b'IHDR' 16 13
+2026-03-15 01:30:24  DEBUG     PIL.PngImagePlugin:201  STREAM b'IDAT' 41 65536
+2026-03-15 01:30:24  DEBUG     services.video.video_assembler:203  Clip 2 duration=18.86s
+2026-03-15 01:30:24  INFO      services.video.video_assembler:215  Concatenated 2 clips  total_duration=38.57s
+2026-03-15 01:31:40  INFO      main:819  Video assembly complete  session=af24a74de6fe4d5d9f1c32ff49f49eef  path=/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/af24a74de6fe4d5d9f1c32ff49f49eef/final_video.mp4
+2026-03-15 01:31:40  INFO      main:827  Video generation done  session=af24a74de6fe4d5d9f1c32ff49f49eef  frames=2  tts=openai

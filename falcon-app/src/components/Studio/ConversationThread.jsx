@@ -27,7 +27,7 @@ function UserBubble({ prompt }) {
 }
 
 // ─── Single turn ───────────────────────────────────────────────────────────────
-function TurnView({ turn }) {
+function TurnView({ turn, onPauseAsk }) {
   const theme = useTheme()
 
   return (
@@ -44,6 +44,7 @@ function TurnView({ turn }) {
             videoPhase={turn.videoPhase}
             framesData={turn.framesData}
             hideHeader
+            onPauseAsk={onPauseAsk}
           />
         ) : (
           <Box sx={{
@@ -62,14 +63,14 @@ function TurnView({ turn }) {
 }
 
 // ─── Full conversation thread ──────────────────────────────────────────────────
-export default function ConversationThread({ turns }) {
+export default function ConversationThread({ turns, onPauseAsk }) {
   const theme = useTheme()
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', pb: 2 }}>
       {turns.map((turn, idx) => (
         <Box key={turn.tempId || turn.id || idx}>
-          <TurnView turn={turn} />
+          <TurnView turn={turn} onPauseAsk={onPauseAsk} />
           {idx < turns.length - 1 && (
             <Divider sx={{ mx: 3, borderColor: theme.palette.divider, opacity: 0.5 }} />
           )}

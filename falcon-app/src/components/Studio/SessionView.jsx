@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { Box } from '@mui/material'
 import QuestionHeader from './QuestionHeader'
-import VideoPanel from './VideoPanel'
-import FrameStrip from './FrameStrip'
+import VideoPanel     from './VideoPanel'
+import FrameStrip     from './FrameStrip'
+import NotesPanel     from './NotesPanel'
 
-export default function SessionView({ session, videoPhase, framesData, hideHeader = false }) {
+export default function SessionView({ session, videoPhase, framesData, hideHeader = false, onPauseAsk }) {
   const [activeFrame, setActiveFrame] = useState(0)
 
   return (
@@ -17,7 +18,7 @@ export default function SessionView({ session, videoPhase, framesData, hideHeade
         />
       )}
 
-      <VideoPanel sessionId={session.id} videoPhase={videoPhase} />
+      <VideoPanel sessionId={session.id} videoPhase={videoPhase} onPauseAsk={onPauseAsk} />
 
       {framesData && (
         <FrameStrip
@@ -27,6 +28,8 @@ export default function SessionView({ session, videoPhase, framesData, hideHeade
           onFrameClick={setActiveFrame}
         />
       )}
+
+      <NotesPanel notes={framesData?.notes} />
     </Box>
   )
 }

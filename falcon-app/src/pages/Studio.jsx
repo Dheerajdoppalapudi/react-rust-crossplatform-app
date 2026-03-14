@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { Box, Typography, Tooltip, IconButton, useTheme } from '@mui/material'
 import AutoAwesomeIcon  from '@mui/icons-material/AutoAwesome'
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
+import NotesOutlinedIcon from '@mui/icons-material/NotesOutlined'
 
 import HistorySidebar      from '../components/Studio/HistorySidebar'
 import LoadingView         from '../components/Studio/LoadingView'
@@ -15,6 +16,16 @@ import { api } from '../services/api'
 export default function Studio() {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
+
+  // ── Notes toggle — persisted across sessions ──────────────────────────────────
+  const [notesEnabled, setNotesEnabled] = useState(
+    () => localStorage.getItem('studio-notes-enabled') === 'true'
+  )
+  const toggleNotes = () => setNotesEnabled((prev) => {
+    const next = !prev
+    localStorage.setItem('studio-notes-enabled', String(next))
+    return next
+  })
 
   // ── Prompt input ─────────────────────────────────────────────────────────────
   const [prompt, setPrompt]   = useState('')
@@ -101,8 +112,15 @@ export default function Studio() {
     // Load frames meta + trigger missing video generation for each turn
     loadedTurns.forEach(async (turn) => {
       try {
-        const framesData = await api.getFramesMeta(turn.id)
-        if (framesData) {
+        const raw = await api.getFramesMeta(turn.id)
+        if (raw) {
+          const framesData = {
+            render_path:         raw.render_path,
+            images:              raw.images              || [],
+            captions:            raw.captions            || [],
+            suggested_followups: raw.suggested_followups || [],
+            notes:               raw.notes               || '',
+          }
           setTurns((prev) => prev.map((t) => t.id === turn.id ? { ...t, framesData } : t))
         }
       } catch { /* non-critical */ }
@@ -155,27 +173,33 @@ export default function Studio() {
     const it2 = !isFirstTurn ? setTimeout(() =>
       setTurns((p) => p.map((t) => t.tempId === tempId ? { ...t, stage: 'rendering' }  : t)), 6000) : null
 
+    // Capture and clear pause context before the async call
+    const capturedPauseContext = pauseContext
+    setPauseContext(null)
+
     try {
-      const data = await api.imageGeneration(submittedPrompt, activeConvId)
+      const data = await api.imageGeneration(submittedPrompt, activeConvId, capturedPauseContext, notesEnabled)
 
       const framesData = {
-        render_path: data.render_path,
-        images:      data.images   || [],
-        captions:    data.captions || [],
+        render_path:         data.render_path,
+        images:              data.images              || [],
+        captions:            data.captions            || [],
+        suggested_followups: data.suggested_followups || [],
+        notes:               data.notes               || '',
       }
       const realTurn = {
         tempId,
-        id:          data.session_id,
-        conversation_id: data.conversation_id,
-        turn_index:  data.turn_index,
-        prompt:      submittedPrompt,
-        intent_type: data.intent_type,
-        render_path: data.render_path,
-        frame_count: data.frame_count,
-        isLoading:   false,
-        stage:       null,
+        id:                  data.session_id,
+        conversation_id:     data.conversation_id,
+        turn_index:          data.turn_index,
+        prompt:              submittedPrompt,
+        intent_type:         data.intent_type,
+        render_path:         data.render_path,
+        frame_count:         data.frame_count,
+        isLoading:           false,
+        stage:               null,
         framesData,
-        videoPhase:  'generating',
+        videoPhase:          'generating',
       }
 
       if (isFirstTurn) {
@@ -220,11 +244,26 @@ export default function Studio() {
     inputRef.current?.focus()
   }
 
-  // The last intent type in the thread (used for follow-up suggestions)
-  const lastIntentType = turns.filter((t) => t.intent_type).at(-1)?.intent_type ?? null
-  const activeConversationMeta = activeConvId
-    ? { id: activeConvId, intent_type: lastIntentType }
-    : null
+  // ── Pause context ─────────────────────────────────────────────────────────────
+  const [pauseContext, setPauseContext] = useState(null)
+
+  const handlePauseAsk = useCallback(({ sessionId, currentTime, duration }) => {
+    const turn = turns.find((t) => t.id === sessionId)
+    if (!turn) return
+    const frameCount = turn.frame_count || 1
+    const frameIndex = Math.min(Math.floor((currentTime / duration) * frameCount), frameCount - 1)
+    const caption    = turn.framesData?.captions?.[frameIndex] ?? null
+    setPauseContext({ sessionId, frameIndex, caption })
+    inputRef.current?.focus()
+  }, [turns, inputRef])
+
+  // Derive follow-up data from the last completed turn
+  const lastTurn = turns.filter((t) => t.intent_type).at(-1) ?? null
+  const activeConversationMeta = activeConvId ? {
+    id:                  activeConvId,
+    intent_type:         lastTurn?.intent_type  ?? null,
+    suggested_followups: lastTurn?.framesData?.suggested_followups ?? [],
+  } : null
 
   // Decide what to render in the scrollable middle
   const showEmpty  = !isBootstrapping && turns.length === 0
@@ -266,20 +305,51 @@ export default function Studio() {
           </Box>
         </Box>
 
-        <Tooltip title="New conversation">
-          <IconButton
-            size="small"
-            onClick={handleNewConversation}
-            sx={{
-              color: theme.palette.primary.main,
-              border: `1px solid ${isDark ? 'rgba(79,110,255,0.3)' : '#c7d2fe'}`,
-              borderRadius: '8px', p: 0.75,
-              '&:hover': { backgroundColor: isDark ? 'rgba(79,110,255,0.08)' : '#f0f4ff' },
-            }}
-          >
-            <EditOutlinedIcon sx={{ fontSize: 16 }} />
-          </IconButton>
-        </Tooltip>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          {/* Notes toggle */}
+          <Tooltip title={notesEnabled ? 'Notes on — click to disable' : 'Notes off — click to enable'}>
+            <IconButton
+              size="small"
+              onClick={toggleNotes}
+              sx={{
+                borderRadius: '8px', p: 0.75,
+                border: `1px solid ${notesEnabled
+                  ? (isDark ? 'rgba(79,110,255,0.5)' : '#c7d2fe')
+                  : (isDark ? 'rgba(255,255,255,0.18)' : '#d1d5db')}`,
+                color: notesEnabled
+                  ? theme.palette.primary.main
+                  : (isDark ? 'rgba(255,255,255,0.55)' : '#6b7280'),
+                backgroundColor: notesEnabled
+                  ? (isDark ? 'rgba(79,110,255,0.12)' : '#f0f4ff')
+                  : 'transparent',
+                '&:hover': {
+                  borderColor: isDark ? 'rgba(255,255,255,0.35)' : '#9ca3af',
+                  color: notesEnabled ? theme.palette.primary.main : (isDark ? '#fff' : '#374151'),
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#f3f4f6',
+                },
+                transition: 'all 0.15s',
+              }}
+            >
+              <NotesOutlinedIcon sx={{ fontSize: 16 }} />
+            </IconButton>
+          </Tooltip>
+
+          {/* New conversation */}
+          <Tooltip title="New conversation">
+            <IconButton
+              size="small"
+              onClick={handleNewConversation}
+              sx={{
+                color: theme.palette.primary.main,
+                border: `1px solid ${isDark ? 'rgba(79,110,255,0.3)' : '#c7d2fe'}`,
+                borderRadius: '8px', p: 0.75,
+                '&:hover': { backgroundColor: isDark ? 'rgba(79,110,255,0.08)' : '#f0f4ff' },
+              }}
+            >
+              <EditOutlinedIcon sx={{ fontSize: 16 }} />
+            </IconButton>
+          </Tooltip>
+        </Box>
       </Box>
 
       {/* ── Body ─────────────────────────────────────────────────────────────── */}
@@ -318,7 +388,7 @@ export default function Studio() {
 
             {showThread && (
               <>
-                <ConversationThread turns={turns} />
+                <ConversationThread turns={turns} onPauseAsk={handlePauseAsk} />
                 {/* Invisible anchor for auto-scroll */}
                 <Box ref={threadBottomRef} sx={{ height: 1 }} />
               </>
@@ -335,6 +405,8 @@ export default function Studio() {
             isGenerating={isBootstrapping}
             activeConversation={activeConversationMeta}
             onNewConversation={handleNewConversation}
+            pauseContext={pauseContext}
+            onClearPauseContext={() => setPauseContext(null)}
           />
         </Box>
       </Box>

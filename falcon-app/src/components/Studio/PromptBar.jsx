@@ -1,6 +1,8 @@
-import { Box, Typography, TextField, IconButton, Tooltip, CircularProgress } from '@mui/material'
+import { Box, Typography, TextField, IconButton, Tooltip, CircularProgress, Chip } from '@mui/material'
 import SendIcon from '@mui/icons-material/Send'
 import AddIcon from '@mui/icons-material/Add'
+import CloseIcon from '@mui/icons-material/Close'
+import PauseCircleOutlineIcon from '@mui/icons-material/PauseCircleOutline'
 import { useTheme } from '@mui/material'
 import { FOLLOWUP_SUGGESTIONS } from './constants'
 
@@ -11,8 +13,10 @@ export default function PromptBar({
   onKeyDown,
   inputRef,
   isGenerating,
-  activeConversation,   // { id, title, intent_type } | null
-  onNewConversation,    // called when user clicks "+ New"
+  activeConversation,   // { id, intent_type } | null
+  onNewConversation,
+  pauseContext,         // { sessionId, frameIndex, caption } | null
+  onClearPauseContext,
 }) {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
@@ -20,8 +24,11 @@ export default function PromptBar({
   const isFollowUp = !!activeConversation && !isGenerating
   const canSend    = prompt.trim() && !isGenerating
 
-  const suggestions = isFollowUp
-    ? (FOLLOWUP_SUGGESTIONS[activeConversation.intent_type] || FOLLOWUP_SUGGESTIONS.illustration)
+  // Use LLM-generated follow-ups when available; fall back to generic constants
+  const suggestions = isFollowUp && !pauseContext
+    ? (activeConversation.suggested_followups?.length
+        ? activeConversation.suggested_followups
+        : (FOLLOWUP_SUGGESTIONS[activeConversation.intent_type] || FOLLOWUP_SUGGESTIONS.illustration))
     : []
 
   const promptBg     = isDark ? '#1f1f1f' : '#fafafa'
@@ -63,6 +70,38 @@ export default function PromptBar({
         </Box>
       )}
 
+      {/* Pause context indicator */}
+      {pauseContext && (
+        <Box sx={{ px: 3, pt: 1.5, pb: 0 }}>
+          <Box sx={{
+            display: 'flex', alignItems: 'center', gap: 1,
+            px: 1.5, py: 0.75, borderRadius: '10px',
+            backgroundColor: isDark ? 'rgba(79,110,255,0.1)' : '#f0f4ff',
+            border: `1px solid ${isDark ? 'rgba(79,110,255,0.25)' : '#c7d2fe'}`,
+          }}>
+            <PauseCircleOutlineIcon sx={{ fontSize: 14, color: theme.palette.primary.main, flexShrink: 0 }} />
+            <Typography sx={{ fontSize: 12, color: theme.palette.primary.main, fontWeight: 500, flexShrink: 0 }}>
+              Paused at:
+            </Typography>
+            <Typography sx={{
+              fontSize: 12, color: theme.palette.primary.main,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1,
+            }}>
+              {pauseContext.caption || `Frame ${pauseContext.frameIndex + 1}`}
+            </Typography>
+            <Tooltip title="Clear pause context">
+              <IconButton
+                size="small"
+                onClick={onClearPauseContext}
+                sx={{ p: 0.25, color: theme.palette.primary.main, opacity: 0.6, flexShrink: 0, '&:hover': { opacity: 1 } }}
+              >
+                <CloseIcon sx={{ fontSize: 12 }} />
+              </IconButton>
+            </Tooltip>
+          </Box>
+        </Box>
+      )}
+
       {/* Input area */}
       <Box sx={{ px: 3, pt: 1.5, pb: 2 }}>
         <Box sx={{
@@ -100,7 +139,11 @@ export default function PromptBar({
             value={prompt}
             onChange={(e) => onPromptChange(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder={isFollowUp ? 'Ask a follow-up…' : 'What do you want to visualize today?'}
+            placeholder={
+              pauseContext   ? 'Ask your question about this moment…' :
+              isFollowUp     ? 'Ask a follow-up…' :
+                               'What do you want to visualize today?'
+            }
             multiline
             maxRows={4}
             disabled={isGenerating}

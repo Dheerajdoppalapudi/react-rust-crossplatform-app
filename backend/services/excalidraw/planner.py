@@ -65,6 +65,8 @@ class GenerationPlan(BaseModel):
     shared_style: SharedStyle
     element_vocabulary: dict = {}  # maps entity key → visual spec string, shared across all frames
     frames: List[FramePlan]
+    suggested_followups: List[str] = []  # 3-4 specific follow-up questions for this lesson
+    notes: str = ""                      # concise lesson summary shown as collapsible notes in the UI
 
 
 # ---------------------------------------------------------------------------
@@ -133,25 +135,25 @@ def _extract_json(text: str) -> dict:
 # Stage 1 — Planning call
 # ---------------------------------------------------------------------------
 
-async def create_plan(user_prompt: str) -> GenerationPlan:
+async def create_plan(user_prompt: str, conversation_context: str = "") -> GenerationPlan:
     """
     Ask the LLM to plan the full multi-frame sequence.
 
-    Loads planning_prompt.md, injects the user's prompt, calls the LLM
-    via call_llm(), and validates the response with Pydantic.
-
-    The LLMService.make_single_prompt_request is synchronous (uses requests),
-    so we run it in a thread via asyncio.to_thread to avoid blocking the
-    FastAPI event loop while waiting for the HTTP response.
-
-    Returns a GenerationPlan with frame_count, shared_style, and one
-    FramePlan per frame (each containing description + caption).
+    conversation_context — optional block injected before the user prompt that
+    summarises prior turns in the conversation and any pause-point context.
+    When provided, the LLM is instructed to build on what was already taught
+    rather than starting from scratch.
     """
     template_path = os.path.join(os.path.dirname(__file__), "prompts", "planning_prompt.md")
     with open(template_path) as f:
-        prompt = f.read().replace("{{USER_PROMPT}}", user_prompt)
+        template = f.read()
 
-    # Run the synchronous call_llm in a thread so the event loop stays free
+    prompt = (
+        template
+        .replace("{{USER_PROMPT}}", user_prompt)
+        .replace("{{CONVERSATION_CONTEXT}}", conversation_context)
+    )
+
     raw = await asyncio.to_thread(call_llm, prompt)
     plan_dict = _extract_json(raw)
     return GenerationPlan(**plan_dict)

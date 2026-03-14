@@ -22,7 +22,13 @@ The JSON must follow this exact structure:
       "narration": "<2-3 sentences of teaching-voice explanation>",
       "caption": "<short label, max 6 words>"
     }
-  ]
+  ],
+  "suggested_followups": [
+    "<specific follow-up question 1>",
+    "<specific follow-up question 2>",
+    "<specific follow-up question 3>"
+  ],
+  "notes": "<concise lesson summary — 3-5 bullet points in markdown format covering the key concepts taught>"
 }
 
 ────────────────────────────────────────────────────────────────────
@@ -165,6 +171,35 @@ This is the spoken script a teacher would deliver while pointing at this frame o
 - Complements the narration — do NOT repeat it.
 
 ────────────────────────────────────────────────────────────────────
+## suggested_followups Rules
+
+Generate exactly 3 follow-up questions a curious student would naturally ask AFTER watching this specific lesson. These must be:
+- Specific to THIS lesson's content — not generic ("tell me more")
+- Progressively deeper: question 1 = immediate curiosity, question 2 = deeper understanding, question 3 = edge case or application
+- Short and conversational (max 10 words each) — phrased as the student would actually ask them
+- Diverse: do not ask the same type of question twice
+
+Examples for a DNS lesson:
+- "What happens if the DNS server is down?"
+- "How does DNS caching speed things up?"
+- "What is the difference between DNS and DHCP?"
+
+────────────────────────────────────────────────────────────────────
+## notes Rules
+
+Write a concise lesson summary a student can reference later. Format as **3-5 markdown bullet points**:
+- Each bullet = one key concept or takeaway from the lesson
+- Plain language — no jargon without explanation
+- Include any important numbers, formulas, or names mentioned
+- Last bullet = the "so what" — why this matters in practice
+
+Example for a DNS lesson:
+- DNS (Domain Name System) translates human-readable domain names (google.com) into IP addresses (142.250.80.46)
+- Every browser request starts with a DNS lookup — it acts as the internet's phone book
+- DNS resolvers cache results to avoid repeated lookups, speeding up subsequent visits
+- Without DNS, users would need to memorise IP addresses to visit any website
+
+────────────────────────────────────────────────────────────────────
 ## Anti-Patterns — Never Do These
 
 - ❌ Wrong intent type: classifying "draw a robot doing a flip" as "process" → produces a flowchart, not a picture
@@ -287,6 +322,6 @@ This is the spoken script a teacher would deliver while pointing at this frame o
 }
 
 ────────────────────────────────────────────────────────────────────
-
+{{CONVERSATION_CONTEXT}}
 USER PROMPT:
 {{USER_PROMPT}}

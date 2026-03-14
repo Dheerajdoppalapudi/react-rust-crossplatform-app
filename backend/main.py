@@ -207,6 +207,129 @@ def _count_llm_calls(log: list) -> int:
     return sum(1 for e in log if e.get("event") == "llm_call")
 
 
+# ── Conversation context builder ──────────────────────────────────────────────
+
+def _parse_narrations_from_file(narration_path: str) -> list[str]:
+    """Read narration.txt and return a list of per-frame narration strings."""
+    if not os.path.exists(narration_path):
+        return []
+    with open(narration_path) as f:
+        text = f.read()
+    # Format: "Frame N: Caption\nNarration text\n\nFrame N+1: ..."
+    blocks = []
+    current = []
+    for line in text.splitlines():
+        if line.strip().startswith("Frame ") and ":" in line and current:
+            narration = " ".join(l for l in current if not l.strip().startswith("Frame ")).strip()
+            blocks.append(narration)
+            current = [line]
+        else:
+            current.append(line)
+    if current:
+        narration = " ".join(l for l in current if not l.strip().startswith("Frame ")).strip()
+        blocks.append(narration)
+    return blocks
+
+
+def _build_conversation_context(
+    conversation_id: str,
+    current_session_id: str,
+    pause_session_id: str | None = None,
+    pause_frame_index: int | None = None,
+    pause_caption: str | None = None,
+) -> str:
+    """
+    Build the conversation context string injected into the planning prompt.
+
+    Strategy (Option B — sliding window):
+      - All prior turns except the most recent: prompt + captions only
+      - Most recent prior turn:                 prompt + full narration
+      - Pause context (if provided):            which frame + caption + narration at that frame
+    """
+    with _get_db() as conn:
+        prior_turns = conn.execute(
+            "SELECT id, prompt, turn_index, output_dir FROM sessions "
+            "WHERE conversation_id = ? AND id != ? AND status = 'done' "
+            "ORDER BY turn_index ASC",
+            (conversation_id, current_session_id),
+        ).fetchall()
+
+    if not prior_turns:
+        return ""
+
+    lines: list[str] = [
+        "────────────────────────────────────────────────────────────────────",
+        "## CONVERSATION HISTORY — what has already been taught",
+        "",
+        "You are continuing an ongoing conversation. Build upon the lessons below.",
+        "Do NOT repeat concepts already covered. Connect new content to prior lessons where natural.",
+        "",
+    ]
+
+    for i, turn in enumerate(prior_turns):
+        turn_idx   = turn["turn_index"]
+        prompt     = turn["prompt"]
+        output_dir = turn["output_dir"] or ""
+        is_last    = (i == len(prior_turns) - 1)
+
+        captions: list[str] = []
+        frames_path = os.path.join(output_dir, "frames.json")
+        if os.path.exists(frames_path):
+            with open(frames_path) as f:
+                captions = json.load(f).get("captions", [])
+
+        lines.append(f"Turn {turn_idx}: \"{prompt}\"")
+
+        if captions:
+            lines.append(f"  Frames: {', '.join(captions)}")
+
+        # Full narration only for the most recent prior turn
+        if is_last:
+            narration_path = os.path.join(output_dir, "narration.txt")
+            if os.path.exists(narration_path):
+                with open(narration_path) as f:
+                    full_narration = f.read().strip()
+                if full_narration:
+                    lines.append("  Full narration of this turn:")
+                    for narr_line in full_narration.splitlines():
+                        lines.append(f"    {narr_line}")
+
+        lines.append("")
+
+    # ── Pause context ────────────────────────────────────────────────────────
+    if pause_session_id and pause_frame_index is not None:
+        pause_narration_text = ""
+        with _get_db() as conn:
+            pause_row = conn.execute(
+                "SELECT output_dir FROM sessions WHERE id = ?", (pause_session_id,)
+            ).fetchone()
+        if pause_row and pause_row["output_dir"]:
+            narrations = _parse_narrations_from_file(
+                os.path.join(pause_row["output_dir"], "narration.txt")
+            )
+            if pause_frame_index < len(narrations):
+                pause_narration_text = narrations[pause_frame_index]
+
+        lines += [
+            "## USER PAUSE CONTEXT",
+            f"The user paused the video at frame {pause_frame_index + 1}"
+            + (f" titled \"{pause_caption}\"" if pause_caption else "") + ".",
+        ]
+        if pause_narration_text:
+            lines.append(f"The lesson was saying at that moment: \"{pause_narration_text}\"")
+        lines += [
+            "Their follow-up question is likely about this specific concept.",
+            "Focus your new lesson on resolving the confusion or curiosity raised at this point.",
+            "",
+        ]
+
+    lines += [
+        "────────────────────────────────────────────────────────────────────",
+        "",
+    ]
+    return "\n".join(lines)
+
+
 # ── Excalidraw browser opener (kept for reference) ────────────────────────────
 
 def open_in_excalidraw(excalidraw_data: dict, excalidraw_url: str = "http://localhost:3000") -> bool:
@@ -233,7 +356,14 @@ async def chat(message: str = Form("")):
 
 
 @app.post("/api/image_generation")
-async def image_generation(message: str = Form(""), conversation_id: str = Form(None)):
+async def image_generation(
+    message:           str  = Form(""),
+    conversation_id:   str  = Form(None),
+    pause_session_id:  str  = Form(None),
+    pause_frame_index: int  = Form(None),
+    pause_caption:     str  = Form(None),
+    notes_enabled:     str  = Form("false"),   # "true" | "false" (sent as string from FormData)
+):
     session_id = uuid.uuid4().hex
     output_dir = _session_output_dir(session_id)
     start_time = time.time()
@@ -253,6 +383,22 @@ async def image_generation(message: str = Form(""), conversation_id: str = Form(
 
     _insert_session(session_id, message, conversation_id, turn_index)
     _touch_conversation(conversation_id)
+
+    # Build conversation context for follow-up turns
+    conversation_context = ""
+    if turn_index > 1:
+        conversation_context = _build_conversation_context(
+            conversation_id   = conversation_id,
+            current_session_id = session_id,
+            pause_session_id  = pause_session_id,
+            pause_frame_index = pause_frame_index,
+            pause_caption     = pause_caption,
+        )
+        if conversation_context:
+            logger.info(
+                "Conversation context built  session=%s  turn=%d  chars=%d  has_pause=%s",
+                session_id, turn_index, len(conversation_context), pause_session_id is not None,
+            )
 
     # Activate per-request lifecycle log
     lifecycle_log: list = []
@@ -275,7 +421,7 @@ async def image_generation(message: str = Form(""), conversation_id: str = Form(
     try:
         # ── Stage 1: Planning ────────────────────────────────────────────────
         _log({"event": "stage_start", "stage": "planning"})
-        plan = await create_plan(message)
+        plan = await create_plan(message, conversation_context)
         _log({
             "event": "stage_complete",
             "stage": "planning",
@@ -288,7 +434,10 @@ async def image_generation(message: str = Form(""), conversation_id: str = Form(
             session_id, plan.intent_type, plan.frame_count, plan.layout,
         )
 
-        captions = [frame.caption for frame in plan.frames]
+        captions            = [frame.caption for frame in plan.frames]
+        _notes_on           = notes_enabled.lower() == "true"
+        suggested_followups = plan.suggested_followups or [] if _notes_on else []
+        notes               = (plan.notes or "")              if _notes_on else ""
         narration_lines = []
         for i, frame in enumerate(plan.frames):
             narration_lines.append(f"Frame {i + 1}: {frame.caption}")
@@ -320,7 +469,8 @@ async def image_generation(message: str = Form(""), conversation_id: str = Form(
                 f.write(py_content)
 
             with open(os.path.join(output_dir, "frames.json"), "w") as f:
-                json.dump({"render_path": "manim", "images": png_paths, "captions": captions}, f, indent=2)
+                json.dump({"render_path": "manim", "images": png_paths, "captions": captions,
+                           "suggested_followups": suggested_followups, "notes": notes}, f, indent=2)
 
             result_payload = {
                 "session_id": session_id,
@@ -330,6 +480,8 @@ async def image_generation(message: str = Form(""), conversation_id: str = Form(
                 "captions": captions,
                 "images": png_paths,
                 "ui_file_type": "python",
+                "suggested_followups": suggested_followups,
+                "notes": notes,
             }
 
         elif plan.intent_type in SVG_INTENT_TYPES and svg_available():
@@ -341,7 +493,8 @@ async def image_generation(message: str = Form(""), conversation_id: str = Form(
             logger.info("SVG frames generated  session=%s  paths=%s", session_id, png_paths)
 
             with open(os.path.join(output_dir, "frames.json"), "w") as f:
-                json.dump({"render_path": "svg", "images": png_paths, "captions": captions}, f, indent=2)
+                json.dump({"render_path": "svg", "images": png_paths, "captions": captions,
+                           "suggested_followups": suggested_followups, "notes": notes}, f, indent=2)
 
             ui_output_file = os.path.join(output_dir, "final_output.json")
             with open(ui_output_file, "w") as f:
@@ -355,6 +508,8 @@ async def image_generation(message: str = Form(""), conversation_id: str = Form(
                 "captions": captions,
                 "images": png_paths,
                 "ui_file_type": "images",
+                "suggested_followups": suggested_followups,
+                "notes": notes,
             }
 
         else:
@@ -413,7 +568,8 @@ async def image_generation(message: str = Form(""), conversation_id: str = Form(
 
             # No real PNGs for this path — store nulls so video uses placeholders
             with open(os.path.join(output_dir, "frames.json"), "w") as f:
-                json.dump({"render_path": path_label, "images": [None] * plan.frame_count, "captions": captions}, f, indent=2)
+                json.dump({"render_path": path_label, "images": [None] * plan.frame_count, "captions": captions,
+                           "suggested_followups": suggested_followups, "notes": notes}, f, indent=2)
 
             result_payload = {
                 "session_id": session_id,
@@ -424,6 +580,8 @@ async def image_generation(message: str = Form(""), conversation_id: str = Form(
                 "render_path": path_label,
                 "captions": captions,
                 "ui_file_type": "json",
+                "suggested_followups": suggested_followups,
+                "notes": notes,
             }
 
         # ── Save narration ────────────────────────────────────────────────────
