@@ -1,7 +1,6 @@
 import { Box, Typography, TextField, IconButton, Tooltip, CircularProgress } from '@mui/material'
 import SendIcon from '@mui/icons-material/Send'
-import CloseIcon from '@mui/icons-material/Close'
-import SubdirectoryArrowRightIcon from '@mui/icons-material/SubdirectoryArrowRight'
+import AddIcon from '@mui/icons-material/Add'
 import { useTheme } from '@mui/material'
 import { FOLLOWUP_SUGGESTIONS } from './constants'
 
@@ -12,17 +11,17 @@ export default function PromptBar({
   onKeyDown,
   inputRef,
   isGenerating,
-  followUpCtx,
-  onClearFollowUp,
+  activeConversation,   // { id, title, intent_type } | null
+  onNewConversation,    // called when user clicks "+ New"
 }) {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
 
+  const isFollowUp = !!activeConversation && !isGenerating
   const canSend    = prompt.trim() && !isGenerating
-  const isFollowUp = !!followUpCtx && !isGenerating
 
   const suggestions = isFollowUp
-    ? (FOLLOWUP_SUGGESTIONS[followUpCtx.intent_type] || FOLLOWUP_SUGGESTIONS.illustration)
+    ? (FOLLOWUP_SUGGESTIONS[activeConversation.intent_type] || FOLLOWUP_SUGGESTIONS.illustration)
     : []
 
   const promptBg     = isDark ? '#1f1f1f' : '#fafafa'
@@ -66,32 +65,6 @@ export default function PromptBar({
 
       {/* Input area */}
       <Box sx={{ px: 3, pt: 1.5, pb: 2 }}>
-        {/* Follow-up context indicator */}
-        {isFollowUp && (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1 }}>
-            <SubdirectoryArrowRightIcon sx={{ fontSize: 13, color: theme.palette.text.secondary, opacity: 0.45 }} />
-            <Typography sx={{ fontSize: 11.5, color: theme.palette.text.secondary, opacity: 0.55, flexShrink: 0 }}>
-              Following up on:
-            </Typography>
-            <Typography sx={{
-              fontSize: 11.5, color: theme.palette.primary.main, fontWeight: 500,
-              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1,
-            }}>
-              "{followUpCtx.prompt}"
-            </Typography>
-            <Tooltip title="Start new question">
-              <IconButton
-                size="small"
-                onClick={onClearFollowUp}
-                sx={{ p: 0.3, color: theme.palette.text.secondary, opacity: 0.5, '&:hover': { opacity: 1 }, flexShrink: 0 }}
-              >
-                <CloseIcon sx={{ fontSize: 12 }} />
-              </IconButton>
-            </Tooltip>
-          </Box>
-        )}
-
-        {/* Text field row */}
         <Box sx={{
           display: 'flex', alignItems: 'flex-end', gap: 1,
           border: `1.5px solid ${promptBorder}`,
@@ -103,12 +76,31 @@ export default function PromptBar({
           },
           transition: 'all 0.15s',
         }}>
+          {/* New conversation button (only while in a conversation) */}
+          {isFollowUp && (
+            <Tooltip title="Start a new conversation">
+              <IconButton
+                size="small"
+                onClick={onNewConversation}
+                sx={{
+                  width: 28, height: 28, flexShrink: 0, mb: 0.25,
+                  color: theme.palette.text.secondary,
+                  border: `1px solid ${theme.palette.divider}`,
+                  borderRadius: '8px',
+                  '&:hover': { borderColor: theme.palette.primary.main, color: theme.palette.primary.main },
+                }}
+              >
+                <AddIcon sx={{ fontSize: 14 }} />
+              </IconButton>
+            </Tooltip>
+          )}
+
           <TextField
             inputRef={inputRef}
             value={prompt}
             onChange={(e) => onPromptChange(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder={isFollowUp ? 'Ask a follow-up question…' : 'What do you want to visualize today?'}
+            placeholder={isFollowUp ? 'Ask a follow-up…' : 'What do you want to visualize today?'}
             multiline
             maxRows={4}
             disabled={isGenerating}
@@ -122,6 +114,7 @@ export default function PromptBar({
               },
             }}
           />
+
           <Tooltip title="Generate (Enter)">
             <span>
               <IconButton

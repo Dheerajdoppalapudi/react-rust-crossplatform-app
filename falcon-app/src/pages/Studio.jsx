@@ -1,167 +1,242 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { Box, Typography, Tooltip, IconButton, useTheme } from '@mui/material'
-import AutoAwesomeIcon   from '@mui/icons-material/AutoAwesome'
-import EditOutlinedIcon  from '@mui/icons-material/EditOutlined'
+import AutoAwesomeIcon  from '@mui/icons-material/AutoAwesome'
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
 
-import HistorySidebar from '../components/Studio/HistorySidebar'
-import LoadingView    from '../components/Studio/LoadingView'
-import EmptyView      from '../components/Studio/EmptyView'
-import SessionView    from '../components/Studio/SessionView'
-import PromptBar      from '../components/Studio/PromptBar'
+import HistorySidebar      from '../components/Studio/HistorySidebar'
+import LoadingView         from '../components/Studio/LoadingView'
+import EmptyView           from '../components/Studio/EmptyView'
+import ConversationThread  from '../components/Studio/ConversationThread'
+import PromptBar           from '../components/Studio/PromptBar'
 
 import { api } from '../services/api'
 
-// ─── Studio (main page orchestrator) ──────────────────────────────────────────
+// ─── Studio ────────────────────────────────────────────────────────────────────
 export default function Studio() {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
 
-  // ── Input state ──────────────────────────────────────────────────────────────
-  const [prompt, setPrompt]             = useState('')
-  const [isGenerating, setIsGenerating] = useState(false)
-  const [stage, setStage]               = useState('planning')
-  const inputRef = useRef(null)
+  // ── Prompt input ─────────────────────────────────────────────────────────────
+  const [prompt, setPrompt]   = useState('')
+  const inputRef              = useRef(null)
+  const threadBottomRef       = useRef(null)  // for auto-scroll when a new turn is added
+  const contentScrollRef      = useRef(null)
 
-  // ── Session state ─────────────────────────────────────────────────────────────
-  const [sessions, setSessions]             = useState([])
-  const [selectedId, setSelectedId]         = useState(null)
-  const [currentSession, setCurrentSession] = useState(null)
-  const [framesData, setFramesData]         = useState(null)
-  const [videoPhase, setVideoPhase]         = useState('generating') // 'generating' | 'ready' | 'error'
+  // ── Conversations list (sidebar) ──────────────────────────────────────────────
+  const [conversations, setConversations] = useState([])
 
-  // ── Follow-up context ─────────────────────────────────────────────────────────
-  const [followUpCtx, setFollowUpCtx] = useState(null)  // { id, prompt, intent_type }
+  // ── Active conversation ───────────────────────────────────────────────────────
+  // activeConvId — which conversation is open
+  // turns        — array of turn state objects for the active conversation
+  const [activeConvId, setActiveConvId] = useState(null)
+  const [turns, setTurns]               = useState([])
 
-  // Ref for the scrollable content area — scroll to top when new session starts
-  const contentScrollRef = useRef(null)
+  // True while the FIRST turn of a brand-new conversation is being submitted
+  // (used to show the full-screen LoadingView before any turns exist)
+  const [isBootstrapping, setIsBootstrapping] = useState(false)
+  const [bootstrapStage, setBootstrapStage]   = useState('planning')
 
-  // ── Fetch session history ─────────────────────────────────────────────────────
-  const fetchSessions = useCallback(async () => {
+  // ── Helpers ───────────────────────────────────────────────────────────────────
+
+  const fetchConversations = useCallback(async () => {
     try {
-      const data = await api.getSessions()
-      setSessions(data)
+      const data = await api.getConversations()
+      setConversations(Array.isArray(data) ? data : [])
     } catch (err) {
-      console.error('[Studio] fetchSessions:', err)
+      console.error('[Studio] fetchConversations:', err)
     }
   }, [])
 
-  useEffect(() => { fetchSessions() }, [fetchSessions])
+  useEffect(() => { fetchConversations() }, [fetchConversations])
 
-  // ── Background video generation ───────────────────────────────────────────────
-  const runVideoGeneration = useCallback(async (sessionId) => {
+  // Update the videoPhase on a specific turn (matched by tempId or real id)
+  const setTurnVideoPhase = useCallback((tempId, sessionId, phase) => {
+    setTurns((prev) =>
+      prev.map((t) =>
+        t.tempId === tempId || (sessionId && t.id === sessionId) ? { ...t, videoPhase: phase } : t
+      )
+    )
+  }, [])
+
+  // Run video generation for a turn; updates videoPhase when done
+  const runVideoGenerationForTurn = useCallback(async (tempId, sessionId) => {
     try {
       const data = await api.generateVideo(sessionId)
-      if (data.video_path) {
-        setVideoPhase('ready')
-      } else {
-        setVideoPhase('error')
-      }
-    } catch (err) {
-      console.error('[Studio] generateVideo:', err)
-      setVideoPhase('error')
+      setTurnVideoPhase(tempId, sessionId, data.video_path ? 'ready' : 'error')
+    } catch {
+      setTurnVideoPhase(tempId, sessionId, 'error')
     }
-  }, [])
+  }, [setTurnVideoPhase])
 
-  // ── Load session from history ──────────────────────────────────────────────────
-  const loadSession = useCallback(async (session) => {
-    setSelectedId(session.id)
-    setCurrentSession(session)
-    setFramesData(null)
-    setVideoPhase('generating')
-    setFollowUpCtx({ id: session.id, prompt: session.prompt, intent_type: session.intent_type })
+  // Scroll the thread to the bottom whenever turns change
+  useEffect(() => {
+    if (threadBottomRef.current) {
+      threadBottomRef.current.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [turns.length])
 
-    // Scroll content area to top
+  // ── Load a conversation from history ──────────────────────────────────────────
+  const loadConversation = useCallback(async (conv) => {
+    setActiveConvId(conv.id)
+    setTurns([])
     if (contentScrollRef.current) contentScrollRef.current.scrollTop = 0
 
-    // Load frame metadata
-    try {
-      const data = await api.getFramesMeta(session.id)
-      if (data) setFramesData(data)
-    } catch (err) {
-      console.error('[Studio] getFramesMeta:', err)
-    }
+    const data = await api.getConversation(conv.id)
+    if (!data) return
 
-    // Check if video already exists — skip generation if so
-    const videoExists = await api.checkVideoExists(session.id)
-    if (videoExists) {
-      setVideoPhase('ready')
-    } else {
-      runVideoGeneration(session.id)
-    }
-  }, [runVideoGeneration])
+    const loadedTurns = data.turns.map((t) => ({
+      tempId:     t.id,
+      id:         t.id,
+      prompt:     t.prompt,
+      intent_type: t.intent_type,
+      render_path: t.render_path,
+      frame_count: t.frame_count,
+      isLoading:  false,
+      framesData: null,
+      videoPhase: t.video_path ? 'ready' : (t.status === 'error' ? 'error' : 'generating'),
+    }))
 
-  // ── Main generate handler ──────────────────────────────────────────────────────
+    setTurns(loadedTurns)
+
+    // Load frames meta + trigger missing video generation for each turn
+    loadedTurns.forEach(async (turn) => {
+      try {
+        const framesData = await api.getFramesMeta(turn.id)
+        if (framesData) {
+          setTurns((prev) => prev.map((t) => t.id === turn.id ? { ...t, framesData } : t))
+        }
+      } catch { /* non-critical */ }
+
+      if (turn.videoPhase === 'generating') {
+        runVideoGenerationForTurn(turn.tempId, turn.id)
+      }
+    })
+  }, [runVideoGenerationForTurn])
+
+  // ── Submit handler ────────────────────────────────────────────────────────────
   const handleGenerate = useCallback(async () => {
-    if (!prompt.trim() || isGenerating) return
+    if (!prompt.trim() || isBootstrapping) return
 
     const submittedPrompt = prompt.trim()
-    setIsGenerating(true)
-    setCurrentSession(null)
-    setFramesData(null)
-    setSelectedId(null)
-    setStage('planning')
+    setPrompt('')
 
-    // Scroll content area to top
-    if (contentScrollRef.current) contentScrollRef.current.scrollTop = 0
+    const tempId      = `temp_${Date.now()}`
+    const isFirstTurn = !activeConvId
 
-    const t1 = setTimeout(() => setStage('generating'), 2500)
-    const t2 = setTimeout(() => setStage('rendering'),  6000)
+    if (isFirstTurn) {
+      // Show full-screen loader before we have any turns
+      setIsBootstrapping(true)
+      setBootstrapStage('planning')
+      setTurns([])
+      if (contentScrollRef.current) contentScrollRef.current.scrollTop = 0
+    } else {
+      // Append a loading placeholder turn to the thread
+      setTurns((prev) => [...prev, {
+        tempId,
+        id:          null,
+        prompt:      submittedPrompt,
+        intent_type: null,
+        render_path: null,
+        frame_count: null,
+        isLoading:   true,
+        stage:       'planning',
+        framesData:  null,
+        videoPhase:  'generating',
+      }])
+    }
+
+    // Stage animation timers (only useful for the first turn bootstrap)
+    const t1 = isFirstTurn ? setTimeout(() => setBootstrapStage('generating'), 2500) : null
+    const t2 = isFirstTurn ? setTimeout(() => setBootstrapStage('rendering'),  6000) : null
+
+    // Stage animation for in-thread loading turns
+    const it1 = !isFirstTurn ? setTimeout(() =>
+      setTurns((p) => p.map((t) => t.tempId === tempId ? { ...t, stage: 'generating' } : t)), 2500) : null
+    const it2 = !isFirstTurn ? setTimeout(() =>
+      setTurns((p) => p.map((t) => t.tempId === tempId ? { ...t, stage: 'rendering' }  : t)), 6000) : null
 
     try {
-      const data = await api.imageGeneration(submittedPrompt)
+      const data = await api.imageGeneration(submittedPrompt, activeConvId)
 
-      const session = {
-        id:          data.session_id,
-        prompt:      submittedPrompt,
-        intent_type: data.intent_type,
-        frame_count: data.frame_count,
-        render_path: data.render_path,
-      }
-      const frames = {
+      const framesData = {
         render_path: data.render_path,
         images:      data.images   || [],
         captions:    data.captions || [],
       }
+      const realTurn = {
+        tempId,
+        id:          data.session_id,
+        conversation_id: data.conversation_id,
+        turn_index:  data.turn_index,
+        prompt:      submittedPrompt,
+        intent_type: data.intent_type,
+        render_path: data.render_path,
+        frame_count: data.frame_count,
+        isLoading:   false,
+        stage:       null,
+        framesData,
+        videoPhase:  'generating',
+      }
 
-      setCurrentSession(session)
-      setSelectedId(data.session_id)
-      setFramesData(frames)
-      setFollowUpCtx({ id: data.session_id, prompt: submittedPrompt, intent_type: data.intent_type })
-      setVideoPhase('generating')
-      setPrompt('')
+      if (isFirstTurn) {
+        setActiveConvId(data.conversation_id)
+        setIsBootstrapping(false)
+        setTurns([realTurn])
+      } else {
+        setTurns((prev) => prev.map((t) => t.tempId === tempId ? realTurn : t))
+      }
 
-      await fetchSessions()
-
-      // Generate video in background — don't block the UI
-      runVideoGeneration(data.session_id)
+      await fetchConversations()
+      runVideoGenerationForTurn(tempId, data.session_id)
     } catch (err) {
       console.error('[Studio] handleGenerate:', err)
+      if (isFirstTurn) {
+        setIsBootstrapping(false)
+        setTurns([])
+        setActiveConvId(null)
+      } else {
+        setTurns((prev) => prev.map((t) =>
+          t.tempId === tempId ? { ...t, isLoading: false, videoPhase: 'error' } : t
+        ))
+      }
     } finally {
-      clearTimeout(t1)
-      clearTimeout(t2)
-      setIsGenerating(false)
+      if (t1) clearTimeout(t1)
+      if (t2) clearTimeout(t2)
+      if (it1) clearTimeout(it1)
+      if (it2) clearTimeout(it2)
     }
-  }, [prompt, isGenerating, fetchSessions, runVideoGeneration])
+  }, [prompt, isBootstrapping, activeConvId, fetchConversations, runVideoGenerationForTurn])
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleGenerate() }
   }
 
-  const handleReset = () => {
-    setCurrentSession(null)
-    setFramesData(null)
-    setSelectedId(null)
-    setFollowUpCtx(null)
+  const handleNewConversation = () => {
+    setActiveConvId(null)
+    setTurns([])
     setPrompt('')
+    setIsBootstrapping(false)
+    if (contentScrollRef.current) contentScrollRef.current.scrollTop = 0
     inputRef.current?.focus()
   }
+
+  // The last intent type in the thread (used for follow-up suggestions)
+  const lastIntentType = turns.filter((t) => t.intent_type).at(-1)?.intent_type ?? null
+  const activeConversationMeta = activeConvId
+    ? { id: activeConvId, intent_type: lastIntentType }
+    : null
+
+  // Decide what to render in the scrollable middle
+  const showEmpty  = !isBootstrapping && turns.length === 0
+  const showLoader = isBootstrapping
+  const showThread = !isBootstrapping && turns.length > 0
 
   // ── Render ────────────────────────────────────────────────────────────────────
   return (
     <Box sx={{
       height: '100%',
       display: 'flex', flexDirection: 'column',
-      overflow: 'hidden',          // prevents Studio from expanding past the viewport
+      overflow: 'hidden',
       bgcolor: 'background.default',
     }}>
 
@@ -191,10 +266,10 @@ export default function Studio() {
           </Box>
         </Box>
 
-        <Tooltip title="New session">
+        <Tooltip title="New conversation">
           <IconButton
             size="small"
-            onClick={handleReset}
+            onClick={handleNewConversation}
             sx={{
               color: theme.palette.primary.main,
               border: `1px solid ${isDark ? 'rgba(79,110,255,0.3)' : '#c7d2fe'}`,
@@ -210,11 +285,11 @@ export default function Studio() {
       {/* ── Body ─────────────────────────────────────────────────────────────── */}
       <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
 
-        {/* ── Left: History sidebar (independent scroll) ────────────────────── */}
+        {/* ── Left: Conversations sidebar ───────────────────────────────────── */}
         <HistorySidebar
-          sessions={sessions}
-          selectedId={selectedId}
-          onSelect={loadSession}
+          conversations={conversations}
+          selectedId={activeConvId}
+          onSelect={loadConversation}
         />
 
         {/* ── Right: Main content column ────────────────────────────────────── */}
@@ -224,9 +299,7 @@ export default function Studio() {
           overflow: 'hidden', minWidth: 0,
         }}>
 
-          {/* ── Scrollable middle ──────────────────────────────────────────────
-              Everything between the header and the prompt bar lives here.
-              This is the ONLY scrollable region on the right side.           */}
+          {/* ── Scrollable middle ─────────────────────────────────────────────── */}
           <Box
             ref={contentScrollRef}
             sx={{
@@ -237,16 +310,18 @@ export default function Studio() {
               '&::-webkit-scrollbar-thumb': { backgroundColor: theme.palette.divider, borderRadius: 2 },
             }}
           >
-            {isGenerating ? (
-              <LoadingView stage={stage} />
-            ) : currentSession ? (
-              <SessionView
-                session={currentSession}
-                videoPhase={videoPhase}
-                framesData={framesData}
-              />
-            ) : (
+            {showLoader && <LoadingView stage={bootstrapStage} />}
+
+            {showEmpty && (
               <EmptyView onSuggestionClick={(s) => { setPrompt(s); inputRef.current?.focus() }} />
+            )}
+
+            {showThread && (
+              <>
+                <ConversationThread turns={turns} />
+                {/* Invisible anchor for auto-scroll */}
+                <Box ref={threadBottomRef} sx={{ height: 1 }} />
+              </>
             )}
           </Box>
 
@@ -257,9 +332,9 @@ export default function Studio() {
             onSubmit={handleGenerate}
             onKeyDown={handleKeyDown}
             inputRef={inputRef}
-            isGenerating={isGenerating}
-            followUpCtx={followUpCtx}
-            onClearFollowUp={() => setFollowUpCtx(null)}
+            isGenerating={isBootstrapping}
+            activeConversation={activeConversationMeta}
+            onNewConversation={handleNewConversation}
           />
         </Box>
       </Box>

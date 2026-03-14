@@ -69,13 +69,25 @@ export const api = {
     return res.json()
   },
 
-  imageGeneration: async (message) => {
+  imageGeneration: async (message, conversationId = null) => {
     const formData = new FormData()
     formData.append('message', message)
+    if (conversationId) formData.append('conversation_id', conversationId)
     const res = await fetch(`${API_BASE}/api/image_generation`, {
       method: 'POST',
       body: formData,
     })
+    return res.json()
+  },
+
+  getConversations: async () => {
+    const res = await fetch(`${API_BASE}/api/conversations`)
+    return res.json()
+  },
+
+  getConversation: async (convId) => {
+    const res = await fetch(`${API_BASE}/api/conversations/${convId}`)
+    if (!res.ok) return null
     return res.json()
   },
 

@@ -10,17 +10,18 @@ const SUBTEXTS = {
   rendering:  'Compiling frames into the final output',
 }
 
-export default function LoadingView({ stage }) {
+export default function LoadingView({ stage, compact = false }) {
   const theme   = useTheme()
   const current = STAGES.indexOf(stage)
 
   return (
     <Box sx={{
-      flex: 1,
-      minHeight: 420,
+      flex: compact ? undefined : 1,
+      minHeight: compact ? 160 : 420,
       display: 'flex', flexDirection: 'column',
       alignItems: 'center', justifyContent: 'center',
-      gap: 3,
+      gap: compact ? 2 : 3,
+      py: compact ? 2 : 0,
     }}>
       {/* Spinner with icon centre */}
       <Box sx={{ position: 'relative', display: 'inline-flex' }}>

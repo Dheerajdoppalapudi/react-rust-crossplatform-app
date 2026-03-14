@@ -110,6 +110,15 @@ def _get_db():
 
 def _init_db():
     with _get_db() as conn:
+        # Conversations table — one row per chat thread
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS conversations (
+                id         TEXT PRIMARY KEY,
+                title      TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        """)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS sessions (
                 id            TEXT PRIMARY KEY,
@@ -122,14 +131,21 @@ def _init_db():
                 output_dir    TEXT,
                 ui_output_file TEXT,
                 api_call_count INTEGER DEFAULT 0,
-                video_path    TEXT
+                video_path    TEXT,
+                conversation_id TEXT,
+                turn_index    INTEGER DEFAULT 1
             )
         """)
-        # Add video_path to existing DBs that pre-date this column
-        try:
-            conn.execute("ALTER TABLE sessions ADD COLUMN video_path TEXT")
-        except Exception:
-            pass  # column already exists — safe to ignore
+        # Safe migrations for existing DBs
+        for col, typedef in [
+            ("video_path",      "TEXT"),
+            ("conversation_id", "TEXT"),
+            ("turn_index",      "INTEGER DEFAULT 1"),
+        ]:
+            try:
+                conn.execute(f"ALTER TABLE sessions ADD COLUMN {col} {typedef}")
+            except Exception:
+                pass
         conn.commit()
 
 
@@ -148,11 +164,31 @@ def _session_output_dir(session_id: str) -> str:
     return path
 
 
-def _insert_session(session_id: str, prompt: str):
+def _insert_conversation(conv_id: str, title: str):
+    now = _now_iso()
     with _get_db() as conn:
         conn.execute(
-            "INSERT INTO sessions (id, prompt, created_at, status) VALUES (?, ?, ?, 'pending')",
-            (session_id, prompt, _now_iso()),
+            "INSERT INTO conversations (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)",
+            (conv_id, title, now, now),
+        )
+        conn.commit()
+
+
+def _touch_conversation(conv_id: str):
+    with _get_db() as conn:
+        conn.execute(
+            "UPDATE conversations SET updated_at = ? WHERE id = ?",
+            (_now_iso(), conv_id),
+        )
+        conn.commit()
+
+
+def _insert_session(session_id: str, prompt: str, conversation_id: str = None, turn_index: int = 1):
+    with _get_db() as conn:
+        conn.execute(
+            "INSERT INTO sessions (id, prompt, created_at, status, conversation_id, turn_index) "
+            "VALUES (?, ?, ?, 'pending', ?, ?)",
+            (session_id, prompt, _now_iso(), conversation_id, turn_index),
         )
         conn.commit()
 
@@ -197,12 +233,26 @@ async def chat(message: str = Form("")):
 
 
 @app.post("/api/image_generation")
-async def image_generation(message: str = Form("")):
+async def image_generation(message: str = Form(""), conversation_id: str = Form(None)):
     session_id = uuid.uuid4().hex
     output_dir = _session_output_dir(session_id)
     start_time = time.time()
 
-    _insert_session(session_id, message)
+    # Resolve conversation — create new one if none provided
+    if not conversation_id:
+        conversation_id = uuid.uuid4().hex
+        _insert_conversation(conversation_id, message[:80])
+        turn_index = 1
+    else:
+        with _get_db() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) AS cnt FROM sessions WHERE conversation_id = ?",
+                (conversation_id,),
+            ).fetchone()
+            turn_index = (row["cnt"] or 0) + 1
+
+    _insert_session(session_id, message, conversation_id, turn_index)
+    _touch_conversation(conversation_id)
 
     # Activate per-request lifecycle log
     lifecycle_log: list = []
@@ -407,6 +457,8 @@ async def image_generation(message: str = Form("")):
             api_call_count=api_call_count,
         )
 
+        result_payload["conversation_id"] = conversation_id
+        result_payload["turn_index"]      = turn_index
         return result_payload
 
     except Exception as exc:
@@ -419,6 +471,40 @@ async def image_generation(message: str = Form("")):
 
     finally:
         request_log.reset(token)
+
+
+# ── Conversations API ─────────────────────────────────────────────────────────
+
+@app.get("/api/conversations")
+def list_conversations():
+    with _get_db() as conn:
+        rows = conn.execute("""
+            SELECT c.id, c.title, c.created_at, c.updated_at,
+                   COUNT(s.id) AS turn_count,
+                   MIN(s.intent_type) AS intent_type
+            FROM conversations c
+            LEFT JOIN sessions s ON s.conversation_id = c.id AND s.status = 'done'
+            GROUP BY c.id
+            ORDER BY c.updated_at DESC
+        """).fetchall()
+    return [dict(r) for r in rows]
+
+
+@app.get("/api/conversations/{conversation_id}")
+def get_conversation(conversation_id: str):
+    with _get_db() as conn:
+        conv = conn.execute(
+            "SELECT * FROM conversations WHERE id = ?", (conversation_id,)
+        ).fetchone()
+        if not conv:
+            return JSONResponse({"error": "Conversation not found"}, status_code=404)
+        turns = conn.execute(
+            "SELECT id, prompt, created_at, status, intent_type, render_path, "
+            "frame_count, video_path, turn_index "
+            "FROM sessions WHERE conversation_id = ? ORDER BY turn_index ASC",
+            (conversation_id,),
+        ).fetchall()
+    return {**dict(conv), "turns": [dict(t) for t in turns]}
 
 
 # ── Sessions API ───────────────────────────────────────────────────────────────

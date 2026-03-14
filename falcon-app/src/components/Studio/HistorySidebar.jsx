@@ -1,8 +1,8 @@
 import { Box, Typography } from '@mui/material'
 import { useTheme } from '@mui/material'
-import SessionCard from './SessionCard'
+import ConversationCard from './ConversationCard'
 
-export default function HistorySidebar({ sessions, selectedId, onSelect }) {
+export default function HistorySidebar({ conversations, selectedId, onSelect }) {
   const theme = useTheme()
 
   return (
@@ -13,7 +13,7 @@ export default function HistorySidebar({ sessions, selectedId, onSelect }) {
       bgcolor: 'background.paper',
       display: 'flex',
       flexDirection: 'column',
-      overflow: 'hidden',   // prevents sidebar from expanding the page
+      overflow: 'hidden',
     }}>
       {/* Fixed label */}
       <Box sx={{ px: 2, pt: 2, pb: 0.75, flexShrink: 0 }}>
@@ -21,11 +21,11 @@ export default function HistorySidebar({ sessions, selectedId, onSelect }) {
           fontSize: 10, fontWeight: 600, color: theme.palette.text.secondary,
           textTransform: 'uppercase', letterSpacing: '0.7px', opacity: 0.7,
         }}>
-          History
+          Conversations
         </Typography>
       </Box>
 
-      {/* Scrollable session list */}
+      {/* Scrollable conversation list */}
       <Box sx={{
         flex: 1,
         overflowY: 'auto',
@@ -34,20 +34,20 @@ export default function HistorySidebar({ sessions, selectedId, onSelect }) {
         '&::-webkit-scrollbar': { width: 3 },
         '&::-webkit-scrollbar-thumb': { backgroundColor: theme.palette.divider, borderRadius: 2 },
       }}>
-        {sessions.length === 0 ? (
+        {conversations.length === 0 ? (
           <Typography sx={{
             fontSize: 12.5, color: theme.palette.text.secondary,
             pt: 3, textAlign: 'center', opacity: 0.5,
           }}>
-            No sessions yet
+            No conversations yet
           </Typography>
         ) : (
-          sessions.map((s) => (
-            <SessionCard
-              key={s.id}
-              session={s}
-              isSelected={selectedId === s.id}
-              onClick={() => onSelect(s)}
+          conversations.map((c) => (
+            <ConversationCard
+              key={c.id}
+              conversation={c}
+              isSelected={selectedId === c.id}
+              onClick={() => onSelect(c)}
             />
           ))
         )}

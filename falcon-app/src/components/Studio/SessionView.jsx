@@ -4,16 +4,18 @@ import QuestionHeader from './QuestionHeader'
 import VideoPanel from './VideoPanel'
 import FrameStrip from './FrameStrip'
 
-export default function SessionView({ session, videoPhase, framesData }) {
+export default function SessionView({ session, videoPhase, framesData, hideHeader = false }) {
   const [activeFrame, setActiveFrame] = useState(0)
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-      <QuestionHeader
-        prompt={session.prompt}
-        intentType={session.intent_type}
-        frameCount={session.frame_count}
-      />
+      {!hideHeader && (
+        <QuestionHeader
+          prompt={session.prompt}
+          intentType={session.intent_type}
+          frameCount={session.frame_count}
+        />
+      )}
 
       <VideoPanel sessionId={session.id} videoPhase={videoPhase} />
 
