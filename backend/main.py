@@ -514,75 +514,103 @@ async def image_generation(
 
         else:
             use_mermaid = plan.intent_type in MERMAID_INTENT_TYPES and _sidecar_available()
-            path_label  = "mermaid" if use_mermaid else "slim_json"
 
-            if use_mermaid:
-                logger.info("Render path → mermaid  session=%s", session_id)
+            # Mermaid intent but sidecar down → fall back to SVG if cairosvg is available
+            if not use_mermaid and plan.intent_type in MERMAID_INTENT_TYPES and svg_available():
+                logger.warning(
+                    "Mermaid sidecar unavailable — falling back to svg  session=%s  intent=%s",
+                    session_id, plan.intent_type,
+                )
+                _log({"event": "info", "message": "Mermaid sidecar unavailable — falling back to SVG"})
+                _log({"event": "stage_start", "stage": "frame_generation", "path": "svg_fallback", "frame_count": plan.frame_count})
+                svg_output_dir = os.path.join(output_dir, "svg")
+                png_paths = await generate_svg_frames(plan, svg_prompt_template, svg_output_dir)
+                _log({"event": "stage_complete", "stage": "frame_generation", "path": "svg_fallback"})
+                logger.info("SVG fallback frames generated  session=%s  paths=%s", session_id, png_paths)
+
+                with open(os.path.join(output_dir, "frames.json"), "w") as f:
+                    json.dump({"render_path": "svg", "images": png_paths, "captions": captions,
+                               "suggested_followups": suggested_followups, "notes": notes}, f, indent=2)
+
+                ui_output_file = os.path.join(output_dir, "final_output.json")
+                with open(ui_output_file, "w") as f:
+                    json.dump({"render_path": "svg", "images": png_paths, "captions": captions}, f, indent=2)
+
+                result_payload = {
+                    "session_id": session_id,
+                    "render_path": "svg",
+                    "frame_count": plan.frame_count,
+                    "intent_type": plan.intent_type,
+                    "captions": captions,
+                    "images": png_paths,
+                    "ui_file_type": "images",
+                    "suggested_followups": suggested_followups,
+                    "notes": notes,
+                }
+
             else:
-                if plan.intent_type in MANIM_INTENT_TYPES:
-                    logger.warning(
-                        "Manim not available — falling back to slim_json  session=%s  intent=%s",
-                        session_id, plan.intent_type,
-                    )
-                elif plan.intent_type in MERMAID_INTENT_TYPES:
-                    logger.warning(
-                        "Mermaid sidecar unavailable — falling back to slim_json  session=%s  intent=%s",
-                        session_id, plan.intent_type,
-                    )
-                elif plan.intent_type in SVG_INTENT_TYPES:
-                    logger.warning(
-                        "cairosvg unavailable — falling back to slim_json  session=%s  intent=%s",
-                        session_id, plan.intent_type,
-                    )
+                path_label = "mermaid" if use_mermaid else "slim_json"
+
+                if use_mermaid:
+                    logger.info("Render path → mermaid  session=%s", session_id)
                 else:
-                    logger.info("Render path → slim_json  session=%s  intent=%s", session_id, plan.intent_type)
+                    if plan.intent_type in MANIM_INTENT_TYPES:
+                        logger.warning(
+                            "Manim not available — falling back to slim_json  session=%s  intent=%s",
+                            session_id, plan.intent_type,
+                        )
+                    elif plan.intent_type in SVG_INTENT_TYPES:
+                        logger.warning(
+                            "cairosvg unavailable — falling back to slim_json  session=%s  intent=%s",
+                            session_id, plan.intent_type,
+                        )
+                    else:
+                        logger.info("Render path → slim_json  session=%s  intent=%s", session_id, plan.intent_type)
 
-            _log({"event": "stage_start", "stage": "frame_generation", "path": path_label, "frame_count": plan.frame_count})
-            if use_mermaid:
-                frame_slims = await generate_mermaid_frames(plan, mermaid_prompt_template)
-            else:
-                if plan.intent_type in MERMAID_INTENT_TYPES:
-                    _log({"event": "info", "message": "Mermaid sidecar unavailable — falling back to slim JSON"})
-                elif plan.intent_type in SVG_INTENT_TYPES:
-                    _log({"event": "info", "message": "cairosvg unavailable — falling back to slim JSON"})
-                frame_slims = await generate_all_frames(plan, prompt_template)
-            _log({"event": "stage_complete", "stage": "frame_generation", "path": path_label})
-            logger.info("Frame generation complete  session=%s  path=%s", session_id, path_label)
+                _log({"event": "stage_start", "stage": "frame_generation", "path": path_label, "frame_count": plan.frame_count})
+                if use_mermaid:
+                    frame_slims = await generate_mermaid_frames(plan, mermaid_prompt_template)
+                else:
+                    if plan.intent_type in SVG_INTENT_TYPES:
+                        _log({"event": "info", "message": "cairosvg unavailable — falling back to slim JSON"})
+                    frame_slims = await generate_all_frames(plan, prompt_template)
+                _log({"event": "stage_complete", "stage": "frame_generation", "path": path_label})
+                logger.info("Frame generation complete  session=%s  path=%s", session_id, path_label)
 
-            # ── Stage 3: Combine ─────────────────────────────────────────────
-            _log({"event": "stage_start", "stage": "combine_frames"})
-            combined_slim = combine_frames(frame_slims, captions)
-            _log({"event": "stage_complete", "stage": "combine_frames"})
+                # ── Stage 3: Combine ─────────────────────────────────────────────
+                _log({"event": "stage_start", "stage": "combine_frames"})
+                combined_slim = combine_frames(frame_slims, captions)
+                _log({"event": "stage_complete", "stage": "combine_frames"})
 
-            with open(os.path.join(output_dir, "sample_slim.json"), "w") as f:
-                json.dump(combined_slim, f, indent=2)
+                with open(os.path.join(output_dir, "sample_slim.json"), "w") as f:
+                    json.dump(combined_slim, f, indent=2)
 
-            # ── Stage 4: Enhance ─────────────────────────────────────────────
-            _log({"event": "stage_start", "stage": "enhance_excalidraw"})
-            excalidraw_result = enhance(combined_slim)
-            _log({"event": "stage_complete", "stage": "enhance_excalidraw", "elements_count": len(excalidraw_result.get("elements", []))})
+                # ── Stage 4: Enhance ─────────────────────────────────────────────
+                _log({"event": "stage_start", "stage": "enhance_excalidraw"})
+                excalidraw_result = enhance(combined_slim)
+                _log({"event": "stage_complete", "stage": "enhance_excalidraw", "elements_count": len(excalidraw_result.get("elements", []))})
 
-            ui_output_file = os.path.join(output_dir, "final_output.json")
-            with open(ui_output_file, "w") as f:
-                json.dump(excalidraw_result, f, indent=2)
+                ui_output_file = os.path.join(output_dir, "final_output.json")
+                with open(ui_output_file, "w") as f:
+                    json.dump(excalidraw_result, f, indent=2)
 
-            # No real PNGs for this path — store nulls so video uses placeholders
-            with open(os.path.join(output_dir, "frames.json"), "w") as f:
-                json.dump({"render_path": path_label, "images": [None] * plan.frame_count, "captions": captions,
-                           "suggested_followups": suggested_followups, "notes": notes}, f, indent=2)
+                # No real PNGs for this path — store nulls so video uses placeholders
+                with open(os.path.join(output_dir, "frames.json"), "w") as f:
+                    json.dump({"render_path": path_label, "images": [None] * plan.frame_count, "captions": captions,
+                               "suggested_followups": suggested_followups, "notes": notes}, f, indent=2)
 
-            result_payload = {
-                "session_id": session_id,
-                "excalidraw": excalidraw_result,
-                "elements_count": len(excalidraw_result["elements"]),
-                "frame_count": plan.frame_count,
-                "intent_type": plan.intent_type,
-                "render_path": path_label,
-                "captions": captions,
-                "ui_file_type": "json",
-                "suggested_followups": suggested_followups,
-                "notes": notes,
-            }
+                result_payload = {
+                    "session_id": session_id,
+                    "excalidraw": excalidraw_result,
+                    "elements_count": len(excalidraw_result["elements"]),
+                    "frame_count": plan.frame_count,
+                    "intent_type": plan.intent_type,
+                    "render_path": path_label,
+                    "captions": captions,
+                    "ui_file_type": "json",
+                    "suggested_followups": suggested_followups,
+                    "notes": notes,
+                }
 
         # ── Save narration ────────────────────────────────────────────────────
         with open(os.path.join(output_dir, "narration.txt"), "w") as f:
