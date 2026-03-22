@@ -212,10 +212,11 @@ export default function Studio() {
 
       if (isFirstTurn) {
         setActiveConvId(data.conversation_id)
-        setBootstrapStage('video')
+        setBootstrapStage('frames')
         setBootstrapFrames({ framesData, sessionId: data.session_id })
         setTurns([realTurn])
         await fetchConversations()
+        setBootstrapStage('video')
         runVideoGenerationForTurn(tempId, data.session_id, () => {
           setIsBootstrapping(false)
           setBootstrapFrames(null)

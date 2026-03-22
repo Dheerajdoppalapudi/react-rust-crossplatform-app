@@ -67,7 +67,8 @@ const STEPS = [
   { key: 'planning',   label: 'Analyzing your question' },
   { key: 'generating', label: 'Generating visual content' },
   { key: 'rendering',  label: 'Rendering frames' },
-  { key: 'video',      label: 'Rendering animation and narration' },
+  { key: 'frames',     label: 'Visual frames ready' },
+  { key: 'video',      label: 'Generating video…' },
 ]
 
 function ActualFrames({ sessionId, count, isDark }) {
@@ -130,7 +131,7 @@ export default function LoadingView({ stage, compact = false, framesData = null 
           const status        = i < current ? 'done' : i === current ? 'active' : 'pending'
           const color         = status === 'active' ? activeColor : status === 'done' ? mutedColor : pendingColor
           const showSkeletons = (step.key === 'generating' || step.key === 'rendering') && status === 'active' && !compact
-          const showFrames    = step.key === 'video' && status === 'active' && !compact
+          const showFrames    = step.key === 'frames' && status !== 'pending' && !compact
           const showCards     = showSkeletons || showFrames
 
           return (
