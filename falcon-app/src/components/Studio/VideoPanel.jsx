@@ -1,51 +1,15 @@
 import { useState, useRef, useCallback } from 'react'
-import { Box, Typography, CircularProgress, Tooltip, IconButton, Chip } from '@mui/material'
-import MovieCreationOutlinedIcon from '@mui/icons-material/MovieCreationOutlined'
+import { Box, Typography, Tooltip, IconButton, Chip, useTheme } from '@mui/material'
 import DownloadOutlinedIcon      from '@mui/icons-material/DownloadOutlined'
 import QuestionAnswerOutlinedIcon from '@mui/icons-material/QuestionAnswerOutlined'
-import { useTheme } from '@mui/material'
 import { api } from '../../services/api'
-
-// ─── Generating placeholder ────────────────────────────────────────────────────
-function GeneratingState() {
-  const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
-
-  return (
-    <Box sx={{
-      aspectRatio: '16/9', width: '100%',
-      display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center', gap: 2.5,
-      borderRadius: '14px', border: `1px solid ${theme.palette.divider}`,
-      backgroundColor: isDark ? '#0d0d0d' : '#f8fafc',
-    }}>
-      <Box sx={{ position: 'relative', display: 'inline-flex' }}>
-        <CircularProgress size={48} thickness={2.5} sx={{ color: theme.palette.primary.main }} />
-        <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <MovieCreationOutlinedIcon sx={{ fontSize: 20, color: theme.palette.primary.main }} />
-        </Box>
-      </Box>
-      <Box sx={{ textAlign: 'center' }}>
-        <Typography sx={{ fontWeight: 600, fontSize: 15, color: theme.palette.text.primary, mb: 0.5 }}>
-          Generating video…
-        </Typography>
-        <Typography sx={{ fontSize: 12.5, color: theme.palette.text.secondary }}>
-          Rendering animations and narration audio
-        </Typography>
-      </Box>
-    </Box>
-  )
-}
 
 // ─── Video player with pause-to-ask overlay ────────────────────────────────────
 function ReadyState({ sessionId, onPauseAsk }) {
-  const videoUrl   = api.getVideoUrl(sessionId)
-  const videoRef   = useRef(null)
+  const theme    = useTheme()
+  const videoUrl = api.getVideoUrl(sessionId)
+  const videoRef = useRef(null)
   const [isPaused, setIsPaused] = useState(false)
-
-  const handlePause = () => setIsPaused(true)
-  const handlePlay  = () => setIsPaused(false)
-  const handleEnded = () => setIsPaused(false)
 
   const handleDownload = () => {
     const a = document.createElement('a')
@@ -57,26 +21,27 @@ function ReadyState({ sessionId, onPauseAsk }) {
   const handleAskHere = useCallback(() => {
     const video = videoRef.current
     if (!video) return
-    onPauseAsk?.({
-      sessionId,
-      currentTime: video.currentTime,
-      duration:    video.duration || 1,
-    })
+    onPauseAsk?.({ sessionId, currentTime: video.currentTime, duration: video.duration || 1 })
   }, [sessionId, onPauseAsk])
 
   return (
-    <Box sx={{ position: 'relative', borderRadius: '14px', overflow: 'hidden', backgroundColor: '#000' }}>
+    <Box sx={{
+      position: 'relative',
+      borderRadius: '12px',
+      overflow: 'hidden',
+      backgroundColor: '#000',
+    }}>
       <video
         ref={videoRef}
         src={videoUrl}
         controls
-        onPause={handlePause}
-        onPlay={handlePlay}
-        onEnded={handleEnded}
+        onPause={() => setIsPaused(true)}
+        onPlay={() => setIsPaused(false)}
+        onEnded={() => setIsPaused(false)}
         style={{ width: '100%', aspectRatio: '16/9', display: 'block', objectFit: 'contain' }}
       />
 
-      {/* Download button — always visible */}
+      {/* Download — top right */}
       <Box sx={{ position: 'absolute', top: 10, right: 10 }}>
         <Tooltip title="Download video">
           <IconButton
@@ -93,23 +58,18 @@ function ReadyState({ sessionId, onPauseAsk }) {
         </Tooltip>
       </Box>
 
-      {/* Pause-to-ask overlay — appears when video is paused */}
+      {/* Pause-to-ask chip */}
       {isPaused && onPauseAsk && (
         <Box sx={{
-          position: 'absolute',
-          bottom: 52,             // sits just above the native video controls bar
-          left: '50%',
-          transform: 'translateX(-50%)',
-          zIndex: 10,
-          pointerEvents: 'all',
+          position: 'absolute', bottom: 52, left: '50%',
+          transform: 'translateX(-50%)', zIndex: 10,
         }}>
           <Chip
             icon={<QuestionAnswerOutlinedIcon sx={{ fontSize: 14 }} />}
             label="Ask about this moment"
             onClick={handleAskHere}
             sx={{
-              cursor: 'pointer',
-              fontWeight: 600, fontSize: 12.5,
+              cursor: 'pointer', fontWeight: 600, fontSize: 12.5,
               backgroundColor: 'rgba(0,0,0,0.72)',
               backdropFilter: 'blur(8px)',
               color: '#fff',
@@ -133,7 +93,8 @@ function ErrorState() {
     <Box sx={{
       aspectRatio: '16/9', width: '100%',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
-      borderRadius: '14px', border: `1px dashed ${theme.palette.divider}`,
+      borderRadius: '12px',
+      border: `1px dashed ${theme.palette.divider}`,
     }}>
       <Typography sx={{ fontSize: 13, color: theme.palette.text.secondary }}>
         Video generation failed — check the server logs.
@@ -145,10 +106,9 @@ function ErrorState() {
 // ─── Public component ─────────────────────────────────────────────────────────
 export default function VideoPanel({ sessionId, videoPhase, onPauseAsk }) {
   return (
-    <Box sx={{ px: 3, pt: 1.5, pb: 1 }}>
-      {videoPhase === 'generating' && <GeneratingState />}
-      {videoPhase === 'ready'      && <ReadyState sessionId={sessionId} onPauseAsk={onPauseAsk} />}
-      {videoPhase === 'error'      && <ErrorState />}
-    </Box>
+    <>
+      {videoPhase === 'ready' && <ReadyState sessionId={sessionId} onPauseAsk={onPauseAsk} />}
+      {videoPhase === 'error' && <ErrorState />}
+    </>
   )
 }

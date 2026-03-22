@@ -9,6 +9,7 @@ import LoadingView         from '../components/Studio/LoadingView'
 import EmptyView           from '../components/Studio/EmptyView'
 import ConversationThread  from '../components/Studio/ConversationThread'
 import PromptBar           from '../components/Studio/PromptBar'
+import LearningView        from '../components/Studio/LearningView/index'
 
 import { api } from '../services/api'
 
@@ -48,6 +49,9 @@ export default function Studio() {
   const [bootstrapStage, setBootstrapStage]     = useState('planning')
   const [bootstrapPrompt, setBootstrapPrompt]   = useState('')
   const [bootstrapFrames, setBootstrapFrames]   = useState(null)
+
+  // ── View mode ─────────────────────────────────────────────────────────────────
+  const [viewMode, setViewMode] = useState('chat')  // 'chat' | 'learn'
 
   // ── Pause context ─────────────────────────────────────────────────────────────
   const [pauseContext, setPauseContext] = useState(null)
@@ -103,15 +107,17 @@ export default function Studio() {
     if (!data) return
 
     const loadedTurns = data.turns.map((t) => ({
-      tempId:     t.id,
-      id:         t.id,
-      prompt:     t.prompt,
-      intent_type: t.intent_type,
-      render_path: t.render_path,
-      frame_count: t.frame_count,
-      isLoading:  false,
-      framesData: null,
-      videoPhase: t.video_path ? 'ready' : (t.status === 'error' ? 'error' : 'generating'),
+      tempId:           t.id,
+      id:               t.id,
+      prompt:           t.prompt,
+      intent_type:      t.intent_type,
+      render_path:      t.render_path,
+      frame_count:      t.frame_count,
+      isLoading:        false,
+      framesData:       null,
+      videoPhase:       t.video_path ? 'ready' : (t.status === 'error' ? 'error' : 'generating'),
+      parentSessionId:  t.parent_session_id  ?? null,
+      parentFrameIndex: t.parent_frame_index ?? null,
     }))
 
     setTurns(loadedTurns)
@@ -159,15 +165,17 @@ export default function Studio() {
       // Append a loading placeholder turn to the thread
       setTurns((prev) => [...prev, {
         tempId,
-        id:          null,
-        prompt:      submittedPrompt,
-        intent_type: null,
-        render_path: null,
-        frame_count: null,
-        isLoading:   true,
-        stage:       'planning',
-        framesData:  null,
-        videoPhase:  'generating',
+        id:               null,
+        prompt:           submittedPrompt,
+        intent_type:      null,
+        render_path:      null,
+        frame_count:      null,
+        isLoading:        true,
+        stage:            'planning',
+        framesData:       null,
+        videoPhase:       'generating',
+        parentSessionId:  pauseContext?.sessionId  ?? null,
+        parentFrameIndex: pauseContext?.frameIndex ?? null,
       }])
     }
 
@@ -208,6 +216,8 @@ export default function Studio() {
         stage:               null,
         framesData,
         videoPhase:          'generating',
+        parentSessionId:     capturedPauseContext?.sessionId  ?? null,
+        parentFrameIndex:    capturedPauseContext?.frameIndex ?? null,
       }
 
       if (isFirstTurn) {
@@ -259,12 +269,14 @@ export default function Studio() {
     inputRef.current?.focus()
   }
 
-  const handlePauseAsk = useCallback(({ sessionId, currentTime, duration }) => {
+  const handlePauseAsk = useCallback(({ sessionId, currentTime, duration, frameIndex: directFrameIndex, caption: directCaption }) => {
     const turn = turns.find((t) => t.id === sessionId)
     if (!turn) return
     const frameCount = turn.frame_count || 1
-    const frameIndex = Math.min(Math.floor((currentTime / duration) * frameCount), frameCount - 1)
-    const caption    = turn.framesData?.captions?.[frameIndex] ?? null
+    const frameIndex = directFrameIndex != null
+      ? directFrameIndex
+      : Math.min(Math.floor((currentTime / duration) * frameCount), frameCount - 1)
+    const caption = directCaption ?? turn.framesData?.captions?.[frameIndex] ?? null
     setPauseContext({ sessionId, frameIndex, caption })
     inputRef.current?.focus()
   }, [turns, inputRef])
@@ -283,6 +295,25 @@ export default function Studio() {
   const showEmpty  = !isBootstrapping && turns.length === 0
   const showLoader = isBootstrapping
   const showThread = !isBootstrapping && turns.length > 0
+
+  // ── Ask from learning canvas — pre-fill prompt + context, switch to chat ─────
+  const handleLearnAsk = useCallback(({ question, sessionId, frameIndex, caption }) => {
+    setPauseContext({ sessionId, frameIndex: frameIndex ?? undefined, caption: caption ?? undefined })
+    setPrompt(question)
+    setViewMode('chat')
+    setTimeout(() => inputRef.current?.focus(), 120)
+  }, [])
+
+  // ── Learning canvas — full-screen focus mode, bypasses Studio layout ─────────
+  if (viewMode === 'learn') {
+    return (
+      <LearningView
+        turns={turns}
+        onExit={() => setViewMode('chat')}
+        onAskFromLearn={handleLearnAsk}
+      />
+    )
+  }
 
   // ── Render ────────────────────────────────────────────────────────────────────
   return (
@@ -320,6 +351,37 @@ export default function Studio() {
         </Box>
 
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          {/* View mode toggle */}
+          <Box sx={{
+            display: 'flex',
+            border: `1px solid ${isDark ? 'rgba(255,255,255,0.12)' : '#d1d5db'}`,
+            borderRadius: '8px',
+            p: 0.3, gap: 0.25,
+          }}>
+            {['Chat', 'Learn'].map((label) => {
+              const mode = label.toLowerCase()
+              const active = viewMode === mode
+              return (
+                <Box
+                  key={mode}
+                  onClick={() => setViewMode(mode)}
+                  sx={{
+                    px: 1.5, py: 0.4,
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: 11, fontWeight: 600,
+                    userSelect: 'none',
+                    bgcolor: active ? theme.palette.primary.main : 'transparent',
+                    color: active ? '#fff' : theme.palette.text.secondary,
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  {label}
+                </Box>
+              )
+            })}
+          </Box>
+
           {/* Notes toggle */}
           <Tooltip title={notesEnabled ? 'Notes on — click to disable' : 'Notes off — click to enable'}>
             <IconButton
@@ -366,82 +428,75 @@ export default function Studio() {
         </Box>
       </Box>
 
-      {/* ── Body ─────────────────────────────────────────────────────────────── */}
-      <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
+      {/* ── Body — chat view (learn mode exits early above) ──────────────────── */}
+        <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
 
-        {/* ── Left: Conversations sidebar ───────────────────────────────────── */}
-        <HistorySidebar
-          conversations={conversations}
-          selectedId={activeConvId}
-          onSelect={loadConversation}
-        />
-
-        {/* ── Right: Main content column ────────────────────────────────────── */}
-        <Box sx={{
-          flex: 1,
-          display: 'flex', flexDirection: 'column',
-          overflow: 'hidden', minWidth: 0,
-        }}>
-
-          {/* ── Scrollable middle ─────────────────────────────────────────────── */}
-          <Box
-            ref={contentScrollRef}
-            sx={{
-              flex: 1,
-              overflowY: 'auto',
-              display: 'flex', flexDirection: 'column',
-              '&::-webkit-scrollbar': { width: 4 },
-              '&::-webkit-scrollbar-thumb': { backgroundColor: theme.palette.divider, borderRadius: 2 },
-            }}
-          >
-            {showLoader && (
-              <>
-                {bootstrapPrompt && (
-                  <Box sx={{ display: 'flex', justifyContent: 'flex-end', px: 3, pt: 3, pb: 1.5 }}>
-                    <Box sx={{
-                      maxWidth: '68%', px: 2.5, py: 1.5,
-                      backgroundColor: isDark ? '#242424' : '#f1f5f9',
-                      color: theme.palette.text.primary,
-                      borderRadius: '18px 18px 4px 18px',
-                      fontSize: 14.5, lineHeight: 1.6,
-                      border: `1px solid ${isDark ? '#2e2e2e' : '#e2e8f0'}`,
-                    }}>
-                      {bootstrapPrompt}
-                    </Box>
-                  </Box>
-                )}
-                <LoadingView stage={bootstrapStage} framesData={bootstrapFrames} />
-              </>
-            )}
-
-            {showEmpty && (
-              <EmptyView onSuggestionClick={(s) => { setPrompt(s); inputRef.current?.focus() }} />
-            )}
-
-            {showThread && (
-              <>
-                <ConversationThread turns={turns} onPauseAsk={handlePauseAsk} />
-                {/* Invisible anchor for auto-scroll */}
-                <Box ref={threadBottomRef} sx={{ height: 1 }} />
-              </>
-            )}
-          </Box>
-
-          {/* ── Fixed bottom prompt bar ───────────────────────────────────────── */}
-          <PromptBar
-            prompt={prompt}
-            onPromptChange={setPrompt}
-            onSubmit={handleGenerate}
-            onKeyDown={handleKeyDown}
-            inputRef={inputRef}
-            isGenerating={isAnyGenerating}
-            activeConversation={activeConversationMeta}
-            onNewConversation={handleNewConversation}
-            pauseContext={pauseContext}
-            onClearPauseContext={() => setPauseContext(null)}
+          <HistorySidebar
+            conversations={conversations}
+            selectedId={activeConvId}
+            onSelect={loadConversation}
           />
+
+          <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
+
+            {/* Scrollable middle */}
+            <Box
+              ref={contentScrollRef}
+              sx={{
+                flex: 1, overflowY: 'auto',
+                display: 'flex', flexDirection: 'column',
+                '&::-webkit-scrollbar': { width: 4 },
+                '&::-webkit-scrollbar-thumb': { backgroundColor: theme.palette.divider, borderRadius: 2 },
+              }}
+            >
+              {showLoader && (
+                <Box sx={{ width: '100%', maxWidth: 900, mx: 'auto', px: { xs: 2.5, sm: 4, md: 5 } }}>
+                  {bootstrapPrompt && (
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', pt: 3, pb: 1.5 }}>
+                      <Box sx={{
+                        maxWidth: '72%', px: 2.5, py: 1.5,
+                        backgroundColor: isDark ? '#242424' : '#f1f5f9',
+                        color: theme.palette.text.primary,
+                        borderRadius: '18px 18px 4px 18px',
+                        fontSize: 14.5, lineHeight: 1.6,
+                        border: `1px solid ${isDark ? '#2e2e2e' : '#e2e8f0'}`,
+                      }}>
+                        {bootstrapPrompt}
+                      </Box>
+                    </Box>
+                  )}
+                  <LoadingView stage={bootstrapStage} framesData={bootstrapFrames} />
+                </Box>
+              )}
+
+              {showEmpty && (
+                <EmptyView onSuggestionClick={(s) => { setPrompt(s); inputRef.current?.focus() }} />
+              )}
+
+              {showThread && (
+                <>
+                  <ConversationThread turns={turns} onPauseAsk={handlePauseAsk} />
+                  <Box ref={threadBottomRef} sx={{ height: 1 }} />
+                </>
+              )}
+            </Box>
+
+            {/* Prompt bar */}
+            <PromptBar
+              prompt={prompt}
+              onPromptChange={setPrompt}
+              onSubmit={handleGenerate}
+              onKeyDown={handleKeyDown}
+              inputRef={inputRef}
+              isGenerating={isAnyGenerating}
+              activeConversation={activeConversationMeta}
+              onNewConversation={handleNewConversation}
+              pauseContext={pauseContext}
+              onClearPauseContext={() => setPauseContext(null)}
+            />
+          </Box>
         </Box>
-      </Box>
+
     </Box>
   )
 }

@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find '/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend' -name *.sql -o -name migration* -o -name *schema*)",
+      "Bash(sqlite3 \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/database.sqlite\" \".schema\")"
+    ]
+  }
+}

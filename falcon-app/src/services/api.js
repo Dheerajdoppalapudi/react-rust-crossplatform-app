@@ -75,9 +75,15 @@ export const api = {
     formData.append('notes_enabled', String(notesEnabled))
     if (conversationId) formData.append('conversation_id', conversationId)
     if (pauseContext) {
+      // Runtime pause context (for building conversation history)
       formData.append('pause_session_id',  pauseContext.sessionId)
-      formData.append('pause_frame_index', pauseContext.frameIndex)
+      formData.append('pause_frame_index', String(pauseContext.frameIndex))
       if (pauseContext.caption) formData.append('pause_caption', pauseContext.caption)
+      // Tree relationship (persisted to DB so canvas can reconstruct the tree)
+      formData.append('parent_session_id', pauseContext.sessionId)
+      if (pauseContext.frameIndex != null) {
+        formData.append('parent_frame_index', String(pauseContext.frameIndex))
+      }
     }
     const res = await fetch(`${API_BASE}/api/image_generation`, {
       method: 'POST',
@@ -93,6 +99,12 @@ export const api = {
 
   getConversation: async (convId) => {
     const res = await fetch(`${API_BASE}/api/conversations/${convId}`)
+    if (!res.ok) return null
+    return res.json()
+  },
+
+  getConversationTree: async (convId) => {
+    const res = await fetch(`${API_BASE}/api/conversations/${convId}/tree`)
     if (!res.ok) return null
     return res.json()
   },

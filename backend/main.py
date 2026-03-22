@@ -121,26 +121,30 @@ def _init_db():
         """)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS sessions (
-                id            TEXT PRIMARY KEY,
-                prompt        TEXT NOT NULL,
-                created_at    TEXT NOT NULL,
-                status        TEXT NOT NULL DEFAULT 'pending',
-                intent_type   TEXT,
-                render_path   TEXT,
-                frame_count   INTEGER,
-                output_dir    TEXT,
-                ui_output_file TEXT,
-                api_call_count INTEGER DEFAULT 0,
-                video_path    TEXT,
-                conversation_id TEXT,
-                turn_index    INTEGER DEFAULT 1
+                id                 TEXT PRIMARY KEY,
+                prompt             TEXT NOT NULL,
+                created_at         TEXT NOT NULL,
+                status             TEXT NOT NULL DEFAULT 'pending',
+                intent_type        TEXT,
+                render_path        TEXT,
+                frame_count        INTEGER,
+                output_dir         TEXT,
+                ui_output_file     TEXT,
+                api_call_count     INTEGER DEFAULT 0,
+                video_path         TEXT,
+                conversation_id    TEXT,
+                turn_index         INTEGER DEFAULT 1,
+                parent_session_id  TEXT,
+                parent_frame_index INTEGER
             )
         """)
-        # Safe migrations for existing DBs
+        # Safe migrations for existing DBs — add new columns without breaking old data
         for col, typedef in [
-            ("video_path",      "TEXT"),
-            ("conversation_id", "TEXT"),
-            ("turn_index",      "INTEGER DEFAULT 1"),
+            ("video_path",          "TEXT"),
+            ("conversation_id",     "TEXT"),
+            ("turn_index",          "INTEGER DEFAULT 1"),
+            ("parent_session_id",   "TEXT"),
+            ("parent_frame_index",  "INTEGER"),
         ]:
             try:
                 conn.execute(f"ALTER TABLE sessions ADD COLUMN {col} {typedef}")
@@ -183,12 +187,21 @@ def _touch_conversation(conv_id: str):
         conn.commit()
 
 
-def _insert_session(session_id: str, prompt: str, conversation_id: str = None, turn_index: int = 1):
+def _insert_session(
+    session_id:         str,
+    prompt:             str,
+    conversation_id:    str  = None,
+    turn_index:         int  = 1,
+    parent_session_id:  str  = None,
+    parent_frame_index: int  = None,
+):
     with _get_db() as conn:
         conn.execute(
-            "INSERT INTO sessions (id, prompt, created_at, status, conversation_id, turn_index) "
-            "VALUES (?, ?, ?, 'pending', ?, ?)",
-            (session_id, prompt, _now_iso(), conversation_id, turn_index),
+            "INSERT INTO sessions "
+            "(id, prompt, created_at, status, conversation_id, turn_index, parent_session_id, parent_frame_index) "
+            "VALUES (?, ?, ?, 'pending', ?, ?, ?, ?)",
+            (session_id, prompt, _now_iso(), conversation_id, turn_index,
+             parent_session_id, parent_frame_index),
         )
         conn.commit()
 
@@ -357,12 +370,14 @@ async def chat(message: str = Form("")):
 
 @app.post("/api/image_generation")
 async def image_generation(
-    message:           str  = Form(""),
-    conversation_id:   str  = Form(None),
-    pause_session_id:  str  = Form(None),
-    pause_frame_index: int  = Form(None),
-    pause_caption:     str  = Form(None),
-    notes_enabled:     str  = Form("false"),   # "true" | "false" (sent as string from FormData)
+    message:             str  = Form(""),
+    conversation_id:     str  = Form(None),
+    pause_session_id:    str  = Form(None),   # session the user paused on (for context)
+    pause_frame_index:   int  = Form(None),   # frame index the user paused on
+    pause_caption:       str  = Form(None),   # caption of the paused frame
+    parent_session_id:   str  = Form(None),   # session this new session branches from (persisted)
+    parent_frame_index:  int  = Form(None),   # frame on parent that triggered this branch (null = follow-up)
+    notes_enabled:       str  = Form("false"), # "true" | "false"
 ):
     session_id = uuid.uuid4().hex
     output_dir = _session_output_dir(session_id)
@@ -381,7 +396,14 @@ async def image_generation(
             ).fetchone()
             turn_index = (row["cnt"] or 0) + 1
 
-    _insert_session(session_id, message, conversation_id, turn_index)
+    _insert_session(
+        session_id,
+        message,
+        conversation_id,
+        turn_index,
+        parent_session_id=parent_session_id,
+        parent_frame_index=parent_frame_index,
+    )
     _touch_conversation(conversation_id)
 
     # Build conversation context for follow-up turns
@@ -643,8 +665,10 @@ async def image_generation(
             api_call_count=api_call_count,
         )
 
-        result_payload["conversation_id"] = conversation_id
-        result_payload["turn_index"]      = turn_index
+        result_payload["conversation_id"]    = conversation_id
+        result_payload["turn_index"]         = turn_index
+        result_payload["parent_session_id"]  = parent_session_id
+        result_payload["parent_frame_index"] = parent_frame_index
         return result_payload
 
     except Exception as exc:
@@ -686,11 +710,43 @@ def get_conversation(conversation_id: str):
             return JSONResponse({"error": "Conversation not found"}, status_code=404)
         turns = conn.execute(
             "SELECT id, prompt, created_at, status, intent_type, render_path, "
-            "frame_count, video_path, turn_index "
+            "frame_count, video_path, turn_index, parent_session_id, parent_frame_index "
             "FROM sessions WHERE conversation_id = ? ORDER BY turn_index ASC",
             (conversation_id,),
         ).fetchall()
     return {**dict(conv), "turns": [dict(t) for t in turns]}
+
+
+@app.get("/api/conversations/{conversation_id}/tree")
+def get_conversation_tree(conversation_id: str):
+    """Lightweight endpoint for the canvas tree view.
+    Returns only the fields needed to render nodes and edges — no captions or images.
+    """
+    with _get_db() as conn:
+        conv = conn.execute(
+            "SELECT id, title FROM conversations WHERE id = ?", (conversation_id,)
+        ).fetchone()
+        if not conv:
+            return JSONResponse({"error": "Conversation not found"}, status_code=404)
+
+        nodes = conn.execute(
+            "SELECT id, prompt, status, intent_type, frame_count, video_path, "
+            "turn_index, parent_session_id, parent_frame_index "
+            "FROM sessions WHERE conversation_id = ? ORDER BY turn_index ASC",
+            (conversation_id,),
+        ).fetchall()
+
+    return {
+        "conversation_id": conv["id"],
+        "title":           conv["title"],
+        "nodes": [
+            {
+                **dict(n),
+                "video_ready": bool(n["video_path"] and os.path.exists(n["video_path"])),
+            }
+            for n in nodes
+        ],
+    }
 
 
 # ── Sessions API ───────────────────────────────────────────────────────────────
