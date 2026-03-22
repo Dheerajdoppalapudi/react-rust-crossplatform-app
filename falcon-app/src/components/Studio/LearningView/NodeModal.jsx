@@ -171,7 +171,7 @@ export default function NodeModal({ node, onClose, onAsk }) {
           maxWidth:        1240,
           height:          '88vh',
           m:               0,
-          borderRadius:    '20px',
+          borderRadius:    '12px',
           overflow:        'hidden',
           bgcolor:         isDark ? '#141414' : '#ffffff',
           backgroundImage: 'none',

@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Handle, Position } from 'reactflow'
-import { Box, Typography, useTheme } from '@mui/material'
+import { Box, Typography, Tooltip, useTheme } from '@mui/material'
 import MovieOutlinedIcon    from '@mui/icons-material/MovieOutlined'
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline'
 import { api } from '../../../services/api'
@@ -18,15 +18,35 @@ export default function SessionNode({ data }) {
   const frameCount  = turn.framesData?.captions?.length || turn.frame_count || 0
   const intentLabel = (turn.intent_type || '').replace(/_/g, ' ')
   const isReady     = turn.videoPhase === 'ready'
+  const [duration, setDuration] = useState(null)
+
+  useEffect(() => {
+    if (!turn.id || !isReady) return
+    const v = document.createElement('video')
+    v.src = api.getVideoUrl(turn.id)
+    v.preload = 'metadata'
+    v.onloadedmetadata = () => {
+      const s = Math.round(v.duration)
+      setDuration(s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`)
+    }
+  }, [turn.id, isReady])
+
+  const tooltipTitle = (
+    <Box>
+      <Typography sx={{ fontSize: 11, lineHeight: 1.5 }}>{turn.prompt || 'Untitled'}</Typography>
+      <Typography sx={{ fontSize: 10, opacity: 0.6, mt: 0.5 }}>Click to view</Typography>
+    </Box>
+  )
 
   return (
     <>
       <Handle type="target" position={Position.Top}    style={{ opacity: 0 }} />
 
+      <Tooltip title={tooltipTitle} placement="top" arrow enterDelay={400}>
       <Box sx={{
         width:        NODE_W,
         height:       NODE_H,
-        borderRadius: '16px',
+        borderRadius: '10px',
         border:       `1.5px solid ${isDark ? 'rgba(255,255,255,0.09)' : '#e8ecf2'}`,
         bgcolor:      isDark ? '#1a1a1a' : '#ffffff',
         overflow:     'hidden',
@@ -44,19 +64,12 @@ export default function SessionNode({ data }) {
         },
       }}>
 
-        {/* ── Top accent gradient bar ──────────────────────────────────────── */}
-        <Box sx={{
-          height:     3,
-          background: `linear-gradient(90deg, ${theme.palette.primary.main}, transparent)`,
-          opacity:    isReady ? 1 : 0.45,
-        }} />
-
         {/* ── Thumbnail ─────────────────────────────────────────────────────── */}
         <Box
           onMouseEnter={() => setThumbHover(true)}
           onMouseLeave={() => setThumbHover(false)}
           sx={{
-            width: '100%', height: THUMB_H - 3,
+            width: '100%', height: THUMB_H,
             bgcolor: isDark ? '#111' : '#f0f2f7',
             overflow: 'hidden', position: 'relative',
           }}
@@ -108,27 +121,52 @@ export default function SessionNode({ data }) {
               : 'linear-gradient(transparent, #ffffff)',
           }} />
 
-          {/* Video status badge */}
+          {/* Badges */}
           <Box sx={{
             position: 'absolute', top: 8, right: 8,
             display: 'flex', alignItems: 'center', gap: 0.5,
-            px: 0.75, py: 0.3, borderRadius: '20px',
-            bgcolor:        isReady ? 'rgba(34,197,94,0.18)'  : 'rgba(251,146,60,0.18)',
-            border:         `1px solid ${isReady ? 'rgba(34,197,94,0.4)' : 'rgba(251,146,60,0.4)'}`,
-            backdropFilter: 'blur(6px)',
           }}>
+            {/* Intent badge */}
+            {intentLabel && (
+              <Box sx={{
+                px: 0.75, py: 0.3, borderRadius: '20px',
+                bgcolor: 'rgba(99,102,241,0.18)',
+                border: '1px solid rgba(99,102,241,0.4)',
+                backdropFilter: 'blur(6px)',
+              }}>
+                <Typography sx={{
+                  fontSize: 8, fontWeight: 600, lineHeight: 1,
+                  color: '#818cf8', textTransform: 'capitalize',
+                }}>
+                  {intentLabel}
+                </Typography>
+              </Box>
+            )}
+
+            {/* Duration / status badge */}
             <Box sx={{
-              width: 5, height: 5, borderRadius: '50%',
-              bgcolor: isReady ? '#22c55e' : '#fb923c',
-            }} />
-            <Typography sx={{
-              fontSize: 8, fontWeight: 700, lineHeight: 1,
-              color: isReady ? '#22c55e' : '#fb923c',
+              display: 'flex', alignItems: 'center', gap: 0.5,
+              px: 0.75, py: 0.3, borderRadius: '20px',
+              bgcolor:        isReady ? 'rgba(34,197,94,0.18)'  : 'rgba(251,146,60,0.18)',
+              border:         `1px solid ${isReady ? 'rgba(34,197,94,0.4)' : 'rgba(251,146,60,0.4)'}`,
+              backdropFilter: 'blur(6px)',
             }}>
-              {isReady ? 'READY' : 'GEN'}
-            </Typography>
+              <Box sx={{
+                width: 5, height: 5, borderRadius: '50%',
+                bgcolor: isReady ? '#22c55e' : '#fb923c',
+              }} />
+              <Typography sx={{
+                fontSize: 8, fontWeight: 700, lineHeight: 1,
+                color: isReady ? '#22c55e' : '#fb923c',
+              }}>
+                {isReady && duration ? duration : isReady ? 'READY' : 'GEN'}
+              </Typography>
+            </Box>
           </Box>
         </Box>
+
+        {/* ── Divider ───────────────────────────────────────────────────────── */}
+        <Box sx={{ height: '1px', bgcolor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.07)' }} />
 
         {/* ── Info ──────────────────────────────────────────────────────────── */}
         <Box sx={{ px: 1.5, pt: 1, pb: 0.75 }}>
@@ -177,6 +215,7 @@ export default function SessionNode({ data }) {
           </Box>
         </Box>
       </Box>
+      </Tooltip>
 
       <Handle type="source" position={Position.Bottom} style={{ opacity: 0 }} />
     </>
