@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(find '/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend' -name *.sql -o -name migration* -o -name *schema*)",
-      "Bash(sqlite3 \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/database.sqlite\" \".schema\")"
+      "Bash(sqlite3 \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/database.sqlite\" \".schema\")",
+      "Bash(python3 -c \"import imageio_ffmpeg; print\\(imageio_ffmpeg.get_ffmpeg_exe\\(\\)\\)\")"
     ]
   }
 }

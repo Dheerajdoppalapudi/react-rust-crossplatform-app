@@ -309,6 +309,7 @@ export default function Studio() {
     return (
       <LearningView
         turns={turns}
+        conversationId={activeConvId}
         onExit={() => setViewMode('chat')}
         onAskFromLearn={handleLearnAsk}
       />

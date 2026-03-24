@@ -2174,3 +2174,5 @@ using good illustrations
 2026-03-22 23:21:58  INFO      services.video.video_assembler:215  Concatenated 2 clips  total_duration=32.93s
 2026-03-22 23:23:12  INFO      main:903  Video assembly complete  session=96587483e44e464dbe5be34a1fc0a1e2  path=/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/96587483e44e464dbe5be34a1fc0a1e2/final_video.mp4
 2026-03-22 23:23:12  INFO      main:911  Video generation done  session=96587483e44e464dbe5be34a1fc0a1e2  frames=2  tts=openai
+2026-03-23 22:28:36  INFO      main:862  Merge complete  conversation=4e7e241081b4426e9c8ca1402e25a353  sessions=5  output=/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/merged_4e7e241081b4426e9c8ca1402e25a353.mp4
+2026-03-23 22:31:42  INFO      main:862  Merge complete  conversation=4e7e241081b4426e9c8ca1402e25a353  sessions=5  output=/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/merged_4e7e241081b4426e9c8ca1402e25a353.mp4

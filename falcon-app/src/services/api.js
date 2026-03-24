@@ -134,7 +134,14 @@ export const api = {
     }
   },
 
+  mergeConversation: async (convId) => {
+    const res = await fetch(`${API_BASE}/api/conversations/${convId}/merge`, { method: 'POST' })
+    if (!res.ok) throw new Error(await res.text())
+    return res.json()
+  },
+
   // URL builders (not async — just return the URL string)
-  getVideoUrl:  (sessionId)             => `${API_BASE}/api/sessions/${sessionId}/video`,
-  getFrameUrl:  (sessionId, frameIndex) => `${API_BASE}/api/sessions/${sessionId}/frame/${frameIndex}`,
+  getVideoUrl:      (sessionId)             => `${API_BASE}/api/sessions/${sessionId}/video`,
+  getFrameUrl:      (sessionId, frameIndex) => `${API_BASE}/api/sessions/${sessionId}/frame/${frameIndex}`,
+  getMergedVideoUrl: (convId)               => `${API_BASE}/api/conversations/${convId}/merged_video`,
 }

@@ -1,22 +1,30 @@
 import { useState } from 'react'
-import { Box, IconButton, Typography, Tooltip, useTheme } from '@mui/material'
+import { Box, IconButton, Typography, Tooltip, useTheme, Button, CircularProgress } from '@mui/material'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
+import MergeIcon from '@mui/icons-material/MergeType'
 import Canvas    from './Canvas'
 import NodeModal from './NodeModal'
+import MergedVideoModal   from './MergedVideoModal'
+import MergeLoadingModal  from './MergeLoadingModal'
+import { api } from '../../../services/api'
 
 /**
  * LearningView — full-screen focus canvas (position: fixed overlay).
  *
  * Props:
  *   turns          — flat turns array from Studio
+ *   conversationId — id of the active conversation (for merging)
  *   onExit         — switch back to chat mode
  *   onAskFromLearn — ({ question, sessionId, frameIndex, caption }) → handled by Studio
  */
-export default function LearningView({ turns, onExit, onAskFromLearn }) {
+export default function LearningView({ turns, conversationId, onExit, onAskFromLearn }) {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
 
   const [selectedNode, setSelectedNode] = useState(null)
+  const [merging, setMerging]           = useState(false)
+  const [mergeResult, setMergeResult]   = useState(null)
+  const [mergeError, setMergeError]     = useState(null)
 
   const handleNodeClick = (node) => {
     // Always use the freshest turn data from the turns array
@@ -27,6 +35,19 @@ export default function LearningView({ turns, onExit, onAskFromLearn }) {
   const handleAsk = ({ question, sessionId, frameIndex, caption }) => {
     setSelectedNode(null)
     onAskFromLearn?.({ question, sessionId, frameIndex, caption })
+  }
+
+  const handleMerge = async () => {
+    setMerging(true)
+    setMergeError(null)
+    try {
+      const result = await api.mergeConversation(conversationId)
+      setMergeResult(result)
+    } catch (e) {
+      setMergeError(e.message || 'Merge failed')
+    } finally {
+      setMerging(false)
+    }
   }
 
   return (
@@ -92,6 +113,30 @@ export default function LearningView({ turns, onExit, onAskFromLearn }) {
         </Typography>
       </Box>
 
+      {/* ── Merge button (top-right) ────────────────────────────────────────── */}
+      <Box sx={{ position: 'absolute', top: 16, right: 16, zIndex: 10, display: 'flex', alignItems: 'center', gap: 1 }}>
+        {mergeError && (
+          <Typography sx={{ fontSize: 11, color: '#f87171', bgcolor: 'rgba(239,68,68,0.12)', px: 1.5, py: 0.5, borderRadius: '6px', border: '1px solid rgba(239,68,68,0.3)' }}>
+            {mergeError}
+          </Typography>
+        )}
+        <Button
+          onClick={mergeResult ? () => setMergeResult(mergeResult) : handleMerge}
+          disabled={merging}
+          size="small"
+          variant="contained"
+          startIcon={merging ? <CircularProgress size={12} color="inherit" /> : <MergeIcon sx={{ fontSize: 14 }} />}
+          sx={{
+            fontSize: 11.5, fontWeight: 700, px: 1.75, py: 0.6,
+            borderRadius: '8px', textTransform: 'none',
+            backdropFilter: 'blur(10px)',
+            boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
+          }}
+        >
+          {merging ? 'Merging\u2026' : mergeResult ? 'View Merged' : 'Merge Videos'}
+        </Button>
+      </Box>
+
       {/* ── Canvas ─────────────────────────────────────────────────────────── */}
       <Canvas turns={turns} onNodeClick={handleNodeClick} />
 
@@ -101,6 +146,19 @@ export default function LearningView({ turns, onExit, onAskFromLearn }) {
           node={selectedNode}
           onClose={() => setSelectedNode(null)}
           onAsk={handleAsk}
+        />
+      )}
+
+      {/* ── Merge loading modal ─────────────────────────────────────────────── */}
+      <MergeLoadingModal open={merging} sessionCount={turns.filter((t) => t.id && t.videoPhase === 'ready').length} />
+
+      {/* ── Merged video modal ──────────────────────────────────────────────── */}
+      {mergeResult && (
+        <MergedVideoModal
+          open={true}
+          onClose={() => setMergeResult(null)}
+          mergedVideoUrl={api.getMergedVideoUrl(conversationId)}
+          sessions={mergeResult.sessions}
         />
       )}
     </Box>

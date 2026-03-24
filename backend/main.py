@@ -4,6 +4,8 @@ import logging
 import logging.handlers
 import os
 import sqlite3
+import subprocess
+import tempfile
 import time
 import uuid
 import urllib.parse
@@ -113,10 +115,11 @@ def _init_db():
         # Conversations table — one row per chat thread
         conn.execute("""
             CREATE TABLE IF NOT EXISTS conversations (
-                id         TEXT PRIMARY KEY,
-                title      TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
+                id                TEXT PRIMARY KEY,
+                title             TEXT NOT NULL,
+                created_at        TEXT NOT NULL,
+                updated_at        TEXT NOT NULL,
+                merged_video_path TEXT
             )
         """)
         conn.execute("""
@@ -148,6 +151,14 @@ def _init_db():
         ]:
             try:
                 conn.execute(f"ALTER TABLE sessions ADD COLUMN {col} {typedef}")
+            except Exception:
+                pass
+        # Safe migrations for conversations table
+        for col, typedef in [
+            ("merged_video_path", "TEXT"),
+        ]:
+            try:
+                conn.execute(f"ALTER TABLE conversations ADD COLUMN {col} {typedef}")
             except Exception:
                 pass
         conn.commit()
@@ -747,6 +758,148 @@ def get_conversation_tree(conversation_id: str):
             for n in nodes
         ],
     }
+
+
+# ── Merge videos ──────────────────────────────────────────────────────────────
+
+@app.post("/api/conversations/{conversation_id}/merge")
+def merge_conversation_videos(conversation_id: str):
+    try:
+        with _get_db() as conn:
+            rows = conn.execute(
+                "SELECT id, prompt, video_path, parent_session_id, turn_index "
+                "FROM sessions WHERE conversation_id = ? AND status = 'done' ORDER BY turn_index ASC",
+                (conversation_id,),
+            ).fetchall()
+
+        if not rows:
+            return JSONResponse({"error": "No completed sessions found for this conversation"}, status_code=400)
+
+        # Build topological order via BFS from roots
+        session_ids = {r["id"] for r in rows}
+        session_map = {r["id"]: dict(r) for r in rows}
+
+        children: dict = {}
+        for r in rows:
+            pid = r["parent_session_id"]
+            if pid and pid in session_ids:
+                children.setdefault(pid, []).append(r["id"])
+
+        # Roots: sessions with no parent or parent not in this conversation's sessions
+        roots = [
+            r["id"] for r in rows
+            if not r["parent_session_id"] or r["parent_session_id"] not in session_ids
+        ]
+
+        ordered_ids = []
+        queue = list(roots)
+        visited = set()
+        while queue:
+            sid = queue.pop(0)
+            if sid in visited:
+                continue
+            visited.add(sid)
+            ordered_ids.append(sid)
+            for child_id in children.get(sid, []):
+                queue.append(child_id)
+
+        # Collect video paths, skip missing files
+        video_paths = []
+        ordered_sessions = []
+        for sid in ordered_ids:
+            s = session_map[sid]
+            vp = s.get("video_path")
+            if vp and os.path.exists(vp):
+                video_paths.append(vp)
+                ordered_sessions.append({"id": sid, "prompt": s["prompt"]})
+
+        if len(video_paths) < 2:
+            return JSONResponse(
+                {"error": f"Need at least 2 videos to merge, found {len(video_paths)}"},
+                status_code=400,
+            )
+
+        output_path = os.path.join(OUTPUTS_DIR, f"merged_{conversation_id}.mp4")
+
+        # Resolve ffmpeg binary — prefer imageio_ffmpeg bundled binary, fall back to PATH
+        try:
+            import imageio_ffmpeg
+            ffmpeg_bin = imageio_ffmpeg.get_ffmpeg_exe()
+        except Exception:
+            ffmpeg_bin = "ffmpeg"
+
+        # Write concat list and run ffmpeg
+        with tempfile.NamedTemporaryFile('w', suffix='.txt', delete=False) as f:
+            for vp in video_paths:
+                f.write(f"file '{vp}'\n")
+            concat_file = f.name
+
+        try:
+            subprocess.run(
+                [ffmpeg_bin, '-y', '-f', 'concat', '-safe', '0',
+                 '-i', concat_file, '-c', 'copy', output_path],
+                check=True,
+                capture_output=True,
+            )
+        except FileNotFoundError:
+            os.unlink(concat_file)
+            return JSONResponse(
+                {"error": "ffmpeg not found — please install ffmpeg and ensure it is on PATH"},
+                status_code=500,
+            )
+        finally:
+            if os.path.exists(concat_file):
+                os.unlink(concat_file)
+
+        # Persist merged video path
+        with _get_db() as conn:
+            conn.execute(
+                "UPDATE conversations SET merged_video_path = ? WHERE id = ?",
+                (output_path, conversation_id),
+            )
+            conn.commit()
+
+        logger.info(
+            "Merge complete  conversation=%s  sessions=%d  output=%s",
+            conversation_id, len(video_paths), output_path,
+        )
+
+        return {
+            "merged_video_url": f"/api/conversations/{conversation_id}/merged_video",
+            "session_count": len(ordered_sessions),
+            "sessions": ordered_sessions,
+        }
+
+    except subprocess.CalledProcessError as e:
+        logger.error("ffmpeg merge failed  conversation=%s  stderr=%s", conversation_id, e.stderr)
+        return JSONResponse(
+            {"error": f"ffmpeg failed: {e.stderr.decode(errors='replace') if e.stderr else str(e)}"},
+            status_code=500,
+        )
+    except Exception as e:
+        logger.error("Merge failed  conversation=%s", conversation_id, exc_info=True)
+        return JSONResponse({"error": f"Merge failed: {e}"}, status_code=500)
+
+
+@app.get("/api/conversations/{conversation_id}/merged_video")
+def get_merged_video(conversation_id: str):
+    with _get_db() as conn:
+        row = conn.execute(
+            "SELECT merged_video_path FROM conversations WHERE id = ?", (conversation_id,)
+        ).fetchone()
+
+    if not row:
+        return JSONResponse({"error": "Conversation not found"}, status_code=404)
+
+    path = row["merged_video_path"]
+    if path and os.path.exists(path):
+        return FileResponse(
+            path,
+            media_type="video/mp4",
+            filename=f"merged_{conversation_id[:8]}.mp4",
+        )
+
+    return JSONResponse({"error": "Merged video not found"}, status_code=404)
 
 
 # ── Sessions API ───────────────────────────────────────────────────────────────
