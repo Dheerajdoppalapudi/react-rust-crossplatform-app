@@ -5,7 +5,6 @@ import Navbar from './components/common/Navbar'
 import Sidebar from './components/common/Sidebar'
 import Footer from './components/common/Footer'
 import AboutUs from './pages/AboutUs'
-import Product from './pages/Product'
 import Settings from './pages/Settings'
 import Studio from './pages/Studio'
 
@@ -39,7 +38,7 @@ const buildTheme = (mode) =>
   })
 
 // ─── Pages that are full-height — no footer, no padding ──────────────────────
-const FULL_HEIGHT_PAGES = ['/product', '/studio']
+const FULL_HEIGHT_PAGES = ['/studio']
 
 // ─── App ─────────────────────────────────────────────────────────────────────
 function App() {
@@ -91,9 +90,8 @@ function App() {
               }}
             >
               <Routes>
-                <Route path="/"        element={<AboutUs />} />
-                <Route path="/product" element={<Product />} />
-                <Route path="/studio"  element={<Studio />} />
+                <Route path="/"       element={<AboutUs />} />
+                <Route path="/studio" element={<Studio />} />
                 <Route path="/settings" element={<Settings />} />
               </Routes>
             </Box>

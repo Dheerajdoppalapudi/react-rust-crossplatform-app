@@ -13,7 +13,6 @@ import {
   useTheme,
 } from '@mui/material'
 import InfoOutlinedIcon        from '@mui/icons-material/InfoOutlined'
-import Inventory2OutlinedIcon  from '@mui/icons-material/Inventory2Outlined'
 import SettingsOutlinedIcon    from '@mui/icons-material/SettingsOutlined'
 import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined'
 import { useNavigate, useLocation } from 'react-router-dom'
@@ -22,12 +21,11 @@ const DRAWER_OPEN   = 228
 const DRAWER_CLOSED = 56
 
 const mainItems = [
-  { label: 'Product', path: '/product', icon: <Inventory2OutlinedIcon  fontSize="small" /> },
-  { label: 'Studio',  path: '/studio',  icon: <AutoAwesomeOutlinedIcon fontSize="small" /> },
+  { label: 'Studio',   path: '/studio', icon: <AutoAwesomeOutlinedIcon fontSize="small" /> },
+  { label: 'About Us', path: '/',       icon: <InfoOutlinedIcon        fontSize="small" /> },
 ]
 
 const bottomItems = [
-  { label: 'About',    path: '/',         icon: <InfoOutlinedIcon     fontSize="small" /> },
   { label: 'Settings', path: '/settings', icon: <SettingsOutlinedIcon fontSize="small" /> },
 ]
 
