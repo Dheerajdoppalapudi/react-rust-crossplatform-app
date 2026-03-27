@@ -66,12 +66,12 @@ from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-from services.excalidraw.excalidraw_enhancer import enhance
-from services.excalidraw.planner import create_plan, generate_all_frames, request_log, _log
-from services.excalidraw.combiner import combine_frames
-from services.excalidraw.mermaid.mermaid_generator import generate_mermaid_frames, _sidecar_available
-from services.excalidraw.manim.manim_generator import generate_manim_frames, manim_available
-from services.excalidraw.svg.svg_generator import generate_svg_frames, svg_available
+from services.Frame_generation.excalidraw_enhancer import enhance
+from services.Frame_generation.planner import create_plan, generate_all_frames, request_log, _log
+from services.Frame_generation.combiner import combine_frames
+from services.Frame_generation.mermaid.mermaid_generator import generate_mermaid_frames, _sidecar_available
+from services.Frame_generation.manim.manim_generator import generate_manim_frames, manim_available
+from services.Frame_generation.svg.svg_generator import generate_svg_frames, svg_available
 from services.video.frame_exporter import export_frames
 from services.video.tts_service import parse_narration, generate_audio
 from services.video.video_assembler import assemble, moviepy_available
@@ -96,7 +96,7 @@ app.add_middleware(
 BASE_DIR       = os.path.dirname(__file__)
 UPLOAD_DIR     = os.path.join(BASE_DIR, "uploads")
 OUTPUTS_DIR    = os.path.join(BASE_DIR, "outputs")
-EXCALIDRAW_DIR = os.path.join(BASE_DIR, "services", "excalidraw")
+EXCALIDRAW_DIR = os.path.join(BASE_DIR, "services", "Frame_generation")
 
 os.makedirs(UPLOAD_DIR,  exist_ok=True)
 os.makedirs(OUTPUTS_DIR, exist_ok=True)

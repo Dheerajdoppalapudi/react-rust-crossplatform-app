@@ -30,9 +30,9 @@ try:
 except (ImportError, OSError):
     _CAIROSVG_AVAILABLE = False
 
-from services.excalidraw.planner import GenerationPlan, FramePlan, call_llm
-from services.excalidraw.svg.component_library import SVGComponent
-from services.excalidraw.svg.component_generator import generate_svg_components, build_component_injection
+from services.Frame_generation.planner import GenerationPlan, FramePlan, call_llm
+from services.Frame_generation.svg.component_library import SVGComponent
+from services.Frame_generation.svg.component_generator import generate_svg_components, build_component_injection
 
 
 # ---------------------------------------------------------------------------

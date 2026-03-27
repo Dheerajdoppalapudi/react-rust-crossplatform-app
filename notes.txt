@@ -318,3 +318,95 @@ USER TYPES QUESTION + SUBMITS
                              └─ planning_prompt.md with {{CONVERSATION_CONTEXT}} injected
                                   → LLM generates targeted follow-up lesson
                                     that builds on prior context + resolves pause moment
+
+
+Architecture Flow
+
+User Browser (HTTPS only)
+         │
+         ▼
+  CloudFront (d2802jabx2c8dk.cloudfront.net)
+         │
+         ├── Path: /*  (default)
+         │      └──► S3 Bucket (falcon-app-frontend)
+         │               └── index.html + assets/
+         │                      └── React app runs in browser
+         │
+         └── Path: /api/*
+                └──► EC2 (ip-172-31-38-57.eu-north-1.compute.amazonaws.com)
+                         └── Nginx :80
+                               └── proxy_pass → Uvicorn :8000
+                                      └── FastAPI (main.py)
+                                             └── SQLite (database.sqlite)
+Key Files & What They Do
+Frontend — Connection to Backend
+falcon-app/src/services/api.js
+
+Central file for all API calls
+VITE_API_URL is baked in at build time from .env.production
+Currently points to https://d2802jabx2c8dk.cloudfront.net
+Every API call goes through here
+falcon-app/.env.production
+
+Sets VITE_API_URL before build
+Gets embedded into the JS bundle — not present on the server
+Backend — Entry Point
+backend/main.py
+
+FastAPI app, all routes defined here
+CORS middleware reads CORS_ORIGINS from .env
+Uvicorn serves it on 127.0.0.1:8000 (internal only)
+backend/.env (on EC2 only, never in git)
+
+OPENAI_API_KEY — for LLM calls
+CORS_ORIGINS — set to your CloudFront domain
+Infrastructure — Request Routing
+/etc/nginx/sites-available/falcon (on EC2)
+
+Receives all traffic on port 80
+Forwards everything to FastAPI on 127.0.0.1:8000
+server_name _ accepts requests from any host (CloudFront, direct IP)
+/etc/systemd/system/falcon-backend.service (on EC2)
+
+Keeps Uvicorn running, auto-restarts on crash or reboot
+.github/workflows/deploy.yml
+
+Triggered on every git push main
+Job 1: builds React → uploads to S3 → clears CloudFront cache
+Job 2: SSHs into EC2 → git pull → pip install → restarts services
+Request lifecycle (API call example)
+
+1. User clicks something in React UI
+2. api.js calls https://d2802jabx2c8dk.cloudfront.net/api/conversations
+3. CloudFront matches /api/* behavior → forwards to EC2
+4. Nginx on EC2 receives request → proxy_pass to 127.0.0.1:8000
+5. FastAPI handles the route → queries SQLite → returns JSON
+6. Response travels back through Nginx → CloudFront → browser
+Deploy lifecycle
+
+1. You push code to GitHub main branch
+2. GitHub Actions triggers deploy.yml
+3. Frontend job: npm run build → aws s3 sync → cloudfront invalidation
+4. Backend job: ssh into EC2 → git pull → pip install → systemctl restart
+5. New code is live within ~2 minutes
+
+================================================================================================================================================
+
+Level 3: Proper Background Jobs (right architecture, more work)
+Pattern: Fire and poll
+
+
+POST /api/generate_video → returns immediately
+  { "job_id": "abc123", "status": "queued" }
+
+GET /api/video_status/{job_id} → UI polls every 2-3s
+  { "status": "processing", "stage": "tts", "progress": 40 }
+  { "status": "done", "video_url": "/outputs/..." }
+Implementation options:
+
+FastAPI BackgroundTasks — simplest, no new infrastructure, runs in same process
+Celery + Redis — proper task queue, survives restarts, scales to multiple workers
+Celery + SQS — cloud-native if you're on AWS
+Trade-off: BackgroundTasks is simple but if the server restarts mid-job, the task is lost. Celery persists jobs.
+
+================================================================================================================================================

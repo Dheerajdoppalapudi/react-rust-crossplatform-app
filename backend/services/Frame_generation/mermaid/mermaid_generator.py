@@ -17,7 +17,7 @@ import asyncio
 import re
 import requests
 
-from services.excalidraw.planner import GenerationPlan, call_llm
+from services.Frame_generation.planner import GenerationPlan, call_llm
 
 SIDECAR_URL = "http://localhost:3001"
 

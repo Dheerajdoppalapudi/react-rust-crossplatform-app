@@ -23,8 +23,8 @@ import json
 import os
 import re
 
-from services.excalidraw.planner import GenerationPlan, call_llm
-from services.excalidraw.svg.component_library import SVGComponent, get_builtin_component
+from services.Frame_generation.planner import GenerationPlan, call_llm
+from services.Frame_generation.svg.component_library import SVGComponent, get_builtin_component
 
 
 # ---------------------------------------------------------------------------

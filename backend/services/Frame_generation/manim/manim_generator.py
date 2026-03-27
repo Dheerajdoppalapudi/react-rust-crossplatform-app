@@ -23,7 +23,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from services.excalidraw.planner import GenerationPlan, FramePlan, call_llm
+from services.Frame_generation.planner import GenerationPlan, FramePlan, call_llm
 
 logger = logging.getLogger(__name__)
 
