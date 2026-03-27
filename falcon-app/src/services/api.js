@@ -114,9 +114,48 @@ export const api = {
     return res.json()
   },
 
-  generateVideo: async (sessionId) => {
-    const res = await fetch(`${API_BASE}/api/generate_video/${sessionId}`, { method: 'POST' })
-    return res.json()
+  generateVideoStream: (sessionId, onEvent) => {
+    // Returns a Promise that resolves when the stream closes (done or error).
+    // onEvent is called for every SSE event object the server sends:
+    //   { type: "stage",        stage: "export_frames"|"tts"|"assembling", ... }
+    //   { type: "tts_progress", frame: 1, total: 5 }
+    //   { type: "done",         video_path: "...", frame_count: N, tts_backend: "..." }
+    //   { type: "error",        message: "..." }
+    return fetch(`${API_BASE}/api/generate_video/${sessionId}`, { method: 'POST' })
+      .then(async (res) => {
+        if (!res.ok) {
+          // Pre-flight errors (404, 400, 503) come back as plain JSON
+          const data = await res.json().catch(() => ({}))
+          onEvent({ type: 'error', message: data.error || `HTTP ${res.status}` })
+          return
+        }
+
+        const reader  = res.body.getReader()
+        const decoder = new TextDecoder()
+        let buffer    = ''
+
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+
+          // Append new bytes and split on newlines
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split('\n')
+          // The last element may be an incomplete line — keep it in the buffer
+          buffer = lines.pop() ?? ''
+
+          for (const line of lines) {
+            // SSE data lines start with "data: "
+            if (line.startsWith('data: ')) {
+              try {
+                onEvent(JSON.parse(line.slice(6)))
+              } catch {
+                // Ignore any malformed lines
+              }
+            }
+          }
+        }
+      })
   },
 
   getFramesMeta: async (sessionId) => {

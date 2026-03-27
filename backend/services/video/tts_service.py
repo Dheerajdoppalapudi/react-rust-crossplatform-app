@@ -19,6 +19,7 @@ If TTS fails for a frame, that entry in the returned list is None.
 The video assembler uses word-count-based timing as a fallback for None entries.
 """
 
+import asyncio
 import logging
 import os
 import re
@@ -162,3 +163,68 @@ def generate_audio(
             logger.debug("Audio generated  frame=%d  path=%s", i, out_path)
 
     return paths
+
+
+# ---------------------------------------------------------------------------
+# Parallel async version (used by the SSE video endpoint)
+# ---------------------------------------------------------------------------
+
+async def generate_audio_parallel(
+    narration_texts: list[str],
+    output_dir: str,
+    use_openai: bool = True,
+    progress_queue: asyncio.Queue | None = None,
+) -> list[Optional[str]]:
+    """
+    Async, parallel version of generate_audio.
+
+    All TTS calls fire concurrently — one asyncio.to_thread per frame — so a
+    5-frame video takes as long as the *slowest* single frame instead of the
+    *sum* of all frames.
+
+    As each frame finishes its index is put into progress_queue (if provided)
+    so the caller can stream per-frame progress events to the client without
+    waiting for the full batch to complete.
+
+    Args:
+        narration_texts: per-frame narration strings (from parse_narration)
+        output_dir:      session output directory
+        use_openai:      True = OpenAI tts-1 model; False = gTTS (free)
+        progress_queue:  optional asyncio.Queue; receives each frame's index
+                         the moment that frame's audio is ready
+
+    Returns:
+        List of absolute .mp3 paths, one per frame.
+        None entries = TTS failed or narration was empty for that frame.
+    """
+    audio_dir = os.path.join(output_dir, "audio")
+    os.makedirs(audio_dir, exist_ok=True)
+
+    backend = _openai_tts_generate if use_openai else _gtts_generate
+    results: list[Optional[str]] = [None] * len(narration_texts)
+
+    async def _one(i: int, text: str) -> None:
+        out_path = os.path.join(audio_dir, f"frame_{i:03d}.mp3")
+
+        if os.path.exists(out_path):
+            # Already cached from a previous run — skip the API call
+            results[i] = out_path
+        elif not text:
+            logger.warning("Frame %d: empty narration — skipping audio", i)
+            results[i] = None
+        else:
+            logger.debug("TTS frame %d  chars=%d", i, len(text))
+            # Run the blocking HTTP call in a thread so other frames
+            # can proceed concurrently on the event loop
+            ok = await asyncio.to_thread(backend, text, out_path)
+            results[i] = out_path if ok else None
+            if not ok:
+                logger.warning("Frame %d: TTS failed — video will use estimated duration", i)
+
+        # Signal the SSE stream that this frame is done
+        if progress_queue is not None:
+            await progress_queue.put(i)
+
+    # Fire all frames at the same time
+    await asyncio.gather(*[_one(i, text) for i, text in enumerate(narration_texts)])
+    return results

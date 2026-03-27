@@ -63,7 +63,7 @@ _setup_logging()
 logger = logging.getLogger(__name__)
 
 from fastapi import FastAPI, UploadFile, File, Form
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from services.Frame_generation.excalidraw_enhancer import enhance
@@ -73,7 +73,7 @@ from services.Frame_generation.mermaid.mermaid_generator import generate_mermaid
 from services.Frame_generation.manim.manim_generator import generate_manim_frames, manim_available
 from services.Frame_generation.svg.svg_generator import generate_svg_frames, svg_available
 from services.video.frame_exporter import export_frames
-from services.video.tts_service import parse_narration, generate_audio
+from services.video.tts_service import parse_narration, generate_audio, generate_audio_parallel
 from services.video.video_assembler import assemble, moviepy_available
 
 # Intent types routed to each generator
@@ -957,23 +957,53 @@ def get_session_log(session_id: str):
 
 # ── Video generation ───────────────────────────────────────────────────────────
 
+def _sse(payload: dict) -> str:
+    """
+    Format one Server-Sent Event line.
+
+    SSE protocol: each event is  'data: <json>\\n\\n'
+    The double newline is what signals the browser that the event is complete.
+    """
+    return f"data: {json.dumps(payload)}\n\n"
+
+
+# SSE response headers sent on every streaming video response.
+# X-Accel-Buffering: no  → tells nginx NOT to buffer the stream (critical for SSE behind a proxy)
+# Cache-Control: no-cache → prevents any intermediate cache from holding the stream
+_SSE_HEADERS = {
+    "Cache-Control": "no-cache",
+    "X-Accel-Buffering": "no",
+    "Connection": "keep-alive",
+}
+
+
 @app.post("/api/generate_video/{session_id}")
 async def generate_video(
     session_id: str,
     use_openai_tts: bool = True,
 ):
     """
-    Generate a video for an existing session.
+    Generate a video for an existing session — streams progress via SSE.
 
-    Reads the session's frames.json + narration.txt, runs TTS on each frame's
-    narration, normalizes all frames to 1920×1080 PNGs, and assembles a final
-    .mp4 with Ken Burns zoom + crossfade transitions.
+    Returns a text/event-stream response. Each event is a JSON object:
+
+      {"type": "stage",        "stage": "export_frames", "message": "..."}
+      {"type": "stage",        "stage": "tts",           "total": 5}
+      {"type": "tts_progress", "frame": 1,               "total": 5}
+      {"type": "stage",        "stage": "assembling",    "message": "..."}
+      {"type": "done",         "session_id": "...",      "video_path": "...", ...}
+      {"type": "error",        "message": "..."}
+
+    The stream keeps the HTTP connection alive for the full duration of the
+    pipeline (frame export → parallel TTS → video assembly), so nginx/ALB
+    timeouts never fire on an idle connection.
 
     Query param:
       use_openai_tts=false  → fall back to gTTS (free, no API key needed)
     """
     logger.info("Video generation requested  session=%s  openai_tts=%s", session_id, use_openai_tts)
 
+    # ── Pre-flight checks (return plain JSON errors before the stream opens) ───
     if not moviepy_available():
         logger.error("moviepy not installed  session=%s", session_id)
         return JSONResponse({"error": "moviepy not installed — run: pip install moviepy"}, status_code=503)
@@ -989,33 +1019,22 @@ async def generate_video(
     if row["status"] != "done":
         return JSONResponse({"error": f"Session not ready (status: {row['status']})"}, status_code=400)
 
-    # ── Idempotency: return cached video if it already exists ──────────────────
-    if row["video_path"] and os.path.exists(row["video_path"]):
-        logger.info("Video already exists — returning cached  session=%s  path=%s", session_id, row["video_path"])
-        return {
-            "session_id":   session_id,
-            "video_path":   row["video_path"],
-            "frame_count":  row["frame_count"],
-            "tts_backend":  "cached",
-        }
-
     output_dir = row["output_dir"]
     if not output_dir or not os.path.isdir(output_dir):
         return JSONResponse({"error": "Session output directory missing"}, status_code=404)
 
-    # ── Load captions from frames.json ────────────────────────────────────────
     frames_json_path = os.path.join(output_dir, "frames.json")
     if not os.path.exists(frames_json_path):
         return JSONResponse({"error": "frames.json not found — re-run image generation"}, status_code=404)
 
-    with open(frames_json_path) as f:
-        frames_data = json.load(f)
-    captions = frames_data.get("captions", [])
-
-    # ── Load narration text ────────────────────────────────────────────────────
     narration_path = os.path.join(output_dir, "narration.txt")
     if not os.path.exists(narration_path):
         return JSONResponse({"error": "narration.txt not found"}, status_code=404)
+
+    # ── Load session data ──────────────────────────────────────────────────────
+    with open(frames_json_path) as f:
+        frames_data = json.load(f)
+    captions = frames_data.get("captions", [])
 
     with open(narration_path) as f:
         narration_txt = f.read()
@@ -1026,52 +1045,118 @@ async def generate_video(
         narration_texts.append("")
     narration_texts = narration_texts[: len(captions)]
 
-    # ── Stage 1: Normalize frames → 1920×1080 PNGs with subtitle bars ─────────
-    logger.info("Video stage 1/3: frame export  session=%s  frames=%d", session_id, len(captions))
-    try:
-        normalized_pngs = await asyncio.to_thread(export_frames, output_dir, captions)
-        logger.info("Frame export done  session=%s  exported=%d", session_id, len(normalized_pngs))
-    except Exception as e:
-        logger.error("Frame export failed  session=%s", session_id, exc_info=True)
-        return JSONResponse({"error": f"Frame export failed: {e}"}, status_code=500)
-
-    # ── Stage 2: TTS — narration text → per-frame .mp3 ────────────────────────
-    logger.info("Video stage 2/3: TTS  session=%s  backend=%s", session_id, "openai" if use_openai_tts else "gtts")
-    try:
-        audio_paths = await asyncio.to_thread(
-            generate_audio, narration_texts, output_dir, use_openai_tts
-        )
-        audio_ok = sum(1 for p in audio_paths if p)
-        logger.info("TTS done  session=%s  generated=%d/%d", session_id, audio_ok, len(audio_paths))
-    except Exception as e:
-        logger.error("TTS generation failed  session=%s", session_id, exc_info=True)
-        return JSONResponse({"error": f"TTS generation failed: {e}"}, status_code=500)
-
-    # ── Stage 3: Assemble video ────────────────────────────────────────────────
     video_path = os.path.join(output_dir, "final_video.mp4")
-    logger.info("Video stage 3/3: assembly  session=%s  output=%s", session_id, video_path)
-    try:
-        await asyncio.to_thread(
-            assemble, normalized_pngs, audio_paths, narration_texts, video_path, captions
-        )
-        logger.info("Video assembly complete  session=%s  path=%s", session_id, video_path)
-    except Exception as e:
-        logger.error("Video assembly failed  session=%s", session_id, exc_info=True)
-        return JSONResponse({"error": f"Video assembly failed: {e}"}, status_code=500)
+    tts_backend = "openai" if use_openai_tts else "gtts"
 
-    # ── Persist video path to DB ───────────────────────────────────────────────
-    _update_session(session_id, video_path=video_path)
+    # ── Idempotency: already done — emit a single "done" event and close ───────
+    if row["video_path"] and os.path.exists(row["video_path"]):
+        logger.info("Video already exists — returning cached  session=%s", session_id)
 
-    logger.info(
-        "Video generation done  session=%s  frames=%d  tts=%s",
-        session_id, len(normalized_pngs), "openai" if use_openai_tts else "gtts",
-    )
-    return {
-        "session_id": session_id,
-        "video_path": video_path,
-        "frame_count": len(normalized_pngs),
-        "tts_backend": "openai" if use_openai_tts else "gtts",
-    }
+        async def _cached_stream():
+            yield _sse({
+                "type":        "done",
+                "session_id":  session_id,
+                "video_path":  row["video_path"],
+                "frame_count": row["frame_count"],
+                "tts_backend": "cached",
+            })
+
+        return StreamingResponse(_cached_stream(), media_type="text/event-stream", headers=_SSE_HEADERS)
+
+    # ── Main pipeline as an async generator ───────────────────────────────────
+    async def event_stream():
+        t_start = time.time()
+
+        def elapsed() -> float:
+            return round(time.time() - t_start, 1)
+
+        try:
+            # ── Stage 1: normalize frames to 1920×1080 PNGs ───────────────────
+            logger.info("Video stage 1/3: frame export  session=%s  frames=%d", session_id, len(captions))
+            yield _sse({"type": "stage", "stage": "export_frames", "message": "Exporting frames", "elapsed_s": elapsed()})
+
+            t1 = time.time()
+            normalized_pngs = await asyncio.to_thread(export_frames, output_dir, captions)
+            d1 = round(time.time() - t1, 1)
+
+            logger.info("Frame export done  session=%s  exported=%d  duration=%.1fs", session_id, len(normalized_pngs), d1)
+            yield _sse({"type": "stage_done", "stage": "export_frames", "count": len(normalized_pngs), "duration_s": d1, "elapsed_s": elapsed()})
+
+            # ── Stage 2: parallel TTS with per-frame progress ─────────────────
+            # All N frames fire concurrently. Each frame puts its index into
+            # progress_queue the moment its audio file is ready, so we can
+            # stream a progress event immediately — no waiting for the full batch.
+            total_frames = len(narration_texts)
+            logger.info("Video stage 2/3: TTS  session=%s  backend=%s  frames=%d", session_id, tts_backend, total_frames)
+            yield _sse({"type": "stage", "stage": "tts", "message": "Generating audio", "total": total_frames, "elapsed_s": elapsed()})
+
+            progress_queue: asyncio.Queue[int] = asyncio.Queue()
+
+            t2 = time.time()
+            # create_task schedules TTS in the background so we can consume
+            # progress events from the queue while TTS runs concurrently
+            tts_task = asyncio.create_task(
+                generate_audio_parallel(narration_texts, output_dir, use_openai_tts, progress_queue)
+            )
+
+            # Stream one progress event per frame as each audio file completes
+            for _ in range(total_frames):
+                frame_idx = await progress_queue.get()
+                yield _sse({"type": "tts_progress", "frame": frame_idx + 1, "total": total_frames, "elapsed_s": elapsed()})
+
+            audio_paths = await tts_task
+            d2 = round(time.time() - t2, 1)
+            audio_ok = sum(1 for p in audio_paths if p)
+            logger.info("TTS done  session=%s  generated=%d/%d  duration=%.1fs", session_id, audio_ok, total_frames, d2)
+            yield _sse({"type": "stage_done", "stage": "tts", "generated": audio_ok, "total": total_frames, "duration_s": d2, "elapsed_s": elapsed()})
+
+            # ── Stage 3: assemble the final .mp4 ─────────────────────────────
+            # Assembly (libx264 encoding) can take 60–120s on a server.
+            # We can't yield mid-function, so we run assemble() as a background
+            # task and send a heartbeat every 20s while we wait. This prevents
+            # nginx's proxy_read_timeout (default 60s) from killing the
+            # connection during the silent encoding gap.
+            logger.info("Video stage 3/3: assembly  session=%s  output=%s", session_id, video_path)
+            yield _sse({"type": "stage", "stage": "assembling", "message": "Assembling video", "elapsed_s": elapsed()})
+
+            t3 = time.time()
+            assemble_task = asyncio.create_task(
+                asyncio.to_thread(assemble, normalized_pngs, audio_paths, narration_texts, video_path, captions)
+            )
+
+            # Ping every 20s so nginx never sees a 60s silent gap
+            while not assemble_task.done():
+                try:
+                    await asyncio.wait_for(asyncio.shield(assemble_task), timeout=20.0)
+                except asyncio.TimeoutError:
+                    yield _sse({"type": "heartbeat", "elapsed_s": elapsed()})
+
+            await assemble_task  # raise any exception from the thread
+            d3 = round(time.time() - t3, 1)
+
+            logger.info("Video assembly complete  session=%s  path=%s  duration=%.1fs", session_id, video_path, d3)
+
+            # ── Persist and signal done ───────────────────────────────────────
+            _update_session(session_id, video_path=video_path)
+
+            total = elapsed()
+            logger.info("Video generation done  session=%s  frames=%d  tts=%s  total=%.1fs  (export=%.1fs tts=%.1fs assembly=%.1fs)",
+                        session_id, len(normalized_pngs), tts_backend, total, d1, d2, d3)
+            yield _sse({
+                "type":        "done",
+                "session_id":  session_id,
+                "video_path":  video_path,
+                "frame_count": len(normalized_pngs),
+                "tts_backend": tts_backend,
+                "elapsed_s":   total,
+                "stage_times": {"export_s": d1, "tts_s": d2, "assembly_s": d3},
+            })
+
+        except Exception as e:
+            logger.error("Video SSE stream failed  session=%s  elapsed=%.1fs", session_id, elapsed(), exc_info=True)
+            yield _sse({"type": "error", "message": str(e), "elapsed_s": elapsed()})
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream", headers=_SSE_HEADERS)
 
 
 @app.get("/api/sessions/{session_id}/frames-meta")

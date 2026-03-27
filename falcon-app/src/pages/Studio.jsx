@@ -78,11 +78,17 @@ export default function Studio() {
     )
   }, [])
 
-  // Run video generation for a turn; updates videoPhase when done
+  // Run video generation for a turn; streams SSE progress and updates videoPhase
   const runVideoGenerationForTurn = useCallback(async (tempId, sessionId, onDone) => {
     try {
-      const data = await api.generateVideo(sessionId)
-      setTurnVideoPhase(tempId, sessionId, data.video_path ? 'ready' : 'error')
+      await api.generateVideoStream(sessionId, (event) => {
+        if (event.type === 'done') {
+          setTurnVideoPhase(tempId, sessionId, event.video_path ? 'ready' : 'error')
+        } else if (event.type === 'error') {
+          setTurnVideoPhase(tempId, sessionId, 'error')
+        }
+        // stage / tts_progress events are available here for future progress UI
+      })
     } catch {
       setTurnVideoPhase(tempId, sessionId, 'error')
     } finally {
