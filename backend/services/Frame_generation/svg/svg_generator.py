@@ -58,18 +58,76 @@ _STRIP_IF_EMPTY = re.compile(
     re.IGNORECASE,
 )
 
+# Matches a bare & that is NOT already the start of a valid XML entity.
+# Valid entities: &amp; &lt; &gt; &quot; &apos; &#123; &#xAB;
+# Everything else (e.g. "AT&T", "R&D") must become &amp;
+_BARE_AMPERSAND = re.compile(
+    r'&(?!(?:#\d+|#x[0-9a-fA-F]+|[a-zA-Z][a-zA-Z0-9]*);)'
+)
+
+# XML 1.0 forbids control characters except tab (0x09), newline (0x0A),
+# and carriage return (0x0D). LLMs occasionally emit these inside text or
+# attribute values — cairosvg's XML parser throws "invalid token" for them.
+_CONTROL_CHARS = re.compile(r'[\x00-\x08\x0B\x0C\x0E-\x1F]')
+
+
+def _fix_text_nodes(svg: str) -> str:
+    """
+    Escape bare < and > characters inside SVG text content.
+
+    Text nodes sit between a closing > and the next opening <.
+    The LLM sometimes writes things like:
+        <text>a < b</text>   or   <text>x > 0</text>
+    which are invalid XML tokens — cairosvg's parser rejects them.
+
+    We only touch content between tags (text nodes), never the tags themselves.
+    """
+    def _escape(m: re.Match) -> str:
+        # Replace only bare < and > (& was already fixed before this runs)
+        return m.group(0).replace('<', '&lt;').replace('>', '&gt;')
+
+    # Match text between > and <, excluding whitespace-only runs
+    return re.sub(r'(?<=>)([^<]+)(?=<)', _escape, svg)
+
+
 def _sanitize_svg(svg: str) -> str:
     """
-    Remove attribute='""' patterns that cause cairosvg parse errors.
+    Fix common LLM mistakes that cause cairosvg XML parse errors.
 
-    cairosvg is strict: stroke-dasharray="" tries to parse an empty string
-    as a length list and raises ValueError. Same for marker-end="" (expects
-    a URL or 'none') and several other presentation attributes.
+    Three classes of fix, applied in order:
 
-    This sanitizer runs on every SVG before it is sent to cairosvg, so the
-    LLM does not need to be perfect about omitting these attributes.
+    1. Strip empty presentation attributes  (e.g. stroke-dasharray="")
+       cairosvg tries to parse the empty string as a value and raises
+       ValueError.  Removing the attribute entirely is safe — the element
+       just inherits or uses the default.
+
+    2. Escape bare ampersands in text/attribute content  (e.g. AT&T → AT&amp;T)
+       & is only legal in XML as the start of an entity reference (&amp; etc.).
+       LLMs frequently emit raw company names, URLs, and formulas with bare &.
+
+    3. Escape bare < and > inside text nodes  (e.g. a < b → a &lt; b)
+       < is never legal outside a tag; > is legal but flagged as an error
+       by strict XML parsers like cairosvg.
+
+    Runs on every SVG before cairosvg, so the LLM does not need to be
+    perfectly compliant — we catch the most common mistakes here.
     """
-    return _STRIP_IF_EMPTY.sub("", svg)
+    # Step 0 — strip XML-illegal control characters (null bytes, BEL, etc.)
+    #           Must run first — these can hide inside any token and confuse
+    #           every subsequent regex.
+    svg = _CONTROL_CHARS.sub("", svg)
+
+    # Step 1 — strip empty presentation attributes
+    svg = _STRIP_IF_EMPTY.sub("", svg)
+
+    # Step 2 — fix bare ampersands (must run before step 3 so we don't
+    #           double-escape the & in &lt; / &gt; added by step 3)
+    svg = _BARE_AMPERSAND.sub("&amp;", svg)
+
+    # Step 3 — fix bare < > in text nodes
+    svg = _fix_text_nodes(svg)
+
+    return svg
 
 
 # ---------------------------------------------------------------------------

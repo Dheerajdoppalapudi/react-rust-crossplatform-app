@@ -1,46 +1,44 @@
 """
-Video Assembler — stitches frame images/clips + audio files into a final .mp4.
+Video Assembler — stitches frame images/clips + audio into a final .mp4.
+
+Replaces the MoviePy implementation with direct ffmpeg subprocess calls.
+
+Why: MoviePy pumps every output frame through Python → Unix pipe → ffmpeg,
+which means ~3 GB of raw pixel data flowing through Python for a 3-frame
+1920×1080 video.  Calling ffmpeg directly bypasses Python entirely — the
+encoder reads PNGs and audio natively, cutting assembly from ~60s to ~3–5s.
+
+Pipeline:
+  1. Per frame: build an intermediate clip (PNG → looped video, or MP4 trim/pad)
+  2. Write an ffmpeg concat list
+  3. Concat all clips with -c copy  (no re-encode, extremely fast)
+  4. Clean up temp files
 
 Supports two frame types:
-  PNG  → static ImageClip with subtle Ken Burns zoom (1.0 → 1.02)
-  MP4  → VideoFileClip (full Manim animation); if audio is longer than the
-         animation, the last frame is frozen to fill the remaining duration.
-         A subtitle caption bar is composited on top.
+  PNG  → static image held for audio duration   (-loop 1 -t <dur>)
+  MP4  → Manim animation padded/trimmed to audio length
 
-Pipeline per frame:
-  1. Detect frame type (.mp4 vs .png)
-  2. Set duration = audio duration (preferred) or text estimate
-  3. For .mp4: freeze last frame if animation is shorter than audio
-  4. For .mp4: composite a semi-transparent subtitle caption bar on top
-  5. Attach narration audio
-  6. Add 0.4s crossfade in/out to adjacent frames
+Final output: 1920×1080, 24 fps, H.264 + AAC.
 
-Final output: 1920×1080, 24 fps, H.264 video + AAC audio.
-
-Requires: pip install moviepy  (version 2.x)
+Requires: ffmpeg in system PATH  (already required by MoviePy)
 """
 
 import logging
 import os
+import shutil
+import subprocess
+import tempfile
 from typing import Optional
-
-import numpy as np
 
 from services.video.tts_service import estimate_duration
 
 logger = logging.getLogger(__name__)
 
-# Crossfade duration between consecutive frames (seconds)
-FADE_DURATION = 0.4
-
-# Output video settings
+VIDEO_W   = 1920
+VIDEO_H   = 1080
 VIDEO_FPS = 24
-VIDEO_CODEC = "libx264"
-AUDIO_CODEC = "aac"
 
-# Subtitle bar settings (must match frame_exporter for visual consistency)
-_SUBTITLE_BAR_H = 90
-_SUBTITLE_FONT_SIZE = 38
+# Font candidates for Manim subtitle drawtext (same list as frame_exporter)
 _FONT_CANDIDATES = [
     "/System/Library/Fonts/Helvetica.ttc",
     "/Library/Fonts/Arial.ttf",
@@ -50,117 +48,230 @@ _FONT_CANDIDATES = [
 ]
 
 
-def _make_subtitle_overlay(caption: str, video_w: int, video_h: int, duration: float):
-    """
-    Render a semi-transparent subtitle bar as a moviepy ImageClip overlay.
+# ---------------------------------------------------------------------------
+# ffmpeg helpers
+# ---------------------------------------------------------------------------
 
-    Returns an ImageClip (RGBA) sized video_w × video_h, positioned at (0,0),
-    with the caption centered in a dark bar at the bottom of the frame.
-    The overlay is fully transparent except for the subtitle bar area.
+def _get_ffmpeg_exe() -> Optional[str]:
     """
-    from moviepy import ImageClip
-    from PIL import Image, ImageDraw, ImageFont
+    Locate the ffmpeg binary, trying two sources in order:
 
-    # Load best available font
-    font = None
+    1. System PATH  — present on most Linux servers ('ffmpeg' command).
+    2. imageio-ffmpeg bundle — installed automatically with MoviePy via pip.
+       This is the binary MoviePy itself has always used, so it is always
+       available in environments where MoviePy was installed even if ffmpeg
+       is not on the system PATH.
+
+    Returns the executable path/name, or None if neither source works.
+    """
+    # 1. System ffmpeg
+    if shutil.which("ffmpeg"):
+        return "ffmpeg"
+    # 2. imageio-ffmpeg bundled binary (ships with moviepy)
+    try:
+        import imageio_ffmpeg  # type: ignore
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        return None
+
+
+# Resolved once at import time so every _ffmpeg() call uses the same binary.
+_FFMPEG_EXE: Optional[str] = _get_ffmpeg_exe()
+
+
+def _ffmpeg(args: list[str]) -> None:
+    """
+    Run ffmpeg with the given arguments, raising RuntimeError on failure.
+
+    -y           overwrite output without asking
+    -hide_banner suppress the version/config banner
+    -loglevel error  only print errors (keeps logs clean)
+    """
+    if not _FFMPEG_EXE:
+        raise RuntimeError("ffmpeg not found — install ffmpeg or pip install imageio-ffmpeg")
+    cmd = [_FFMPEG_EXE, "-y", "-hide_banner", "-loglevel", "error"] + args
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(f"ffmpeg failed (exit {result.returncode}):\n{result.stderr.strip()}")
+
+
+def _probe_duration(path: str) -> Optional[float]:
+    """
+    Return the media duration in seconds using ffprobe (or ffmpeg -i as fallback).
+    Returns None if the file is missing or the probe fails.
+    """
+    if not _FFMPEG_EXE:
+        return None
+    # Derive ffprobe path from the ffmpeg binary location
+    ffprobe = _FFMPEG_EXE.replace("ffmpeg", "ffprobe")
+    try:
+        result = subprocess.run(
+            [
+                ffprobe, "-v", "error",
+                "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+                path,
+            ],
+            capture_output=True,
+            text=True,
+        )
+        return float(result.stdout.strip())
+    except Exception:
+        return None
+
+
+def _find_font() -> Optional[str]:
+    """Return the first available system font path, or None."""
     for fp in _FONT_CANDIDATES:
         if os.path.exists(fp):
-            try:
-                from PIL import ImageFont as _IF
-                font = _IF.truetype(fp, _SUBTITLE_FONT_SIZE)
-                break
-            except Exception:
-                continue
-    if font is None:
-        from PIL import ImageFont as _IF
-        font = _IF.load_default()
-
-    # Create transparent overlay
-    overlay = Image.new("RGBA", (video_w, video_h), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(overlay)
-
-    bar_y = video_h - _SUBTITLE_BAR_H
-    draw.rectangle([(0, bar_y), (video_w, video_h)], fill=(0, 0, 0, 175))
-
-    bbox = draw.textbbox((0, 0), caption, font=font)
-    text_w = bbox[2] - bbox[0]
-    text_h = bbox[3] - bbox[1]
-    text_x = (video_w - text_w) // 2
-    text_y = bar_y + (_SUBTITLE_BAR_H - text_h) // 2 - bbox[1]
-    draw.text((text_x, text_y), caption, fill=(255, 255, 255, 255), font=font)
-
-    arr = np.array(overlay)   # shape: (H, W, 4) uint8
-    return ImageClip(arr).with_duration(duration)
+            return fp
+    return None
 
 
-def _make_clip(
-    frame_path: str,
+def _escape_drawtext(text: str) -> str:
+    """
+    Escape special characters for ffmpeg's drawtext filter value.
+    These characters have meaning in the filter graph syntax.
+    """
+    return (
+        text
+        .replace("\\", "\\\\")
+        .replace("'",  "\\'")
+        .replace(":",  "\\:")
+        .replace("[",  "\\[")
+        .replace("]",  "\\]")
+        .replace(",",  "\\,")
+    )
+
+
+# ---------------------------------------------------------------------------
+# Per-frame clip builders
+# ---------------------------------------------------------------------------
+
+def _build_png_clip(
+    png_path: str,
     audio_path: Optional[str],
-    duration: Optional[float],
-    caption: str = "",
-):
+    duration: float,
+    out_path: str,
+) -> None:
     """
-    Build a single video clip for one frame.
+    Build a video clip from a static PNG + optional audio.
 
-    PNG frames:
-      - Static ImageClip with Ken Burns zoom (1.0 → 1.02)
-      - Duration = audio duration or text estimate
-      - Subtitle already burned in by frame_exporter — no overlay added here
+    Uses -loop 1 to hold the image for the full duration.
+    -tune stillimage tells libx264 to optimise for static content.
 
-    MP4 frames (Manim animations):
-      - Full VideoFileClip (plays the animation naturally)
-      - If audio is longer than the animation, the last frame is frozen
-        to fill the gap (audio always wins)
-      - No Ken Burns (the animation already has motion)
-      - Semi-transparent subtitle caption bar composited on top
-
-    Returns a moviepy VideoClip ready for concatenation.
+    If no audio: inserts a silent AAC track so the clip has the same
+    stream layout as audio clips — required for -c copy concat.
     """
-    from moviepy import ImageClip, AudioFileClip, VideoFileClip, concatenate_videoclips, CompositeVideoClip
-
-    # Determine target duration from audio
     if audio_path and os.path.exists(audio_path):
-        audio_clip = AudioFileClip(audio_path)
-        target_duration = audio_clip.duration
+        _ffmpeg([
+            "-loop", "1", "-t", str(duration), "-i", png_path,
+            "-i", audio_path,
+            "-map", "0:v", "-map", "1:a",
+            "-c:v", "libx264", "-preset", "ultrafast", "-tune", "stillimage",
+            "-pix_fmt", "yuv420p",
+            "-vf", f"scale={VIDEO_W}:{VIDEO_H}",
+            "-r", str(VIDEO_FPS),
+            "-c:a", "aac", "-b:a", "192k",
+            "-shortest",
+            out_path,
+        ])
     else:
-        audio_clip = None
-        target_duration = duration or 5.0  # hard fallback
+        # Generate a silent audio stream so all clips are stream-consistent
+        _ffmpeg([
+            "-loop", "1", "-t", str(duration), "-i", png_path,
+            "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100",
+            "-map", "0:v", "-map", "1:a",
+            "-c:v", "libx264", "-preset", "ultrafast", "-tune", "stillimage",
+            "-pix_fmt", "yuv420p",
+            "-vf", f"scale={VIDEO_W}:{VIDEO_H}",
+            "-r", str(VIDEO_FPS),
+            "-c:a", "aac", "-b:a", "192k",
+            "-t", str(duration),
+            out_path,
+        ])
 
-    is_video = frame_path.lower().endswith(".mp4")
 
-    if is_video:
-        base_clip = VideoFileClip(frame_path).resized((1920, 1080))
-        anim_duration = base_clip.duration
+def _build_video_clip(
+    mp4_path: str,
+    audio_path: Optional[str],
+    fallback_duration: float,
+    caption: str,
+    out_path: str,
+) -> None:
+    """
+    Build a clip from a Manim MP4 animation + optional audio.
 
-        if anim_duration < target_duration:
-            # Freeze last frame to fill the remaining time
-            freeze_duration = target_duration - anim_duration
-            last_frame = (
-                ImageClip(base_clip.get_frame(anim_duration - 0.001))
-                .with_duration(freeze_duration)
-            )
-            clip = concatenate_videoclips([base_clip, last_frame])
-        else:
-            # Animation is longer than audio — trim to audio length
-            clip = base_clip.subclipped(0, target_duration)
+    Duration logic (audio always wins):
+      - animation shorter than audio → pad last frame with tpad filter
+      - animation longer  than audio → trim with -t
 
-        # Composite subtitle caption bar on top of the Manim animation
-        if caption:
-            subtitle = _make_subtitle_overlay(caption, 1920, 1080, clip.duration)
-            clip = CompositeVideoClip([clip, subtitle])
+    Caption: rendered directly by ffmpeg's drawbox + drawtext filters,
+    matching the subtitle bar style used by frame_exporter for PNG frames.
+    """
+    video_dur = _probe_duration(mp4_path) or fallback_duration
+    audio_dur = (
+        _probe_duration(audio_path)
+        if audio_path and os.path.exists(audio_path)
+        else None
+    )
+    target_dur = audio_dur or fallback_duration
 
+    # ── Build video filter chain ──────────────────────────────────────────────
+    vf_parts = [f"scale={VIDEO_W}:{VIDEO_H}"]
+
+    if caption:
+        font       = _find_font()
+        font_arg   = f":fontfile={font}" if font else ""
+        bar_y      = VIDEO_H - 90
+        escaped    = _escape_drawtext(caption)
+        vf_parts.append(
+            f"drawbox=y={bar_y}:color=black@0.69:width=iw:height=90:t=fill"
+        )
+        vf_parts.append(
+            f"drawtext{font_arg}:text='{escaped}'"
+            f":fontsize=38:fontcolor=white"
+            f":x=(w-tw)/2:y={bar_y}+(90-th)/2"
+        )
+
+    # tpad must be last in the chain (it pads in the time dimension)
+    if audio_dur and video_dur < audio_dur:
+        freeze = round(audio_dur - video_dur, 3)
+        vf_parts.append(f"tpad=stop_mode=clone:stop_duration={freeze}")
+
+    vf = ",".join(vf_parts)
+
+    if audio_path and os.path.exists(audio_path):
+        _ffmpeg([
+            "-i", mp4_path,
+            "-i", audio_path,
+            "-map", "0:v", "-map", "1:a",
+            "-vf", vf,
+            "-c:v", "libx264", "-preset", "ultrafast",
+            "-pix_fmt", "yuv420p",
+            "-r", str(VIDEO_FPS),
+            "-c:a", "aac", "-b:a", "192k",
+            "-t", str(target_dur),
+            out_path,
+        ])
     else:
-        # Static PNG: apply Ken Burns zoom (1.0 → 1.02 over clip duration)
-        # Subtitle was already burned in by frame_exporter — no overlay needed
-        clip = ImageClip(frame_path).with_duration(target_duration)
-        clip = clip.resized(lambda t: 1 + 0.02 * (t / target_duration))
+        _ffmpeg([
+            "-i", mp4_path,
+            "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100",
+            "-map", "0:v", "-map", "1:a",
+            "-vf", vf,
+            "-c:v", "libx264", "-preset", "ultrafast",
+            "-pix_fmt", "yuv420p",
+            "-r", str(VIDEO_FPS),
+            "-c:a", "aac", "-b:a", "192k",
+            "-t", str(target_dur),
+            out_path,
+        ])
 
-    # Attach audio
-    if audio_clip is not None:
-        clip = clip.with_audio(audio_clip)
 
-    return clip
-
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
 
 def assemble(
     frame_paths: list[str],
@@ -170,77 +281,104 @@ def assemble(
     captions: Optional[list[str]] = None,
 ) -> str:
     """
-    Assemble frame images/clips + audio into a final .mp4 video.
+    Assemble frame images/clips + audio into a final .mp4 using ffmpeg.
+
+    Steps:
+      1. Build one intermediate .mp4 clip per frame in a temp directory
+      2. Write an ffmpeg concat list (plain text, one 'file' entry per clip)
+      3. Concat with -c copy — no re-encode, just mux the streams together
+      4. Remove temp directory
+
+    The -c copy concat step is what makes this fast: ffmpeg copies the
+    already-encoded H.264/AAC streams straight into the container without
+    touching a single frame.
 
     Args:
-        frame_paths:     Per-frame paths — .png (SVG/Mermaid/placeholder) or
-                         .mp4 (Manim animations). Mixed lists are supported.
-        audio_paths:     Per-frame .mp3 paths (None = TTS failed for that frame).
-        narration_texts: Per-frame narration strings (duration fallback when
-                         audio_path is None).
-        output_path:     Absolute path for the output .mp4 file.
-        captions:        Per-frame caption strings used for subtitle overlay on
-                         Manim .mp4 frames (optional; None = no subtitle overlay).
+        frame_paths:     Per-frame file paths (.png or .mp4). None = skip.
+        audio_paths:     Per-frame .mp3 paths. None = silent audio for that frame.
+        narration_texts: Per-frame narration (used as duration fallback).
+        output_path:     Destination .mp4 path.
+        captions:        Per-frame caption strings (Manim subtitle overlay only;
+                         PNG captions are already burned in by frame_exporter).
 
     Returns:
-        output_path (the same value passed in).
+        output_path
     """
-    from moviepy import concatenate_videoclips
-    from moviepy.video.fx import CrossFadeIn, CrossFadeOut
-
     if not frame_paths:
         raise ValueError("No frames to assemble — frame_paths is empty")
 
     captions = captions or [""] * len(frame_paths)
-
-    clips = []
-    for i, (frame_path, audio_path, narration, caption) in enumerate(
-        zip(frame_paths, audio_paths, narration_texts, captions)
-    ):
-        logger.debug("Building clip %d/%d  path=%s", i + 1, len(frame_paths), frame_path)
-        fallback_duration = estimate_duration(narration)
-        clip = _make_clip(frame_path, audio_path, fallback_duration, caption=caption)
-        logger.debug("Clip %d duration=%.2fs", i + 1, clip.duration)
-
-        # Apply crossfade transitions
-        if i > 0:
-            clip = clip.with_effects([CrossFadeIn(FADE_DURATION)])
-        if i < len(frame_paths) - 1:
-            clip = clip.with_effects([CrossFadeOut(FADE_DURATION)])
-
-        clips.append(clip)
-
-    # Concatenate with overlapping fades
-    final = concatenate_videoclips(clips, padding=-FADE_DURATION, method="compose")
-    logger.info("Concatenated %d clips  total_duration=%.2fs", len(clips), final.duration)
-
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
-    final.write_videofile(
-        output_path,
-        fps=VIDEO_FPS,
-        codec=VIDEO_CODEC,
-        audio_codec=AUDIO_CODEC,
-        logger=None,       # suppress verbose moviepy progress bars in API context
-        temp_audiofile=output_path + ".temp_audio.m4a",
-        # ultrafast preset cuts encode time by ~6x vs the default "medium" preset
-        # with no perceptible quality difference for educational slideshows.
-        # medium: ~100s on 2 vCPU  →  ultrafast: ~12–15s on 2 vCPU
-        ffmpeg_params=["-preset", "ultrafast"],
-    )
+    temp_dir = tempfile.mkdtemp(prefix="video_assemble_")
+    logger.info("Assembly temp dir: %s", temp_dir)
 
-    # Cleanup temp audio file if moviepy left it behind
-    temp = output_path + ".temp_audio.m4a"
-    if os.path.exists(temp):
-        os.remove(temp)
+    try:
+        # ── Step 1: build one clip per frame ──────────────────────────────────
+        clip_paths: list[str] = []
+
+        for i, (frame_path, audio_path, narration, caption) in enumerate(
+            zip(frame_paths, audio_paths, narration_texts, captions)
+        ):
+            if not frame_path or not os.path.exists(frame_path):
+                logger.warning("Frame %d path missing or None — skipping", i)
+                continue
+
+            clip_out      = os.path.join(temp_dir, f"clip_{i:03d}.mp4")
+            fallback_dur  = estimate_duration(narration)
+
+            try:
+                if frame_path.lower().endswith(".mp4"):
+                    logger.debug("Building video clip %d  path=%s", i, frame_path)
+                    _build_video_clip(frame_path, audio_path, fallback_dur, caption, clip_out)
+                else:
+                    logger.debug("Building image clip %d  path=%s", i, frame_path)
+                    audio_dur = (
+                        _probe_duration(audio_path)
+                        if audio_path and os.path.exists(audio_path)
+                        else None
+                    )
+                    _build_png_clip(frame_path, audio_path, audio_dur or fallback_dur, clip_out)
+
+                clip_paths.append(clip_out)
+                logger.debug("Clip %d ready  path=%s", i, clip_out)
+
+            except Exception:
+                logger.error("Failed to build clip %d — skipping", i, exc_info=True)
+
+        if not clip_paths:
+            raise ValueError("All frames failed — no clips to concat")
+
+        # ── Step 2: write concat list ─────────────────────────────────────────
+        # ffmpeg concat demuxer format: one "file '<path>'" line per clip
+        concat_list = os.path.join(temp_dir, "concat.txt")
+        with open(concat_list, "w") as f:
+            for cp in clip_paths:
+                f.write(f"file '{cp}'\n")
+
+        # ── Step 3: stream-copy concat (no re-encode) ─────────────────────────
+        # All clips share the same codec/resolution/fps so -c copy is safe.
+        # This step takes < 1s regardless of video length.
+        logger.info("Concatenating %d clips → %s", len(clip_paths), output_path)
+        _ffmpeg([
+            "-f", "concat", "-safe", "0", "-i", concat_list,
+            "-c", "copy",
+            output_path,
+        ])
+
+        logger.info("Assembly complete  output=%s", output_path)
+
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
 
     return output_path
 
 
 def moviepy_available() -> bool:
-    """Return True if moviepy 2.x is installed."""
-    try:
-        import moviepy  # noqa: F401
-        return True
-    except ImportError:
-        return False
+    """
+    Return True if ffmpeg is available (system PATH or imageio-ffmpeg bundle).
+
+    Kept as 'moviepy_available' for backward compatibility with main.py,
+    which uses this as the video-generation feature flag.
+    """
+    return _FFMPEG_EXE is not None

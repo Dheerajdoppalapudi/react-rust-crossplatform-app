@@ -17,8 +17,17 @@ Public API (unchanged — all callers continue to work):
 """
 
 import os
+import re
+import time
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Any
+
+# How many times to retry a 429 before giving up
+_MAX_RETRIES = 3
+
+# Regex to pull the suggested wait time out of OpenAI's error message:
+# "Please try again in 4.934s."
+_WAIT_RE = re.compile(r'try again in ([\d.]+)s', re.IGNORECASE)
 
 
 # ---------------------------------------------------------------------------
@@ -54,18 +63,34 @@ class OpenAIProvider(LLMProvider):
         self.model = model or os.getenv("OPENAI_MODEL", "gpt-4.1")
 
     def complete(self, messages: List[Dict[str, str]], **kwargs) -> Optional[str]:
-        try:
-            from openai import OpenAI
-            client = OpenAI()  # reads OPENAI_API_KEY from env automatically
-            response = client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                **kwargs,
-            )
-            return response.choices[0].message.content
-        except Exception as e:
-            print(f"[OpenAIProvider] Request failed: {e}")
-            return None
+        from openai import OpenAI, RateLimitError
+        client = OpenAI()  # reads OPENAI_API_KEY from env automatically
+
+        for attempt in range(_MAX_RETRIES):
+            try:
+                response = client.chat.completions.create(
+                    model=self.model,
+                    messages=messages,
+                    **kwargs,
+                )
+                return response.choices[0].message.content
+
+            except RateLimitError as e:
+                if attempt == _MAX_RETRIES - 1:
+                    print(f"[OpenAIProvider] Rate limit — all {_MAX_RETRIES} retries exhausted: {e}")
+                    return None
+                # OpenAI tells us exactly how long to wait in the error message.
+                # Parse it; fall back to an increasing fixed delay if not found.
+                match = _WAIT_RE.search(str(e))
+                wait = (float(match.group(1)) + 0.5) if match else (5.0 * (attempt + 1))
+                print(f"[OpenAIProvider] Rate limit — waiting {wait:.1f}s then retry {attempt + 1}/{_MAX_RETRIES - 1}")
+                time.sleep(wait)
+
+            except Exception as e:
+                print(f"[OpenAIProvider] Request failed: {e}")
+                return None
+
+        return None
 
 
 # ---------------------------------------------------------------------------
