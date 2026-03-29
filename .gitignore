@@ -25,5 +25,5 @@ Thumbs.db
 .vscode/
 .idea/
 backend/logs/app.log
-backend/logs/app.log
 /backend/logs
+references/
