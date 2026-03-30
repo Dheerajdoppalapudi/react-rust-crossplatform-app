@@ -1,12 +1,12 @@
-import { useState, useMemo, createContext, useContext } from 'react'
-import { Routes, Route, useLocation } from 'react-router-dom'
-import { Box, Toolbar, ThemeProvider, CssBaseline, createTheme } from '@mui/material'
-import Navbar from './components/common/Navbar'
+import { useState, useMemo, createContext, useContext, useCallback, useEffect } from 'react'
+import { Routes, Route, useLocation, useNavigate } from 'react-router-dom'
+import { Box, ThemeProvider, CssBaseline, createTheme } from '@mui/material'
 import Sidebar from './components/common/Sidebar'
 import Footer from './components/common/Footer'
 import AboutUs from './pages/AboutUs'
 import Settings from './pages/Settings'
 import Studio from './pages/Studio'
+import { api } from './services/api'
 
 // ─── Theme context ────────────────────────────────────────────────────────────
 export const ColorModeContext = createContext({ mode: 'light', toggle: () => {} })
@@ -40,12 +40,41 @@ const buildTheme = (mode) =>
 // ─── Pages that are full-height — no footer, no padding ──────────────────────
 const FULL_HEIGHT_PAGES = ['/studio']
 
+// ─── Pages that are edge-to-edge — no outer padding, keep footer ─────────────
+const NO_PADDING_PAGES  = ['/']
+
 // ─── App ─────────────────────────────────────────────────────────────────────
 function App() {
   const [mode, setMode] = useState(() => localStorage.getItem('falcon-theme') || 'light')
-  const [sidebarOpen, setSidebarOpen] = useState(false)
-  const location = useLocation()
+  const location  = useLocation()
+  const navigate  = useNavigate()
   const isFullHeight = FULL_HEIGHT_PAGES.includes(location.pathname)
+  const isNoPadding  = NO_PADDING_PAGES.includes(location.pathname)
+
+  // ── Conversations — lifted so Sidebar and Studio share them ──────────────
+  const [conversations, setConversations] = useState([])
+  const [activeConvId, setActiveConvId]   = useState(null)
+
+  const fetchConversations = useCallback(async () => {
+    try {
+      const data = await api.getConversations()
+      setConversations(Array.isArray(data) ? data : [])
+    } catch (err) {
+      console.error('[App] fetchConversations:', err)
+    }
+  }, [])
+
+  useEffect(() => { fetchConversations() }, [fetchConversations])
+
+  const handleSelectConv = useCallback((conv) => {
+    setActiveConvId(conv.id)
+    navigate('/studio')
+  }, [navigate])
+
+  const handleNewConversation = useCallback(() => {
+    setActiveConvId(null)
+    navigate('/studio')
+  }, [navigate])
 
   const colorMode = useMemo(() => ({
     mode,
@@ -64,24 +93,22 @@ function App() {
       <ThemeProvider theme={theme}>
         <CssBaseline />
         <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden', bgcolor: 'background.default' }}>
-          <Navbar onToggleSidebar={() => setSidebarOpen((p) => !p)} />
-          <Sidebar open={sidebarOpen} />
 
-          <Box
-            sx={{
-              flexGrow: 1,
-              display: 'flex',
-              flexDirection: 'column',
-              height: '100vh',        // exact viewport height — prevents page-level scroll
-              overflow: 'hidden',
-            }}
-          >
-            <Toolbar sx={{ minHeight: '52px !important' }} />
+          <Sidebar
+            conversations={conversations}
+            activeConvId={activeConvId}
+            onSelectConv={handleSelectConv}
+            onNewConversation={handleNewConversation}
+            themeMode={mode}
+            onThemeToggle={colorMode.toggle}
+          />
+
+          <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
             <Box
               component="main"
               sx={{
                 flex: 1,
-                p: isFullHeight ? 0 : 3,
+                p: (isFullHeight || isNoPadding) ? 0 : 3,
                 display: 'flex',
                 flexDirection: 'column',
                 minHeight: 0,
@@ -90,14 +117,21 @@ function App() {
               }}
             >
               <Routes>
-                <Route path="/"       element={<AboutUs />} />
-                <Route path="/studio" element={<Studio />} />
+                <Route path="/"         element={<AboutUs />} />
+                <Route path="/studio"   element={
+                  <Studio
+                    activeConvId={activeConvId}
+                    onActiveConvIdChange={setActiveConvId}
+                    onConversationsRefresh={fetchConversations}
+                  />
+                } />
                 <Route path="/settings" element={<Settings />} />
               </Routes>
             </Box>
 
             {!isFullHeight && <Footer />}
           </Box>
+
         </Box>
       </ThemeProvider>
     </ColorModeContext.Provider>

@@ -1,10 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Box, Typography, Tooltip, IconButton, useTheme } from '@mui/material'
-import AutoAwesomeIcon  from '@mui/icons-material/AutoAwesome'
-import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
+import { Box, Tooltip, IconButton, useTheme } from '@mui/material'
 import NotesOutlinedIcon from '@mui/icons-material/NotesOutlined'
 
-import HistorySidebar      from '../components/Studio/HistorySidebar'
 import LoadingView         from '../components/Studio/LoadingView'
 import EmptyView           from '../components/Studio/EmptyView'
 import ConversationThread  from '../components/Studio/ConversationThread'
@@ -14,7 +11,7 @@ import LearningView        from '../components/Studio/LearningView/index'
 import { api } from '../services/api'
 
 // ─── Studio ────────────────────────────────────────────────────────────────────
-export default function Studio() {
+export default function Studio({ activeConvId, onActiveConvIdChange, onConversationsRefresh }) {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
 
@@ -31,20 +28,13 @@ export default function Studio() {
   // ── Prompt input ─────────────────────────────────────────────────────────────
   const [prompt, setPrompt]   = useState('')
   const inputRef              = useRef(null)
-  const threadBottomRef       = useRef(null)  // for auto-scroll when a new turn is added
+  const threadBottomRef       = useRef(null)
   const contentScrollRef      = useRef(null)
 
-  // ── Conversations list (sidebar) ──────────────────────────────────────────────
-  const [conversations, setConversations] = useState([])
-
-  // ── Active conversation ───────────────────────────────────────────────────────
-  // activeConvId — which conversation is open
-  // turns        — array of turn state objects for the active conversation
-  const [activeConvId, setActiveConvId] = useState(null)
-  const [turns, setTurns]               = useState([])
+  // ── Active conversation turns ─────────────────────────────────────────────────
+  const [turns, setTurns] = useState([])
 
   // True while the FIRST turn of a brand-new conversation is being submitted
-  // (used to show the full-screen LoadingView before any turns exist)
   const [isBootstrapping, setIsBootstrapping]   = useState(false)
   const [bootstrapStage, setBootstrapStage]     = useState('planning')
   const [bootstrapPrompt, setBootstrapPrompt]   = useState('')
@@ -56,18 +46,10 @@ export default function Studio() {
   // ── Pause context ─────────────────────────────────────────────────────────────
   const [pauseContext, setPauseContext] = useState(null)
 
+  // ── Track which convId we've already loaded to avoid duplicate loads ──────────
+  const loadedConvIdRef = useRef(null)
+
   // ── Helpers ───────────────────────────────────────────────────────────────────
-
-  const fetchConversations = useCallback(async () => {
-    try {
-      const data = await api.getConversations()
-      setConversations(Array.isArray(data) ? data : [])
-    } catch (err) {
-      console.error('[Studio] fetchConversations:', err)
-    }
-  }, [])
-
-  useEffect(() => { fetchConversations() }, [fetchConversations])
 
   // Update the videoPhase on a specific turn (matched by tempId or real id)
   const setTurnVideoPhase = useCallback((tempId, sessionId, phase) => {
@@ -87,7 +69,6 @@ export default function Studio() {
         } else if (event.type === 'error') {
           setTurnVideoPhase(tempId, sessionId, 'error')
         }
-        // stage / tts_progress events are available here for future progress UI
       })
     } catch {
       setTurnVideoPhase(tempId, sessionId, 'error')
@@ -103,13 +84,12 @@ export default function Studio() {
     }
   }, [turns.length])
 
-  // ── Load a conversation from history ──────────────────────────────────────────
-  const loadConversation = useCallback(async (conv) => {
-    setActiveConvId(conv.id)
+  // ── Load conversation by id ───────────────────────────────────────────────────
+  const loadConversationById = useCallback(async (convId) => {
     setTurns([])
     if (contentScrollRef.current) contentScrollRef.current.scrollTop = 0
 
-    const data = await api.getConversation(conv.id)
+    const data = await api.getConversation(convId)
     if (!data) return
 
     const loadedTurns = data.turns.map((t) => ({
@@ -150,6 +130,25 @@ export default function Studio() {
     })
   }, [runVideoGenerationForTurn])
 
+  // Keep a ref so useEffect doesn't need loadConversationById in its dep array
+  const loadConversationByIdRef = useRef(loadConversationById)
+  loadConversationByIdRef.current = loadConversationById
+
+  // ── React to activeConvId prop changes (driven by Sidebar selection) ──────────
+  useEffect(() => {
+    if (activeConvId && activeConvId !== loadedConvIdRef.current) {
+      loadedConvIdRef.current = activeConvId
+      loadConversationByIdRef.current(activeConvId)
+    } else if (!activeConvId && loadedConvIdRef.current !== null) {
+      // Sidebar "New Chat" was clicked — clear all local state
+      loadedConvIdRef.current = null
+      setTurns([])
+      setPrompt('')
+      setIsBootstrapping(false)
+      if (contentScrollRef.current) contentScrollRef.current.scrollTop = 0
+    }
+  }, [activeConvId])
+
   // ── Submit handler ────────────────────────────────────────────────────────────
   const handleGenerate = useCallback(async () => {
     if (!prompt.trim() || isBootstrapping || turns.some((t) => t.isLoading)) return
@@ -161,14 +160,12 @@ export default function Studio() {
     const isFirstTurn = !activeConvId
 
     if (isFirstTurn) {
-      // Show full-screen loader before we have any turns
       setIsBootstrapping(true)
       setBootstrapStage('planning')
       setBootstrapPrompt(submittedPrompt)
       setTurns([])
       if (contentScrollRef.current) contentScrollRef.current.scrollTop = 0
     } else {
-      // Append a loading placeholder turn to the thread
       setTurns((prev) => [...prev, {
         tempId,
         id:               null,
@@ -185,17 +182,13 @@ export default function Studio() {
       }])
     }
 
-    // Stage animation timers (only useful for the first turn bootstrap)
-    const t1 = isFirstTurn ? setTimeout(() => setBootstrapStage('generating'), 2500) : null
-    const t2 = isFirstTurn ? setTimeout(() => setBootstrapStage('rendering'),  6000) : null
-
-    // Stage animation for in-thread loading turns
+    const t1  = isFirstTurn  ? setTimeout(() => setBootstrapStage('generating'), 2500) : null
+    const t2  = isFirstTurn  ? setTimeout(() => setBootstrapStage('rendering'),  6000) : null
     const it1 = !isFirstTurn ? setTimeout(() =>
       setTurns((p) => p.map((t) => t.tempId === tempId ? { ...t, stage: 'generating' } : t)), 2500) : null
     const it2 = !isFirstTurn ? setTimeout(() =>
       setTurns((p) => p.map((t) => t.tempId === tempId ? { ...t, stage: 'rendering' }  : t)), 6000) : null
 
-    // Capture and clear pause context before the async call
     const capturedPauseContext = pauseContext
     setPauseContext(null)
 
@@ -227,11 +220,13 @@ export default function Studio() {
       }
 
       if (isFirstTurn) {
-        setActiveConvId(data.conversation_id)
+        // Mark as loaded before notifying parent to prevent useEffect re-load
+        loadedConvIdRef.current = data.conversation_id
+        onActiveConvIdChange(data.conversation_id)
         setBootstrapStage('frames')
         setBootstrapFrames({ framesData, sessionId: data.session_id })
         setTurns([realTurn])
-        await fetchConversations()
+        await onConversationsRefresh()
         setBootstrapStage('video')
         runVideoGenerationForTurn(tempId, data.session_id, () => {
           setIsBootstrapping(false)
@@ -239,7 +234,7 @@ export default function Studio() {
         })
       } else {
         setTurns((prev) => prev.map((t) => t.tempId === tempId ? realTurn : t))
-        await fetchConversations()
+        await onConversationsRefresh()
         runVideoGenerationForTurn(tempId, data.session_id)
       }
     } catch (err) {
@@ -247,19 +242,19 @@ export default function Studio() {
       if (isFirstTurn) {
         setIsBootstrapping(false)
         setTurns([])
-        setActiveConvId(null)
+        onActiveConvIdChange(null)
       } else {
         setTurns((prev) => prev.map((t) =>
           t.tempId === tempId ? { ...t, isLoading: false, videoPhase: 'error' } : t
         ))
       }
     } finally {
-      if (t1) clearTimeout(t1)
-      if (t2) clearTimeout(t2)
+      if (t1)  clearTimeout(t1)
+      if (t2)  clearTimeout(t2)
       if (it1) clearTimeout(it1)
       if (it2) clearTimeout(it2)
     }
-  }, [prompt, isBootstrapping, turns, activeConvId, notesEnabled, pauseContext, fetchConversations, runVideoGenerationForTurn])
+  }, [prompt, isBootstrapping, turns, activeConvId, notesEnabled, pauseContext, onActiveConvIdChange, onConversationsRefresh, runVideoGenerationForTurn])
 
 
   const handleKeyDown = (e) => {
@@ -267,7 +262,8 @@ export default function Studio() {
   }
 
   const handleNewConversation = () => {
-    setActiveConvId(null)
+    loadedConvIdRef.current = null
+    onActiveConvIdChange(null)
     setTurns([])
     setPrompt('')
     setIsBootstrapping(false)
@@ -287,7 +283,6 @@ export default function Studio() {
     inputRef.current?.focus()
   }, [turns, inputRef])
 
-  // Derive follow-up data from the last completed turn
   const lastTurn = turns.filter((t) => t.intent_type).at(-1) ?? null
   const activeConversationMeta = activeConvId ? {
     id:                  activeConvId,
@@ -296,13 +291,10 @@ export default function Studio() {
   } : null
 
   const isAnyGenerating = isBootstrapping || turns.some((t) => t.isLoading)
-
-  // Decide what to render in the scrollable middle
   const showEmpty  = !isBootstrapping && turns.length === 0
   const showLoader = isBootstrapping
   const showThread = !isBootstrapping && turns.length > 0
 
-  // ── Ask from learning canvas — pre-fill prompt + context, switch to chat ─────
   const handleLearnAsk = useCallback(({ question, sessionId, frameIndex, caption }) => {
     setPauseContext({ sessionId, frameIndex: frameIndex ?? undefined, caption: caption ?? undefined })
     setPrompt(question)
@@ -310,7 +302,7 @@ export default function Studio() {
     setTimeout(() => inputRef.current?.focus(), 120)
   }, [])
 
-  // ── Learning canvas — full-screen focus mode, bypasses Studio layout ─────────
+  // ── Learning canvas — full-screen focus mode ──────────────────────────────────
   if (viewMode === 'learn') {
     return (
       <LearningView
@@ -329,180 +321,140 @@ export default function Studio() {
       display: 'flex', flexDirection: 'column',
       overflow: 'hidden',
       bgcolor: 'background.default',
+      position: 'relative',
     }}>
 
-      {/* ── Fixed top header ─────────────────────────────────────────────────── */}
+      {/* ── Floating controls pill — top right ───────────────────────────────── */}
       <Box sx={{
-        px: 3, py: 1.5, flexShrink: 0,
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        bgcolor: 'background.paper',
-        borderBottom: `1px solid ${theme.palette.divider}`,
-        zIndex: 2,
+        position: 'absolute', top: 12, right: 16, zIndex: 10,
+        display: 'flex', alignItems: 'center', gap: 0.75,
+        bgcolor: isDark ? 'rgba(26,26,26,0.85)' : 'rgba(255,255,255,0.88)',
+        backdropFilter: 'blur(12px)',
+        border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)'}`,
+        borderRadius: '10px',
+        px: 0.75, py: 0.5,
+        boxShadow: isDark
+          ? '0 4px 16px rgba(0,0,0,0.4)'
+          : '0 4px 16px rgba(0,0,0,0.08)',
       }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <Box sx={{
-            width: 30, height: 30, borderRadius: '8px',
-            background: 'linear-gradient(135deg, #001AFF 0%, #6B44F8 100%)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <AutoAwesomeIcon sx={{ fontSize: 15, color: '#fff' }} />
-          </Box>
-          <Box>
-            <Typography sx={{ fontWeight: 700, fontSize: 14, color: theme.palette.text.primary, lineHeight: 1.2 }}>
-              Studio
-            </Typography>
-            <Typography sx={{ fontSize: 10.5, color: theme.palette.text.secondary }}>
-              Visual Learning Lab
-            </Typography>
-          </Box>
+        {/* Chat / Learn toggle */}
+        <Box sx={{
+          display: 'flex',
+          border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : '#e2e8f0'}`,
+          borderRadius: '7px',
+          p: 0.25, gap: 0.2,
+        }}>
+          {['Chat', 'Learn'].map((label) => {
+            const m      = label.toLowerCase()
+            const active = viewMode === m
+            return (
+              <Box
+                key={m}
+                onClick={() => setViewMode(m)}
+                sx={{
+                  px: 1.25, py: 0.35,
+                  borderRadius: '5px',
+                  cursor: 'pointer',
+                  fontSize: 11, fontWeight: 600,
+                  userSelect: 'none',
+                  bgcolor: active ? theme.palette.primary.main : 'transparent',
+                  color: active ? '#fff' : theme.palette.text.secondary,
+                  transition: 'all 0.15s',
+                }}
+              >
+                {label}
+              </Box>
+            )
+          })}
         </Box>
 
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          {/* View mode toggle */}
-          <Box sx={{
-            display: 'flex',
-            border: `1px solid ${isDark ? 'rgba(255,255,255,0.12)' : '#d1d5db'}`,
-            borderRadius: '8px',
-            p: 0.3, gap: 0.25,
-          }}>
-            {['Chat', 'Learn'].map((label) => {
-              const mode = label.toLowerCase()
-              const active = viewMode === mode
-              return (
-                <Box
-                  key={mode}
-                  onClick={() => setViewMode(mode)}
-                  sx={{
-                    px: 1.5, py: 0.4,
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    fontSize: 11, fontWeight: 600,
-                    userSelect: 'none',
-                    bgcolor: active ? theme.palette.primary.main : 'transparent',
-                    color: active ? '#fff' : theme.palette.text.secondary,
-                    transition: 'all 0.15s',
-                  }}
-                >
-                  {label}
-                </Box>
-              )
-            })}
-          </Box>
-
-          {/* Notes toggle */}
-          <Tooltip title={notesEnabled ? 'Notes on — click to disable' : 'Notes off — click to enable'}>
-            <IconButton
-              size="small"
-              onClick={toggleNotes}
-              sx={{
-                borderRadius: '8px', p: 0.75,
-                border: `1px solid ${notesEnabled
-                  ? (isDark ? 'rgba(79,110,255,0.5)' : '#c7d2fe')
-                  : (isDark ? 'rgba(255,255,255,0.18)' : '#d1d5db')}`,
-                color: notesEnabled
-                  ? theme.palette.primary.main
-                  : (isDark ? 'rgba(255,255,255,0.55)' : '#6b7280'),
-                backgroundColor: notesEnabled
-                  ? (isDark ? 'rgba(79,110,255,0.12)' : '#f0f4ff')
-                  : 'transparent',
-                '&:hover': {
-                  borderColor: isDark ? 'rgba(255,255,255,0.35)' : '#9ca3af',
-                  color: notesEnabled ? theme.palette.primary.main : (isDark ? '#fff' : '#374151'),
-                  backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#f3f4f6',
-                },
-                transition: 'all 0.15s',
-              }}
-            >
-              <NotesOutlinedIcon sx={{ fontSize: 16 }} />
-            </IconButton>
-          </Tooltip>
-
-          {/* New conversation */}
-          <Tooltip title="New conversation">
-            <IconButton
-              size="small"
-              onClick={handleNewConversation}
-              sx={{
-                color: theme.palette.primary.main,
-                border: `1px solid ${isDark ? 'rgba(79,110,255,0.3)' : '#c7d2fe'}`,
-                borderRadius: '8px', p: 0.75,
-                '&:hover': { backgroundColor: isDark ? 'rgba(79,110,255,0.08)' : '#f0f4ff' },
-              }}
-            >
-              <EditOutlinedIcon sx={{ fontSize: 16 }} />
-            </IconButton>
-          </Tooltip>
-        </Box>
+        {/* Notes toggle */}
+        <Tooltip title={notesEnabled ? 'Notes on' : 'Notes off'}>
+          <IconButton
+            size="small"
+            onClick={toggleNotes}
+            sx={{
+              borderRadius: '7px', p: 0.6,
+              border: `1px solid ${notesEnabled
+                ? (isDark ? 'rgba(79,110,255,0.45)' : '#c7d2fe')
+                : (isDark ? 'rgba(255,255,255,0.12)' : '#e2e8f0')}`,
+              color: notesEnabled
+                ? theme.palette.primary.main
+                : (isDark ? 'rgba(255,255,255,0.4)' : '#94a3b8'),
+              bgcolor: notesEnabled
+                ? (isDark ? 'rgba(79,110,255,0.1)' : '#f0f4ff')
+                : 'transparent',
+              '&:hover': {
+                borderColor: isDark ? 'rgba(255,255,255,0.25)' : '#94a3b8',
+                color: notesEnabled ? theme.palette.primary.main : (isDark ? '#fff' : '#374151'),
+              },
+              transition: 'all 0.15s',
+            }}
+          >
+            <NotesOutlinedIcon sx={{ fontSize: 15 }} />
+          </IconButton>
+        </Tooltip>
       </Box>
 
-      {/* ── Body — chat view (learn mode exits early above) ──────────────────── */}
-        <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
+      {/* ── Body ─────────────────────────────────────────────────────────────── */}
+      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
 
-          <HistorySidebar
-            conversations={conversations}
-            selectedId={activeConvId}
-            onSelect={loadConversation}
-          />
-
-          <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
-
-            {/* Scrollable middle */}
-            <Box
-              ref={contentScrollRef}
-              sx={{
-                flex: 1, overflowY: 'auto',
-                display: 'flex', flexDirection: 'column',
-                '&::-webkit-scrollbar': { width: 4 },
-                '&::-webkit-scrollbar-thumb': { backgroundColor: theme.palette.divider, borderRadius: 2 },
-              }}
-            >
-              {showLoader && (
-                <Box sx={{ width: '100%', maxWidth: 900, mx: 'auto', px: { xs: 2.5, sm: 4, md: 5 } }}>
-                  {bootstrapPrompt && (
-                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', pt: 3, pb: 1.5 }}>
-                      <Box sx={{
-                        maxWidth: '72%', px: 2.5, py: 1.5,
-                        backgroundColor: isDark ? '#242424' : '#f1f5f9',
-                        color: theme.palette.text.primary,
-                        borderRadius: '18px 18px 4px 18px',
-                        fontSize: 14.5, lineHeight: 1.6,
-                        border: `1px solid ${isDark ? '#2e2e2e' : '#e2e8f0'}`,
-                      }}>
-                        {bootstrapPrompt}
-                      </Box>
-                    </Box>
-                  )}
-                  <LoadingView stage={bootstrapStage} framesData={bootstrapFrames} />
+        {/* Scrollable middle */}
+        <Box
+          ref={contentScrollRef}
+          sx={{
+            flex: 1, overflowY: 'auto',
+            display: 'flex', flexDirection: 'column',
+            '&::-webkit-scrollbar': { width: 4 },
+            '&::-webkit-scrollbar-thumb': { backgroundColor: theme.palette.divider, borderRadius: 2 },
+          }}
+        >
+          {showLoader && (
+            <Box sx={{ width: '100%', maxWidth: 900, mx: 'auto', px: { xs: 2.5, sm: 4, md: 5 } }}>
+              {bootstrapPrompt && (
+                <Box sx={{ display: 'flex', justifyContent: 'flex-end', pt: 3, pb: 1.5 }}>
+                  <Box sx={{
+                    maxWidth: '72%', px: 2.5, py: 1.5,
+                    backgroundColor: isDark ? '#242424' : '#f1f5f9',
+                    color: theme.palette.text.primary,
+                    borderRadius: '18px 18px 4px 18px',
+                    fontSize: 14.5, lineHeight: 1.6,
+                    border: `1px solid ${isDark ? '#2e2e2e' : '#e2e8f0'}`,
+                  }}>
+                    {bootstrapPrompt}
+                  </Box>
                 </Box>
               )}
-
-              {showEmpty && (
-                <EmptyView onSuggestionClick={(s) => { setPrompt(s); inputRef.current?.focus() }} />
-              )}
-
-              {showThread && (
-                <>
-                  <ConversationThread turns={turns} onPauseAsk={handlePauseAsk} />
-                  <Box ref={threadBottomRef} sx={{ height: 1 }} />
-                </>
-              )}
+              <LoadingView stage={bootstrapStage} framesData={bootstrapFrames} />
             </Box>
+          )}
 
-            {/* Prompt bar */}
-            <PromptBar
-              prompt={prompt}
-              onPromptChange={setPrompt}
-              onSubmit={handleGenerate}
-              onKeyDown={handleKeyDown}
-              inputRef={inputRef}
-              isGenerating={isAnyGenerating}
-              activeConversation={activeConversationMeta}
-              onNewConversation={handleNewConversation}
-              pauseContext={pauseContext}
-              onClearPauseContext={() => setPauseContext(null)}
-            />
-          </Box>
+          {showEmpty && (
+            <EmptyView onSuggestionClick={(s) => { setPrompt(s); inputRef.current?.focus() }} />
+          )}
+
+          {showThread && (
+            <>
+              <ConversationThread turns={turns} onPauseAsk={handlePauseAsk} />
+              <Box ref={threadBottomRef} sx={{ height: 1 }} />
+            </>
+          )}
         </Box>
+
+        {/* Prompt bar */}
+        <PromptBar
+          prompt={prompt}
+          onPromptChange={setPrompt}
+          onSubmit={handleGenerate}
+          onKeyDown={handleKeyDown}
+          inputRef={inputRef}
+          isGenerating={isAnyGenerating}
+          activeConversation={activeConversationMeta}
+          onNewConversation={handleNewConversation}
+          pauseContext={pauseContext}
+          onClearPauseContext={() => setPauseContext(null)}
+        />
+      </Box>
 
     </Box>
   )
