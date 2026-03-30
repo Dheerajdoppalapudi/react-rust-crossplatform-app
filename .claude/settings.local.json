@@ -3,7 +3,9 @@
     "allow": [
       "Bash(find '/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend' -name *.sql -o -name migration* -o -name *schema*)",
       "Bash(sqlite3 \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/database.sqlite\" \".schema\")",
-      "Bash(python3 -c \"import imageio_ffmpeg; print\\(imageio_ffmpeg.get_ffmpeg_exe\\(\\)\\)\")"
+      "Bash(python3 -c \"import imageio_ffmpeg; print\\(imageio_ffmpeg.get_ffmpeg_exe\\(\\)\\)\")",
+      "Bash(npm install:*)",
+      "Bash(node -e \"const p = require\\(''./node_modules/framer-motion/package.json''\\); console.log\\(p.version\\)\")"
     ]
   }
 }
