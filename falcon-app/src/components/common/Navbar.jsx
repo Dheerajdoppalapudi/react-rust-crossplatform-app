@@ -44,7 +44,7 @@ const Navbar = ({ onToggleSidebar }) => {
             letterSpacing: '-0.3px',
           }}
         >
-          Falcon
+          Zenith
         </Typography>
 
         <Box sx={{ flexGrow: 1 }} />

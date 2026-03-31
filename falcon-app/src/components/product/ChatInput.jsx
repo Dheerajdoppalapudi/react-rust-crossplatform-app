@@ -166,7 +166,7 @@ const ChatInput = ({ onSend, disabled }) => {
               fullWidth
               multiline
               maxRows={6}
-              placeholder="Message Falcon..."
+              placeholder="Message Zenith..."
               value={value}
               onChange={(e) => setValue(e.target.value)}
               onKeyDown={handleKeyDown}
@@ -209,7 +209,7 @@ const ChatInput = ({ onSend, disabled }) => {
         </Box>
         <Box sx={{ textAlign: 'center', mt: 1.5 }}>
           <Box component="span" sx={{ fontSize: 12, color: '#b0b0b0' }}>
-            Falcon echoes your messages
+            Zenith echoes your messages
           </Box>
         </Box>
       </Box>

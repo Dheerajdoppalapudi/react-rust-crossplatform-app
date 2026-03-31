@@ -45,7 +45,7 @@ const NO_PADDING_PAGES  = ['/']
 
 // ─── App ─────────────────────────────────────────────────────────────────────
 function App() {
-  const [mode, setMode] = useState(() => localStorage.getItem('falcon-theme') || 'light')
+  const [mode, setMode] = useState(() => localStorage.getItem('zenith-theme') || 'light')
   const location  = useLocation()
   const navigate  = useNavigate()
   const isFullHeight = FULL_HEIGHT_PAGES.includes(location.pathname)
@@ -81,7 +81,7 @@ function App() {
     toggle: () =>
       setMode((prev) => {
         const next = prev === 'light' ? 'dark' : 'light'
-        localStorage.setItem('falcon-theme', next)
+        localStorage.setItem('zenith-theme', next)
         return next
       }),
   }), [mode])

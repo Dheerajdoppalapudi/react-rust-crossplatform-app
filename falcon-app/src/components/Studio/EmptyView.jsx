@@ -33,7 +33,7 @@ export default function EmptyView({ onSuggestionClick }) {
           What do you want to learn?
         </Typography>
         <Typography sx={{ fontSize: 13.5, color: theme.palette.text.secondary, lineHeight: 1.65 }}>
-          Type a topic and Falcon will generate a visual lesson — animations, diagrams, or illustrations.
+          Type a topic and Zenith will generate a visual lesson — animations, diagrams, or illustrations.
         </Typography>
       </Box>
 

@@ -22,6 +22,7 @@ import AddIcon                 from '@mui/icons-material/Add'
 import DarkModeOutlinedIcon    from '@mui/icons-material/DarkModeOutlined'
 import LightModeOutlinedIcon   from '@mui/icons-material/LightModeOutlined'
 import AutoAwesomeIcon         from '@mui/icons-material/AutoAwesome'
+import ChevronLeftIcon         from '@mui/icons-material/ChevronLeft'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { relativeTime } from '../Studio/constants'
 
@@ -191,7 +192,7 @@ const Sidebar = ({ conversations = [], activeConvId, onSelectConv, onNewConversa
   const isDark   = theme.palette.mode === 'dark'
   const accent   = theme.palette.primary.main
 
-  // Self-managed hover expansion
+  // Click-to-expand
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
 
@@ -206,17 +207,18 @@ const Sidebar = ({ conversations = [], activeConvId, onSelectConv, onNewConversa
   const grouped = useMemo(() => groupConversations(filtered), [filtered])
 
   return (
+    <Box sx={{ position: 'relative', flexShrink: 0 }}>
     <Drawer
       variant="permanent"
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
+      onClick={!open ? () => setOpen(true) : undefined}
       sx={{
+        cursor: !open ? 'pointer' : 'default',
         width: open ? DRAWER_OPEN : DRAWER_CLOSED,
         flexShrink: 0,
-        transition: 'width 0.22s ease',
+        transition: 'width 0.25s cubic-bezier(0.4,0,0.2,1)',
         '& .MuiDrawer-paper': {
           width: open ? DRAWER_OPEN : DRAWER_CLOSED,
-          transition: 'width 0.22s ease',
+          transition: 'width 0.25s cubic-bezier(0.4,0,0.2,1)',
           overflowX: 'hidden',
           borderRight: `1px solid ${theme.palette.divider}`,
           backgroundColor: sidebarBg,
@@ -228,35 +230,60 @@ const Sidebar = ({ conversations = [], activeConvId, onSelectConv, onNewConversa
       }}
     >
 
-      {/* ── Logo ──────────────────────────────────────────────────────────── */}
+      {/* ── Logo + toggle ─────────────────────────────────────────────── */}
       <Box sx={{
         flexShrink: 0,
         display: 'flex', alignItems: 'center',
-        px: open ? 2 : 0,
+        px: open ? 1.5 : 0,
         justifyContent: open ? 'flex-start' : 'center',
         height: 52,
         borderBottom: `1px solid ${theme.palette.divider}`,
-        transition: 'padding 0.22s ease',
-        gap: 1.25,
+        transition: 'padding 0.25s cubic-bezier(0.4,0,0.2,1)',
+        gap: 1,
       }}>
-        <Box sx={{
-          width: 28, height: 28, borderRadius: '8px', flexShrink: 0,
-          background: 'linear-gradient(135deg, #001AFF 0%, #6B44F8 100%)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          boxShadow: `0 2px 10px ${accent}40`,
-        }}>
+        {/* Logo icon — also acts as toggle when collapsed */}
+        <Box
+          onClick={(e) => { e.stopPropagation(); setOpen((p) => !p) }}
+          sx={{
+            width: 28, height: 28, borderRadius: '8px', flexShrink: 0,
+            background: 'linear-gradient(135deg, #001AFF 0%, #6B44F8 100%)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: `0 2px 10px ${accent}40`,
+            cursor: 'pointer',
+          }}
+        >
           <AutoAwesomeIcon sx={{ fontSize: 14, color: '#fff' }} />
         </Box>
+
+        {/* Wordmark — only when expanded */}
         {open && (
           <Typography sx={{
             fontWeight: 800, fontSize: 15, letterSpacing: '-0.3px',
             color: theme.palette.text.primary,
-            whiteSpace: 'nowrap',
-            opacity: open ? 1 : 0,
-            transition: 'opacity 0.15s ease',
+            whiteSpace: 'nowrap', flex: 1,
           }}>
-            Falcon
+            Zenith
           </Typography>
+        )}
+
+        {/* Toggle chevron — only when expanded, sits at far right */}
+        {open && (
+          <Box
+            onClick={(e) => { e.stopPropagation(); setOpen(false) }}
+            sx={{
+              width: 24, height: 24, borderRadius: '6px',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: 'pointer', flexShrink: 0,
+              color: theme.palette.text.disabled,
+              '&:hover': {
+                bgcolor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)',
+                color: theme.palette.text.secondary,
+              },
+              transition: 'background 0.15s, color 0.15s',
+            }}
+          >
+            <ChevronLeftIcon sx={{ fontSize: 18 }} />
+          </Box>
         )}
       </Box>
 
@@ -453,6 +480,8 @@ const Sidebar = ({ conversations = [], activeConvId, onSelectConv, onNewConversa
       </Box>
 
     </Drawer>
+
+    </Box>
   )
 }
 

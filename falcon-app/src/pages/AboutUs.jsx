@@ -106,7 +106,7 @@ const stats = [
 
 const steps = [
   { step: '01', label: 'Ask anything',          sub: 'Type a topic, concept, or question you want to understand deeply — no structure needed.', color: '#4F6EFF' },
-  { step: '02', label: 'Watch it come alive',   sub: 'Falcon scripts, narrates, and renders a personalised animated learning video just for you.', color: '#7C3AED' },
+  { step: '02', label: 'Watch it come alive',   sub: 'Zenith scripts, narrates, and renders a personalised animated learning video just for you.', color: '#7C3AED' },
   { step: '03', label: 'Explore every detail',  sub: 'Dive into structured notes, key frames, and visual breakdowns at your own pace.', color: '#0891B2' },
   { step: '04', label: 'Branch deeper',         sub: 'Ask follow-ups from any frame. Spawn new sessions that branch off the exact moment you chose.', color: '#059669' },
   { step: '05', label: 'Merge & review',         sub: 'Combine your entire session tree into one continuous video to review the full picture.', color: '#D97706' },
@@ -320,7 +320,7 @@ export default function AboutUs() {
               color: theme.palette.text.secondary,
               lineHeight: 1.75, maxWidth: 560, mx: 'auto', mb: 4.5,
             }}>
-              Falcon turns any topic into clear, animated videos with AI-generated
+              Zenith turns any topic into clear, animated videos with AI-generated
               explanations, structured notes, and an interactive canvas that maps
               exactly how your knowledge grows.
             </Typography>
@@ -406,7 +406,7 @@ export default function AboutUs() {
         borderBottom: `1px solid ${cardBorder}`,
         bgcolor: isDark ? '#161616' : '#fff',
         py: { xs: 4, md: 5 },
-        px: { xs: 3, sm: 6, md: 8 },
+        px: { xs: 2, sm: 4, md: 6 },
       }}>
         <Box sx={{
           maxWidth: 860, mx: 'auto',
@@ -448,7 +448,7 @@ export default function AboutUs() {
               color: theme.palette.text.disabled, textTransform: 'uppercase',
               mb: 1.5, textAlign: 'center',
             }}>
-              What Falcon does
+              What Zenith does
             </Typography>
           </Reveal>
 
@@ -678,7 +678,7 @@ export default function AboutUs() {
               fontSize: { xs: 26, md: 36 }, fontWeight: 900, letterSpacing: '-0.03em',
               textAlign: 'center', color: theme.palette.text.primary, mb: 6, lineHeight: 1.15,
             }}>
-              A real Falcon conversation<br />
+              A real Zenith conversation<br />
               <Box component="span" sx={{
                 background: `linear-gradient(135deg, ${accent} 0%, #7C3AED 100%)`,
                 WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
@@ -715,7 +715,7 @@ export default function AboutUs() {
                 }}>
                   <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#28C840' }} />
                   <Typography sx={{ fontSize: 11, color: theme.palette.text.secondary }}>
-                    falcon.app — Studio
+                    zenith.app — Studio
                   </Typography>
                 </Box>
               </Box>
