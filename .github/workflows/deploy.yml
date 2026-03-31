@@ -35,7 +35,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1  # change to your region
+          aws-region: eu-north-1
 
       - name: Sync to S3
         run: |
@@ -61,7 +61,7 @@ jobs:
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            cd /home/ubuntu/app
+            cd /home/ubuntu/react-rust-crossplatform-app
             git pull origin main
             cd backend
             source venv/bin/activate
