@@ -81,9 +81,10 @@ MERMAID_INTENT_TYPES = {"process", "architecture", "timeline"}
 MANIM_INTENT_TYPES   = {"math"}
 SVG_INTENT_TYPES     = {"illustration", "concept_analogy", "comparison"}
 
-app = FastAPI(title="Falcon API")
+app = FastAPI(title="Zenith API")
 
 _cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
