@@ -69,10 +69,12 @@ export const api = {
     return res.json()
   },
 
-  imageGeneration: async (message, conversationId = null, pauseContext = null, notesEnabled = false) => {
+  imageGeneration: async (message, conversationId = null, pauseContext = null, notesEnabled = false, provider = 'claude', model = null) => {
     const formData = new FormData()
     formData.append('message', message)
     formData.append('notes_enabled', String(notesEnabled))
+    formData.append('provider', provider)
+    if (model) formData.append('model', model)
     if (conversationId) formData.append('conversation_id', conversationId)
     if (pauseContext) {
       // Runtime pause context (for building conversation history)

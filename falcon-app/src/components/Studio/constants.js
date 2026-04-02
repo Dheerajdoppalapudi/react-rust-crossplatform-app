@@ -30,6 +30,36 @@ export const FOLLOWUP_SUGGESTIONS = {
   timeline:        ['What happened between?','Key turning points',    "What's next?",            'The impact'],
 }
 
+// ─── Available models ─────────────────────────────────────────────────────────
+export const MODELS = [
+  {
+    id: 'claude-sonnet-4-6', provider: 'claude', model: 'claude-sonnet-4-6',
+    label: 'Claude Sonnet 4.6', short: 'Sonnet 4.6', description: 'Best quality · recommended',
+  },
+  {
+    id: 'claude-opus-4-6', provider: 'claude', model: 'claude-opus-4-6',
+    label: 'Claude Opus 4.6', short: 'Opus 4.6', description: 'Most capable',
+  },
+  {
+    id: 'claude-haiku-4-5', provider: 'claude', model: 'claude-haiku-4-5-20251001',
+    label: 'Claude Haiku 4.5', short: 'Haiku 4.5', description: 'Fastest & cheapest',
+  },
+  {
+    id: 'gpt-4.1', provider: 'openai', model: 'gpt-4.1',
+    label: 'GPT-4.1', short: 'GPT-4.1', description: 'OpenAI flagship',
+  },
+  {
+    id: 'gpt-4o', provider: 'openai', model: 'gpt-4o',
+    label: 'GPT-4o', short: 'GPT-4o', description: 'Fast & capable',
+  },
+  {
+    id: 'gpt-4o-mini', provider: 'openai', model: 'gpt-4o-mini',
+    label: 'GPT-4o mini', short: '4o mini', description: 'Fastest OpenAI',
+  },
+]
+
+export const DEFAULT_MODEL = MODELS[0]
+
 // ─── Prompt bar initial suggestions ──────────────────────────────────────────
 export const INITIAL_SUGGESTIONS = [
   "Newton's laws of motion",

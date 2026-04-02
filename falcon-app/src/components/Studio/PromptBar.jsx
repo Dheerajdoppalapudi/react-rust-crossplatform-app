@@ -1,10 +1,13 @@
-import { Box, Typography, TextField, IconButton, Tooltip, CircularProgress, Chip } from '@mui/material'
+import { useState } from 'react'
+import { Box, Typography, TextField, IconButton, Tooltip, CircularProgress, Divider,
+         Menu, MenuItem, ListSubheader } from '@mui/material'
 import SendIcon from '@mui/icons-material/Send'
 import AddIcon from '@mui/icons-material/Add'
 import CloseIcon from '@mui/icons-material/Close'
 import PauseCircleOutlineIcon from '@mui/icons-material/PauseCircleOutline'
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown'
 import { useTheme } from '@mui/material'
-import { FOLLOWUP_SUGGESTIONS } from './constants'
+import { MODELS } from './constants'
 
 export default function PromptBar({
   prompt,
@@ -17,58 +20,27 @@ export default function PromptBar({
   onNewConversation,
   pauseContext,         // { sessionId, frameIndex, caption } | null
   onClearPauseContext,
+  selectedModel,        // { id, provider, model, label, short, description }
+  onModelChange,
 }) {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
 
+  const [menuAnchor, setMenuAnchor] = useState(null)
+  const menuOpen = Boolean(menuAnchor)
+
   const isFollowUp = !!activeConversation && !isGenerating
   const canSend    = prompt.trim() && !isGenerating
 
-  // Use LLM-generated follow-ups when available; fall back to generic constants
-  const suggestions = isFollowUp && !pauseContext
-    ? (activeConversation.suggested_followups?.length
-        ? activeConversation.suggested_followups
-        : (FOLLOWUP_SUGGESTIONS[activeConversation.intent_type] || FOLLOWUP_SUGGESTIONS.illustration))
-    : []
+  const promptBorder = isDark ? '#333333' : '#dde3ec'
+  const cardBg       = isDark ? '#1a1a1a' : '#ffffff'
 
-  const promptBg     = isDark ? '#1f1f1f' : '#fafafa'
-  const promptBorder = isDark ? '#2e2e2e' : '#e2e8f0'
+  // Group models by provider for the dropdown
+  const claudeModels = MODELS.filter((m) => m.provider === 'claude')
+  const openaiModels = MODELS.filter((m) => m.provider === 'openai')
 
   return (
-    <Box sx={{
-      flexShrink: 0,
-      borderTop: `1px solid ${theme.palette.divider}`,
-      bgcolor: 'background.paper',
-    }}>
-      {/* Follow-up suggestions */}
-      {isFollowUp && suggestions.length > 0 && (
-        <Box sx={{ px: 3, pt: 1.5, pb: 0 }}>
-          <Typography sx={{ fontSize: 10.5, color: theme.palette.text.secondary, opacity: 0.55, mb: 0.75 }}>
-            Suggested follow-ups
-          </Typography>
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
-            {suggestions.map((s) => (
-              <Box
-                key={s}
-                onClick={() => { onPromptChange(s); inputRef.current?.focus() }}
-                sx={{
-                  px: 1.25, py: 0.5, borderRadius: '20px', cursor: 'pointer',
-                  border: `1px solid ${theme.palette.divider}`,
-                  fontSize: 12, color: theme.palette.text.secondary, userSelect: 'none',
-                  '&:hover': {
-                    borderColor: theme.palette.primary.main,
-                    color: theme.palette.primary.main,
-                    backgroundColor: isDark ? 'rgba(79,110,255,0.08)' : '#f5f7ff',
-                  },
-                  transition: 'all 0.15s',
-                }}
-              >
-                {s}
-              </Box>
-            ))}
-          </Box>
-        </Box>
-      )}
+    <Box sx={{ flexShrink: 0 }}>
 
       {/* Pause context indicator */}
       {pauseContext && (
@@ -103,87 +75,190 @@ export default function PromptBar({
       )}
 
       {/* Input area */}
-      <Box sx={{ px: 3, pt: 1.5, pb: 2 }}>
-        <Box sx={{
-          display: 'flex', alignItems: 'flex-end', gap: 1,
-          border: `1.5px solid ${promptBorder}`,
-          borderRadius: '12px', px: 2, py: 1,
-          backgroundColor: promptBg,
-          '&:focus-within': {
-            borderColor: theme.palette.primary.main,
-            backgroundColor: theme.palette.background.paper,
-          },
-          transition: 'all 0.15s',
-        }}>
-          {/* New conversation button (only while in a conversation) */}
-          {isFollowUp && (
-            <Tooltip title="Start a new conversation">
-              <IconButton
-                size="small"
-                onClick={onNewConversation}
-                sx={{
-                  width: 28, height: 28, flexShrink: 0, mb: 0.25,
-                  color: theme.palette.text.secondary,
-                  border: `1px solid ${theme.palette.divider}`,
-                  borderRadius: '8px',
-                  '&:hover': { borderColor: theme.palette.primary.main, color: theme.palette.primary.main },
-                }}
-              >
-                <AddIcon sx={{ fontSize: 14 }} />
-              </IconButton>
-            </Tooltip>
-          )}
-
-          <TextField
-            inputRef={inputRef}
-            value={prompt}
-            onChange={(e) => onPromptChange(e.target.value)}
-            onKeyDown={onKeyDown}
-            placeholder={
-              pauseContext   ? 'Ask your question about this moment…' :
-              isFollowUp     ? 'Ask a follow-up…' :
-                               'What do you want to visualize today?'
-            }
-            multiline
-            maxRows={4}
-            disabled={false}
-            variant="standard"
-            fullWidth
-            slotProps={{ input: { disableUnderline: true } }}
-            sx={{
-              '& .MuiInputBase-input': {
-                fontSize: 14, color: theme.palette.text.primary, py: 0.25,
-                '&::placeholder': { color: theme.palette.text.secondary, opacity: 0.6 },
-              },
-            }}
-          />
-
-          <Tooltip title="Generate (Enter)">
-            <span>
-              <IconButton
-                onClick={onSubmit}
-                disabled={!canSend}
-                size="small"
-                sx={{
-                  width: 34, height: 34, flexShrink: 0, mb: 0.25,
-                  backgroundColor: canSend ? theme.palette.primary.main : (isDark ? '#2a2a2a' : '#f1f5f9'),
-                  color: canSend ? '#fff' : theme.palette.text.secondary,
-                  '&:hover': { backgroundColor: canSend ? (isDark ? '#3D58FF' : '#0015cc') : undefined },
-                  transition: 'all 0.15s',
-                }}
-              >
-                {isGenerating
-                  ? <CircularProgress size={14} sx={{ color: theme.palette.text.secondary }} />
-                  : <SendIcon sx={{ fontSize: 14 }} />
+      <Box sx={{ px: 3, pt: 1, pb: 2 }}>
+        <Box sx={{ maxWidth: 760, mx: 'auto' }}>
+          {/* Card */}
+          <Box sx={{
+            border: `1.5px solid ${promptBorder}`,
+            borderRadius: '14px',
+            overflow: 'hidden',
+            backgroundColor: cardBg,
+            boxShadow: isDark
+              ? '0 2px 12px rgba(0,0,0,0.35)'
+              : '0 2px 12px rgba(0,0,0,0.06)',
+            '&:focus-within': {
+              borderColor: theme.palette.primary.main,
+              boxShadow: isDark
+                ? '0 2px 20px rgba(79,110,255,0.15)'
+                : '0 2px 20px rgba(0,26,255,0.08)',
+            },
+            transition: 'border-color 0.15s, box-shadow 0.15s',
+          }}>
+            {/* Text row */}
+            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, px: 2, pt: 1.25, pb: 0.25 }}>
+              {isFollowUp && (
+                <Tooltip title="Start a new conversation">
+                  <IconButton
+                    size="small"
+                    onClick={onNewConversation}
+                    sx={{
+                      mt: 0.25, width: 26, height: 26, flexShrink: 0,
+                      color: theme.palette.text.secondary,
+                      border: `1px solid ${theme.palette.divider}`,
+                      borderRadius: '7px',
+                      '&:hover': { borderColor: theme.palette.primary.main, color: theme.palette.primary.main },
+                    }}
+                  >
+                    <AddIcon sx={{ fontSize: 13 }} />
+                  </IconButton>
+                </Tooltip>
+              )}
+              <TextField
+                inputRef={inputRef}
+                value={prompt}
+                onChange={(e) => onPromptChange(e.target.value)}
+                onKeyDown={onKeyDown}
+                placeholder={
+                  pauseContext ? 'Ask your question about this moment…' :
+                  isFollowUp   ? 'Ask a follow-up…' :
+                                 'What do you want to visualize today?'
                 }
-              </IconButton>
-            </span>
-          </Tooltip>
-        </Box>
+                multiline
+                minRows={1}
+                maxRows={6}
+                variant="standard"
+                fullWidth
+                slotProps={{ input: { disableUnderline: true } }}
+                sx={{
+                  '& .MuiInputBase-input': {
+                    fontSize: 14, color: theme.palette.text.primary, py: 0,
+                    '&::placeholder': { color: theme.palette.text.secondary, opacity: 0.55 },
+                  },
+                }}
+              />
+            </Box>
 
-        <Typography sx={{ fontSize: 10.5, color: theme.palette.text.secondary, opacity: 0.4, mt: 0.75, ml: 0.5 }}>
-          Enter to generate · Shift+Enter for new line
-        </Typography>
+            {/* Toolbar row */}
+            <Box sx={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              px: 1.5, pb: 1.25, pt: 0.25,
+            }}>
+              {/* Model selector */}
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                <Box
+                  onClick={(e) => setMenuAnchor(e.currentTarget)}
+                  sx={{
+                    display: 'flex', alignItems: 'center', gap: 0.4,
+                    px: 1, py: 0.4, borderRadius: '7px', cursor: 'pointer',
+                    color: theme.palette.text.secondary,
+                    userSelect: 'none',
+                    '&:hover': {
+                      bgcolor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)',
+                      color: theme.palette.text.primary,
+                    },
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  <Typography sx={{ fontSize: 12, fontWeight: 500, lineHeight: 1 }}>
+                    {selectedModel?.short || 'Model'}
+                  </Typography>
+                  <KeyboardArrowDownIcon sx={{ fontSize: 13, opacity: 0.7 }} />
+                </Box>
+
+                <Menu
+                  anchorEl={menuAnchor}
+                  open={menuOpen}
+                  onClose={() => setMenuAnchor(null)}
+                  anchorOrigin={{ vertical: 'top', horizontal: 'left' }}
+                  transformOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+                  slotProps={{
+                    paper: {
+                      sx: {
+                        minWidth: 230,
+                        borderRadius: '12px',
+                        border: `1px solid ${theme.palette.divider}`,
+                        boxShadow: isDark
+                          ? '0 8px 32px rgba(0,0,0,0.6)'
+                          : '0 8px 32px rgba(0,0,0,0.12)',
+                        mb: 0.5,
+                      },
+                    },
+                  }}
+                >
+                  <ListSubheader sx={{
+                    fontSize: 10, fontWeight: 700, letterSpacing: '0.08em',
+                    color: theme.palette.text.secondary, lineHeight: '30px',
+                    textTransform: 'uppercase', bgcolor: 'background.paper',
+                    px: 2,
+                  }}>
+                    Claude
+                  </ListSubheader>
+                  {claudeModels.map((m) => (
+                    <MenuItem
+                      key={m.id}
+                      selected={selectedModel?.id === m.id}
+                      onClick={() => { onModelChange(m); setMenuAnchor(null) }}
+                      sx={{ px: 2, py: 0.75, mx: 0.5, borderRadius: '8px' }}
+                    >
+                      <Box>
+                        <Typography sx={{ fontSize: 13, fontWeight: 500, lineHeight: 1.3 }}>{m.label}</Typography>
+                        <Typography sx={{ fontSize: 11, color: theme.palette.text.secondary, lineHeight: 1.4 }}>{m.description}</Typography>
+                      </Box>
+                    </MenuItem>
+                  ))}
+
+                  <Divider sx={{ my: 0.5 }} />
+
+                  <ListSubheader sx={{
+                    fontSize: 10, fontWeight: 700, letterSpacing: '0.08em',
+                    color: theme.palette.text.secondary, lineHeight: '30px',
+                    textTransform: 'uppercase', bgcolor: 'background.paper',
+                    px: 2,
+                  }}>
+                    OpenAI
+                  </ListSubheader>
+                  {openaiModels.map((m) => (
+                    <MenuItem
+                      key={m.id}
+                      selected={selectedModel?.id === m.id}
+                      onClick={() => { onModelChange(m); setMenuAnchor(null) }}
+                      sx={{ px: 2, py: 0.75, mx: 0.5, borderRadius: '8px' }}
+                    >
+                      <Box>
+                        <Typography sx={{ fontSize: 13, fontWeight: 500, lineHeight: 1.3 }}>{m.label}</Typography>
+                        <Typography sx={{ fontSize: 11, color: theme.palette.text.secondary, lineHeight: 1.4 }}>{m.description}</Typography>
+                      </Box>
+                    </MenuItem>
+                  ))}
+                </Menu>
+              </Box>
+
+              {/* Send button */}
+              <Tooltip title="Generate (Enter)">
+                <span>
+                  <IconButton
+                    onClick={onSubmit}
+                    disabled={!canSend}
+                    size="small"
+                    sx={{
+                      width: 32, height: 32,
+                      backgroundColor: canSend ? theme.palette.primary.main : (isDark ? '#2a2a2a' : '#f1f5f9'),
+                      color: canSend ? '#fff' : theme.palette.text.secondary,
+                      borderRadius: '8px',
+                      '&:hover': { backgroundColor: canSend ? (isDark ? '#3D58FF' : '#0015cc') : undefined },
+                      transition: 'all 0.15s',
+                    }}
+                  >
+                    {isGenerating
+                      ? <CircularProgress size={13} sx={{ color: theme.palette.text.secondary }} />
+                      : <SendIcon sx={{ fontSize: 14 }} />
+                    }
+                  </IconButton>
+                </span>
+              </Tooltip>
+            </Box>
+          </Box>
+        </Box>
       </Box>
     </Box>
   )

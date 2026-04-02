@@ -8,9 +8,9 @@ function ContentColumn({ children }) {
   return (
     <Box sx={{
       width: '100%',
-      maxWidth: 900,
+      maxWidth: 760,
       mx: 'auto',
-      px: { xs: 2.5, sm: 4, md: 5 },
+      px: 3,
     }}>
       {children}
     </Box>
@@ -83,7 +83,7 @@ function TurnView({ turn, onPauseAsk }) {
 // ─── Full conversation thread ──────────────────────────────────────────────────
 export default function ConversationThread({ turns, onPauseAsk }) {
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', pt: 1, pb: 4 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', pt: 1, pb: 1 }}>
       {turns.map((turn, idx) => (
         <TurnView key={turn.tempId || turn.id || idx} turn={turn} onPauseAsk={onPauseAsk} />
       ))}

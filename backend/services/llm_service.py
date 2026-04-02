@@ -35,14 +35,17 @@ _WAIT_RE = re.compile(r'try again in ([\d.]+)s', re.IGNORECASE)
 # ---------------------------------------------------------------------------
 
 class LLMProvider(ABC):
-    """Every provider must implement a single method: complete(messages) → str."""
+    """Every provider must implement a single method: complete(messages) → (text, usage)."""
 
     @abstractmethod
-    def complete(self, messages: List[Dict[str, str]], **kwargs) -> Optional[str]:
+    def complete(self, messages: List[Dict[str, str]], **kwargs) -> tuple[Optional[str], dict]:
         """
         Send a list of {"role": ..., "content": ...} messages and return
-        the assistant's reply text, or None on failure.
+        (reply_text, usage_dict) where usage_dict has keys:
+            prompt_tokens, completion_tokens, total_tokens
+        Returns (None, {}) on failure.
         """
+        ...  # pragma: no cover
 
 
 # ---------------------------------------------------------------------------
@@ -62,7 +65,7 @@ class OpenAIProvider(LLMProvider):
     def __init__(self, model: str = None):
         self.model = model or os.getenv("OPENAI_MODEL", "gpt-4.1")
 
-    def complete(self, messages: List[Dict[str, str]], **kwargs) -> Optional[str]:
+    def complete(self, messages: List[Dict[str, str]], **kwargs) -> tuple[Optional[str], dict]:
         from openai import OpenAI, RateLimitError
         client = OpenAI()  # reads OPENAI_API_KEY from env automatically
 
@@ -73,12 +76,18 @@ class OpenAIProvider(LLMProvider):
                     messages=messages,
                     **kwargs,
                 )
-                return response.choices[0].message.content
+                usage = response.usage
+                usage_dict = {
+                    "prompt_tokens":     usage.prompt_tokens,
+                    "completion_tokens": usage.completion_tokens,
+                    "total_tokens":      usage.total_tokens,
+                } if usage else {}
+                return response.choices[0].message.content, usage_dict
 
             except RateLimitError as e:
                 if attempt == _MAX_RETRIES - 1:
                     print(f"[OpenAIProvider] Rate limit — all {_MAX_RETRIES} retries exhausted: {e}")
-                    return None
+                    return None, {}
                 # OpenAI tells us exactly how long to wait in the error message.
                 # Parse it; fall back to an increasing fixed delay if not found.
                 match = _WAIT_RE.search(str(e))
@@ -88,9 +97,9 @@ class OpenAIProvider(LLMProvider):
 
             except Exception as e:
                 print(f"[OpenAIProvider] Request failed: {e}")
-                return None
+                return None, {}
 
-        return None
+        return None, {}
 
 
 # ---------------------------------------------------------------------------
@@ -106,9 +115,9 @@ class ClaudeProvider(LLMProvider):
     """
 
     def __init__(self, model: str = None):
-        self.model = model or os.getenv("CLAUDE_MODEL", "claude-opus-4-6")
+        self.model = model or os.getenv("CLAUDE_MODEL", "claude-sonnet-4-6")
 
-    def complete(self, messages: List[Dict[str, str]], **kwargs) -> Optional[str]:
+    def complete(self, messages: List[Dict[str, str]], **kwargs) -> tuple[Optional[str], dict]:
         try:
             import anthropic
             client = anthropic.Anthropic()  # reads ANTHROPIC_API_KEY from env
@@ -128,10 +137,16 @@ class ClaudeProvider(LLMProvider):
                 create_kwargs["system"] = system
 
             response = client.messages.create(**create_kwargs)
-            return response.content[0].text
+            usage = response.usage
+            usage_dict = {
+                "prompt_tokens":     usage.input_tokens,
+                "completion_tokens": usage.output_tokens,
+                "total_tokens":      usage.input_tokens + usage.output_tokens,
+            } if usage else {}
+            return response.content[0].text, usage_dict
         except Exception as e:
             print(f"[ClaudeProvider] Request failed: {e}")
-            return None
+            return None, {}
 
 
 # ---------------------------------------------------------------------------
@@ -153,12 +168,12 @@ class LLMService:
         self,
         messages: List[Dict[str, str]],
         **kwargs,
-    ) -> Optional[Any]:
-        """Send a chat-style message list, return the reply text or None."""
+    ) -> tuple[Optional[Any], dict]:
+        """Send a chat-style message list, return (reply_text, usage_dict)."""
         return self.provider.complete(messages, **kwargs)
 
-    def make_single_prompt_request(self, prompt: str, **kwargs) -> Optional[Any]:
-        """Send a single user prompt string, return the reply text or None."""
+    def make_single_prompt_request(self, prompt: str, **kwargs) -> tuple[Optional[Any], dict]:
+        """Send a single user prompt string, return (reply_text, usage_dict)."""
         messages = [{"role": "user", "content": prompt}]
         return self.provider.complete(messages, **kwargs)
 
@@ -167,8 +182,8 @@ class LLMService:
         system_prompt: str,
         user_prompt: str,
         **kwargs,
-    ) -> Optional[Any]:
-        """Send a system + user message pair, return the reply text or None."""
+    ) -> tuple[Optional[Any], dict]:
+        """Send a system + user message pair, return (reply_text, usage_dict)."""
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
@@ -181,7 +196,7 @@ class LLMService:
 #
 # To switch providers:
 #   default_llm_service = LLMService(provider=ClaudeProvider())
-#   default_llm_service = LLMService(provider=OpenAIProvider(model="gpt-4o"))
+#   default_llm_service = LLMService(provider=OpenAIProvider(model="gpt-4.1"))
 # ---------------------------------------------------------------------------
 
-default_llm_service = LLMService(provider=OpenAIProvider())
+default_llm_service = LLMService(provider=ClaudeProvider())

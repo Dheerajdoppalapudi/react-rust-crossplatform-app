@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Box, Tooltip, IconButton, useTheme } from '@mui/material'
+import { Box, Tooltip, IconButton, Typography, Divider, useTheme } from '@mui/material'
 import NotesOutlinedIcon from '@mui/icons-material/NotesOutlined'
 
 import LoadingView         from '../components/Studio/LoadingView'
@@ -9,6 +9,7 @@ import PromptBar           from '../components/Studio/PromptBar'
 import LearningView        from '../components/Studio/LearningView/index'
 
 import { api } from '../services/api'
+import { DEFAULT_MODEL, FOLLOWUP_SUGGESTIONS } from '../components/Studio/constants'
 
 // ─── Studio ────────────────────────────────────────────────────────────────────
 export default function Studio({ activeConvId, onActiveConvIdChange, onConversationsRefresh }) {
@@ -26,8 +27,9 @@ export default function Studio({ activeConvId, onActiveConvIdChange, onConversat
   })
 
   // ── Prompt input ─────────────────────────────────────────────────────────────
-  const [prompt, setPrompt]   = useState('')
-  const inputRef              = useRef(null)
+  const [prompt, setPrompt]               = useState('')
+  const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL)
+  const inputRef                                = useRef(null)
   const threadBottomRef       = useRef(null)
   const contentScrollRef      = useRef(null)
 
@@ -193,7 +195,7 @@ export default function Studio({ activeConvId, onActiveConvIdChange, onConversat
     setPauseContext(null)
 
     try {
-      const data = await api.imageGeneration(submittedPrompt, activeConvId, capturedPauseContext, notesEnabled)
+      const data = await api.imageGeneration(submittedPrompt, activeConvId, capturedPauseContext, notesEnabled, selectedModel.provider, selectedModel.model)
 
       const framesData = {
         render_path:         data.render_path,
@@ -410,7 +412,7 @@ export default function Studio({ activeConvId, onActiveConvIdChange, onConversat
           }}
         >
           {showLoader && (
-            <Box sx={{ width: '100%', maxWidth: 900, mx: 'auto', px: { xs: 2.5, sm: 4, md: 5 } }}>
+            <Box sx={{ width: '100%', maxWidth: 760, mx: 'auto', px: 3 }}>
               {bootstrapPrompt && (
                 <Box sx={{ display: 'flex', justifyContent: 'flex-end', pt: 3, pb: 1.5 }}>
                   <Box sx={{
@@ -433,12 +435,48 @@ export default function Studio({ activeConvId, onActiveConvIdChange, onConversat
             <EmptyView onSuggestionClick={(s) => { setPrompt(s); inputRef.current?.focus() }} />
           )}
 
-          {showThread && (
-            <>
-              <ConversationThread turns={turns} onPauseAsk={handlePauseAsk} />
-              <Box ref={threadBottomRef} sx={{ height: 1 }} />
-            </>
-          )}
+          {showThread && (() => {
+            const isFollowUp = !!activeConvId && !isAnyGenerating
+            const suggestions = isFollowUp && !pauseContext
+              ? (activeConversationMeta?.suggested_followups?.length
+                  ? activeConversationMeta.suggested_followups
+                  : (FOLLOWUP_SUGGESTIONS[activeConversationMeta?.intent_type] || FOLLOWUP_SUGGESTIONS.illustration))
+              : []
+
+            return (
+              <>
+                <ConversationThread turns={turns} onPauseAsk={handlePauseAsk} />
+
+                {suggestions.length > 0 && (
+                  <Box sx={{ width: '100%', maxWidth: 760, mx: 'auto', px: 3, pt: 0.5, pb: 3 }}>
+                    <Typography sx={{ fontSize: 13, fontWeight: 600, color: theme.palette.text.secondary, mb: 0.5 }}>
+                      Follow-ups
+                    </Typography>
+                    {suggestions.map((s, i) => (
+                      <Box key={s}>
+                        {i > 0 && <Divider sx={{ opacity: 0.2 }} />}
+                        <Box
+                          onClick={() => { setPrompt(s); inputRef.current?.focus() }}
+                          sx={{
+                            display: 'flex', alignItems: 'center', gap: 1.5,
+                            py: 0.9, px: 0.5, cursor: 'pointer', userSelect: 'none',
+                            color: theme.palette.text.secondary,
+                            '&:hover': { color: theme.palette.text.primary },
+                            transition: 'color 0.15s',
+                          }}
+                        >
+                          <Typography sx={{ fontSize: 14.5, opacity: 0.35, flexShrink: 0, lineHeight: 1 }}>↳</Typography>
+                          <Typography sx={{ fontSize: 14.5, fontWeight: 400, lineHeight: 1.6 }}>{s}</Typography>
+                        </Box>
+                      </Box>
+                    ))}
+                  </Box>
+                )}
+
+                <Box ref={threadBottomRef} sx={{ height: 1 }} />
+              </>
+            )
+          })()}
         </Box>
 
         {/* Prompt bar */}
@@ -453,6 +491,8 @@ export default function Studio({ activeConvId, onActiveConvIdChange, onConversat
           onNewConversation={handleNewConversation}
           pauseContext={pauseContext}
           onClearPauseContext={() => setPauseContext(null)}
+          selectedModel={selectedModel}
+          onModelChange={setSelectedModel}
         />
       </Box>
 

@@ -67,11 +67,17 @@ from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from services.Frame_generation.excalidraw_enhancer import enhance
-from services.Frame_generation.planner import create_plan, generate_all_frames, request_log, _log
+from services.Frame_generation.planner import (
+    create_plan, create_vocab_plan, create_spatial_plan,
+    generate_all_frames, request_log, token_usage, request_llm_service, _log,
+)
+from services.llm_service import LLMService, OpenAIProvider, ClaudeProvider
 from services.Frame_generation.combiner import combine_frames
 from services.Frame_generation.mermaid.mermaid_generator import generate_mermaid_frames, _sidecar_available
 from services.Frame_generation.manim.manim_generator import generate_manim_frames, manim_available
 from services.Frame_generation.svg.svg_generator import generate_svg_frames, svg_available
+from services.Frame_generation.svg.component_generator import generate_svg_components
+from services.Frame_generation.svg.component_library import get_builtin_component
 from services.video.frame_exporter import export_frames
 from services.video.tts_service import parse_narration, generate_audio, generate_audio_parallel
 from services.video.video_assembler import assemble, moviepy_available
@@ -101,6 +107,18 @@ EXCALIDRAW_DIR = os.path.join(BASE_DIR, "services", "Frame_generation")
 
 os.makedirs(UPLOAD_DIR,  exist_ok=True)
 os.makedirs(OUTPUTS_DIR, exist_ok=True)
+
+# ── Prompt templates — loaded once at startup, reused on every request ────────
+_PROMPTS_DIR = os.path.join(EXCALIDRAW_DIR, "prompts")
+
+def _load_prompt(filename: str) -> str:
+    with open(os.path.join(_PROMPTS_DIR, filename), encoding="utf-8") as f:
+        return f.read()
+
+_PROMPT_TEMPLATE         = _load_prompt("prompt_template.md")
+_MERMAID_PROMPT_TEMPLATE = _load_prompt("mermaid_prompt.md")
+_MANIM_PROMPT_TEMPLATE   = _load_prompt("manim_prompt.md")
+_SVG_PROMPT_TEMPLATE     = _load_prompt("svg_prompt.md")
 
 # ── SQLite ────────────────────────────────────────────────────────────────────
 DB_PATH = os.path.join(BASE_DIR, "database.sqlite")
@@ -136,6 +154,10 @@ def _init_db():
                 output_dir         TEXT,
                 ui_output_file     TEXT,
                 api_call_count     INTEGER DEFAULT 0,
+                prompt_tokens      INTEGER DEFAULT 0,
+                completion_tokens  INTEGER DEFAULT 0,
+                total_tokens       INTEGER DEFAULT 0,
+                model_name         TEXT,
                 video_path         TEXT,
                 conversation_id    TEXT,
                 turn_index         INTEGER DEFAULT 1,
@@ -150,6 +172,10 @@ def _init_db():
             ("turn_index",          "INTEGER DEFAULT 1"),
             ("parent_session_id",   "TEXT"),
             ("parent_frame_index",  "INTEGER"),
+            ("prompt_tokens",       "INTEGER DEFAULT 0"),
+            ("completion_tokens",   "INTEGER DEFAULT 0"),
+            ("total_tokens",        "INTEGER DEFAULT 0"),
+            ("model_name",          "TEXT"),
         ]:
             try:
                 conn.execute(f"ALTER TABLE sessions ADD COLUMN {col} {typedef}")
@@ -230,7 +256,35 @@ def _update_session(session_id: str, **fields):
 
 
 def _count_llm_calls(log: list) -> int:
-    return sum(1 for e in log if e.get("event") == "llm_call")
+    return sum(1 for e in log if e.get("event") in ("llm_call", "llm_call_fast"))
+
+
+def _build_estimated_dimension_map(vocab_plan) -> dict:
+    """
+    Build a dimension map instantly (no LLM call) from the pre-built component DB.
+
+    Known entity types (browser, server, etc.) → exact DB dimensions.
+    Novel/generic entities → safe default 140×80.
+
+    This lets Phase B start in parallel with the component-gen LLM call,
+    saving ~15-18s of sequential waiting.
+    """
+    fill   = vocab_plan.shared_style.backgroundColor
+    stroke = vocab_plan.shared_style.strokeColor
+    dim_map: dict = {}
+    for key, spec in vocab_plan.element_vocabulary.items():
+        comp = get_builtin_component(key, spec, fill, stroke)
+        if comp:
+            dim_map[key] = {
+                "width":         comp.width,
+                "height":        comp.height,
+                "right_edge_y":  comp.right_edge_y,
+                "bottom_edge_x": comp.bottom_edge_x,
+            }
+        else:
+            # Default estimate for novel entities the component-gen LLM will draw
+            dim_map[key] = {"width": 140, "height": 80, "right_edge_y": 40, "bottom_edge_x": 70}
+    return dim_map
 
 
 # ── Conversation context builder ──────────────────────────────────────────────
@@ -391,6 +445,8 @@ async def image_generation(
     parent_session_id:   str  = Form(None),   # session this new session branches from (persisted)
     parent_frame_index:  int  = Form(None),   # frame on parent that triggered this branch (null = follow-up)
     notes_enabled:       str  = Form("false"), # "true" | "false"
+    provider:            str  = Form("claude"), # "claude" | "openai"
+    model:               str  = Form(None),     # optional model override e.g. "gpt-4.1"
 ):
     session_id = uuid.uuid4().hex
     output_dir = _session_output_dir(session_id)
@@ -439,24 +495,61 @@ async def image_generation(
     lifecycle_log: list = []
     token = request_log.set(lifecycle_log)
 
-    _log({"event": "request_received", "prompt": message, "session_id": session_id})
+    # Activate per-request token accumulator
+    usage_acc = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+    token_usage_token = token_usage.set(usage_acc)
+
+    # Build per-request LLM service from the user's provider choice
+    if provider == "openai":
+        _llm_provider = OpenAIProvider(model=model) if model else OpenAIProvider()
+    else:
+        _llm_provider = ClaudeProvider(model=model) if model else ClaudeProvider()
+    model_name = _llm_provider.model
+    llm_svc_token = request_llm_service.set(LLMService(provider=_llm_provider))
+
+    _log({"event": "request_received", "prompt": message, "session_id": session_id, "model": model_name})
     logger.info("Request received  session=%s  prompt=%r", session_id, message[:120])
     logger.debug("Full prompt: %s", message)
 
-    prompts_dir = os.path.join(EXCALIDRAW_DIR, "prompts")
-    with open(os.path.join(prompts_dir, "prompt_template.md")) as f:
-        prompt_template = f.read()
-    with open(os.path.join(prompts_dir, "mermaid_prompt.md")) as f:
-        mermaid_prompt_template = f.read()
-    with open(os.path.join(prompts_dir, "manim_prompt.md")) as f:
-        manim_prompt_template = f.read()
-    with open(os.path.join(prompts_dir, "svg_prompt.md")) as f:
-        svg_prompt_template = f.read()
+    prompt_template        = _PROMPT_TEMPLATE
+    mermaid_prompt_template = _MERMAID_PROMPT_TEMPLATE
+    manim_prompt_template   = _MANIM_PROMPT_TEMPLATE
+    svg_prompt_template     = _SVG_PROMPT_TEMPLATE
 
     try:
         # ── Stage 1: Planning ────────────────────────────────────────────────
         _log({"event": "stage_start", "stage": "planning"})
-        plan = await create_plan(message, conversation_context)
+
+        # Phase A — vocabulary plan (intent, entities, colors — no coordinates)
+        vocab_plan = await create_vocab_plan(message, conversation_context)
+        _log({"event": "stage_complete", "stage": "planning_phase_a",
+              "intent_type": vocab_plan.intent_type, "frame_count": vocab_plan.frame_count})
+
+        # Stage 1.5 — build component library + get real pixel dimensions
+        # (runs here for SVG paths; non-SVG paths skip and go straight to Stage 2)
+        component_library = {}
+        dimension_map = {}
+
+        if vocab_plan.intent_type in SVG_INTENT_TYPES and svg_available():
+            # ── Parallel: component gen + Phase B ───────────────────────────
+            # Build an estimated dimension map instantly from the pre-built DB
+            # (no LLM call). Known entities get exact dims; novel entities get
+            # a safe 140×80 default. This lets Phase B start immediately while
+            # the component-gen LLM call runs — saves ~15-18s vs sequential.
+            estimated_dim_map = _build_estimated_dimension_map(vocab_plan)
+            _log({"event": "stage_start", "stage": "component_gen_and_phase_b_parallel"})
+
+            (component_library, dimension_map), plan = await asyncio.gather(
+                generate_svg_components(vocab_plan),
+                create_spatial_plan(vocab_plan, estimated_dim_map),
+            )
+
+            _log({"event": "stage_complete", "stage": "component_gen_and_phase_b_parallel",
+                  "entities": list(component_library.keys()), "frame_count": plan.frame_count})
+        else:
+            # Non-SVG paths (Mermaid / Manim): single-pass legacy plan
+            plan = await create_plan(message, conversation_context)
+
         _log({
             "event": "stage_complete",
             "stage": "planning",
@@ -523,7 +616,8 @@ async def image_generation(
             logger.info("Render path → svg  session=%s", session_id)
             _log({"event": "stage_start", "stage": "frame_generation", "path": "svg", "frame_count": plan.frame_count})
             svg_output_dir = os.path.join(output_dir, "svg")
-            png_paths = await generate_svg_frames(plan, svg_prompt_template, svg_output_dir)
+            # Pass the already-built component_library — svg_generator skips Stage 1.5
+            png_paths = await generate_svg_frames(plan, svg_prompt_template, svg_output_dir, component_library)
             _log({"event": "stage_complete", "stage": "frame_generation", "path": "svg"})
             logger.info("SVG frames generated  session=%s  paths=%s", session_id, png_paths)
 
@@ -559,7 +653,7 @@ async def image_generation(
                 _log({"event": "info", "message": "Mermaid sidecar unavailable — falling back to SVG"})
                 _log({"event": "stage_start", "stage": "frame_generation", "path": "svg_fallback", "frame_count": plan.frame_count})
                 svg_output_dir = os.path.join(output_dir, "svg")
-                png_paths = await generate_svg_frames(plan, svg_prompt_template, svg_output_dir)
+                png_paths = await generate_svg_frames(plan, svg_prompt_template, svg_output_dir, component_library)
                 _log({"event": "stage_complete", "stage": "frame_generation", "path": "svg_fallback"})
                 logger.info("SVG fallback frames generated  session=%s  paths=%s", session_id, png_paths)
 
@@ -667,6 +761,7 @@ async def image_generation(
 
         # ── Persist to DB ─────────────────────────────────────────────────────
         api_call_count = _count_llm_calls(lifecycle_log)
+        final_usage    = token_usage.get() or {}
         _update_session(
             session_id,
             status="done",
@@ -676,6 +771,10 @@ async def image_generation(
             output_dir=output_dir,
             ui_output_file=ui_output_file,
             api_call_count=api_call_count,
+            prompt_tokens=final_usage.get("prompt_tokens", 0),
+            completion_tokens=final_usage.get("completion_tokens", 0),
+            total_tokens=final_usage.get("total_tokens", 0),
+            model_name=model_name,
         )
 
         result_payload["conversation_id"]    = conversation_id
@@ -694,6 +793,8 @@ async def image_generation(
 
     finally:
         request_log.reset(token)
+        token_usage.reset(token_usage_token)
+        request_llm_service.reset(llm_svc_token)
 
 
 # ── Conversations API ─────────────────────────────────────────────────────────
@@ -910,7 +1011,8 @@ def get_merged_video(conversation_id: str):
 def list_sessions():
     with _get_db() as conn:
         rows = conn.execute(
-            "SELECT id, prompt, created_at, status, intent_type, render_path, frame_count, api_call_count "
+            "SELECT id, prompt, created_at, status, intent_type, render_path, frame_count, "
+            "api_call_count, prompt_tokens, completion_tokens, total_tokens, model_name "
             "FROM sessions ORDER BY created_at DESC"
         ).fetchall()
     return [dict(r) for r in rows]

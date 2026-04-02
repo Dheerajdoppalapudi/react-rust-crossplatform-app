@@ -230,30 +230,32 @@ const Sidebar = ({ conversations = [], activeConvId, onSelectConv, onNewConversa
       }}
     >
 
-      {/* ── Logo + toggle ─────────────────────────────────────────────── */}
+      {/* ── Logo + New Chat + toggle ───────────────────────────────────── */}
       <Box sx={{
         flexShrink: 0,
         display: 'flex', alignItems: 'center',
-        px: open ? 1.5 : 0,
-        justifyContent: open ? 'flex-start' : 'center',
+        px: 0.75,
         height: 52,
         borderBottom: `1px solid ${theme.palette.divider}`,
-        transition: 'padding 0.25s cubic-bezier(0.4,0,0.2,1)',
-        gap: 1,
+        gap: 0.5,
       }}>
-        {/* Logo icon — also acts as toggle when collapsed */}
-        <Box
-          onClick={(e) => { e.stopPropagation(); setOpen((p) => !p) }}
-          sx={{
-            width: 28, height: 28, borderRadius: '8px', flexShrink: 0,
-            background: 'linear-gradient(135deg, #001AFF 0%, #6B44F8 100%)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: `0 2px 10px ${accent}40`,
-            cursor: 'pointer',
-          }}
-        >
-          <AutoAwesomeIcon sx={{ fontSize: 14, color: '#fff' }} />
-        </Box>
+        {/* Logo icon — acts as collapse toggle */}
+        <Tooltip title={open ? 'Collapse' : 'Expand'} placement="right" arrow>
+          <Box
+            onClick={(e) => { e.stopPropagation(); setOpen((p) => !p) }}
+            sx={{
+              width: 32, height: 32, borderRadius: '8px', flexShrink: 0,
+              background: 'linear-gradient(135deg, #001AFF 0%, #6B44F8 100%)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: `0 2px 10px ${accent}40`,
+              cursor: 'pointer',
+              transition: 'opacity 0.15s',
+              '&:hover': { opacity: 0.85 },
+            }}
+          >
+            <AutoAwesomeIcon sx={{ fontSize: 14, color: '#fff' }} />
+          </Box>
+        </Tooltip>
 
         {/* Wordmark — only when expanded */}
         {open && (
@@ -266,24 +268,50 @@ const Sidebar = ({ conversations = [], activeConvId, onSelectConv, onNewConversa
           </Typography>
         )}
 
-        {/* Toggle chevron — only when expanded, sits at far right */}
-        {open && (
-          <Box
-            onClick={(e) => { e.stopPropagation(); setOpen(false) }}
+        {/* Spacer when collapsed */}
+        {!open && <Box sx={{ flex: 1 }} />}
+
+        {/* New Chat — always visible in header */}
+        <Tooltip title="New chat" placement="right" arrow>
+          <IconButton
+            size="small"
+            onClick={(e) => { e.stopPropagation(); onNewConversation() }}
             sx={{
-              width: 24, height: 24, borderRadius: '6px',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              cursor: 'pointer', flexShrink: 0,
-              color: theme.palette.text.disabled,
+              width: 32, height: 32, borderRadius: '8px', flexShrink: 0,
+              color: theme.palette.text.secondary,
+              border: `1px solid ${theme.palette.divider}`,
               '&:hover': {
-                bgcolor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)',
-                color: theme.palette.text.secondary,
+                borderColor: accent,
+                color: accent,
+                bgcolor: isDark ? 'rgba(79,110,255,0.1)' : 'rgba(0,26,255,0.06)',
               },
-              transition: 'background 0.15s, color 0.15s',
+              transition: 'all 0.15s',
             }}
           >
-            <ChevronLeftIcon sx={{ fontSize: 18 }} />
-          </Box>
+            <AddIcon sx={{ fontSize: 16 }} />
+          </IconButton>
+        </Tooltip>
+
+        {/* Collapse chevron — only when expanded */}
+        {open && (
+          <Tooltip title="Collapse" placement="right" arrow>
+            <Box
+              onClick={(e) => { e.stopPropagation(); setOpen(false) }}
+              sx={{
+                width: 28, height: 28, borderRadius: '6px',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                cursor: 'pointer', flexShrink: 0,
+                color: theme.palette.text.disabled,
+                '&:hover': {
+                  bgcolor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)',
+                  color: theme.palette.text.secondary,
+                },
+                transition: 'background 0.15s, color 0.15s',
+              }}
+            >
+              <ChevronLeftIcon sx={{ fontSize: 18 }} />
+            </Box>
+          </Tooltip>
         )}
       </Box>
 
@@ -319,27 +347,13 @@ const Sidebar = ({ conversations = [], activeConvId, onSelectConv, onNewConversa
         {/* Expanded: header + search */}
         {open && (
           <Box sx={{ px: 0.75, mb: 0.5, flexShrink: 0 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 0.75, mb: 0.5 }}>
+            <Box sx={{ px: 0.75, mb: 0.5 }}>
               <Typography sx={{
                 fontSize: 10, fontWeight: 600, color: theme.palette.text.secondary,
                 textTransform: 'uppercase', letterSpacing: '0.8px', opacity: 0.6,
               }}>
                 Your Chats
               </Typography>
-              <Tooltip title="New chat" placement="right" arrow>
-                <IconButton
-                  size="small"
-                  onClick={onNewConversation}
-                  sx={{
-                    p: 0.4, borderRadius: '6px',
-                    color: theme.palette.text.secondary,
-                    '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)', color: accent },
-                    transition: 'all 0.15s',
-                  }}
-                >
-                  <AddIcon sx={{ fontSize: ICON_SIZE }} />
-                </IconButton>
-              </Tooltip>
             </Box>
 
             <Box sx={{
@@ -365,17 +379,9 @@ const Sidebar = ({ conversations = [], activeConvId, onSelectConv, onNewConversa
           </Box>
         )}
 
-        {/* Collapsed: new chat + search icons — uniform with nav items */}
+        {/* Collapsed: search icon */}
         {!open && (
           <List disablePadding>
-            <CollapsedBtn
-              label="New chat"
-              icon={<AddIcon sx={{ fontSize: ICON_SIZE }} />}
-              onClick={onNewConversation}
-              isActive={false}
-              accent={accent}
-              isDark={isDark}
-            />
             <CollapsedBtn
               label="Search chats"
               icon={<SearchIcon sx={{ fontSize: ICON_SIZE }} />}

@@ -190,11 +190,27 @@ def _generate_svg_code(
     )
 
     if component_library:
-        # Inject actual SVG markup — model positions pre-built icons, not text hints
-        vocab_note = build_component_injection(component_library)
+        # Replace/append COMPONENTS block in the description with exact SVG markup
+        # and pre-computed edge coordinates — renderer never has to guess dimensions
+        description = build_component_injection(frame.description, component_library) + style_note
+        prompt = prompt_template.replace("{{DIAGRAM_DESCRIPTION}}", description)
+        return call_llm(prompt)
     elif plan.element_vocabulary:
         # Fallback: text descriptions only (no component library available)
-        lines = [f'  - "{k}": {v}' for k, v in plan.element_vocabulary.items()]
+        # Normalise values — new planner uses dicts, old planner uses strings
+        lines = []
+        for k, v in plan.element_vocabulary.items():
+            if isinstance(v, dict):
+                parts = []
+                if "shape" in v:   parts.append(v["shape"])
+                if "fill"  in v:   parts.append(f'fill {v["fill"]}')
+                if "label" in v:   parts.append(f'label \'{v["label"]}\'')
+                if "estimated_width" in v and "estimated_height" in v:
+                    parts.append(f'{v["estimated_width"]}x{v["estimated_height"]}')
+                spec_str = ", ".join(parts) if parts else k.replace("_", " ").title()
+            else:
+                spec_str = str(v)
+            lines.append(f'  - "{k}": {spec_str}')
         vocab_note = (
             "\n\nElement vocabulary (STRICTLY reproduce each named entity with the same "
             "shape, fill color, approximate size, and label in every frame it appears — "
@@ -230,12 +246,17 @@ def _render_frame(svg_text: str, frame_index: int, output_dir: str) -> tuple[Opt
     with open(svg_path, "w", encoding="utf-8") as f:
         f.write(clean_svg)
 
+    # Read viewBox height from the SVG so variable-height frames render correctly.
+    # Falls back to 900 if the viewBox attribute is absent or malformed.
+    height_match = re.search(r'viewBox=["\']0 0 \d+ (\d+)["\']', clean_svg)
+    svg_height = int(height_match.group(1)) if height_match else 900
+
     try:
         cairosvg.svg2png(
             url=svg_path,
             write_to=png_path,
             output_width=1200,
-            output_height=900,
+            output_height=svg_height,
         )
         return png_path, None
     except Exception as e:
@@ -363,37 +384,30 @@ async def generate_svg_frames(
     plan: GenerationPlan,
     prompt_template: str,
     output_dir: str,
+    component_library: dict[str, SVGComponent] | None = None,
 ) -> list[Optional[str]]:
     """
     Generate one PNG per frame using SVG.
 
-    Mirrors the interface of generate_manim_frames:
-      - Input:  GenerationPlan + svg prompt template string + output dir
-      - Output: List of absolute PNG paths, one per frame (None = failed frame)
+    Input:  GenerationPlan + svg prompt template + output dir + optional pre-built component library
+    Output: List of absolute PNG paths, one per frame (None = failed frame)
 
-    Pipeline:
-      Stage 1.5 — Component generation (sequential, runs once):
-        For each entity in element_vocabulary, look up the pre-built icon
-        library.  Any entity not in the library is generated via one LLM
-        call covering all novel entities together.  Result: a dict of
-        entity_key → SVGComponent (actual SVG markup at origin).
+    When called from the SVG pipeline in main.py, component_library is already
+    built (Stage 1.5 ran before Phase B).  When called standalone or from a
+    fallback path, component_library=None triggers an internal build.
 
-      Stage 2 — Frame generation (parallel):
-        All N frames run concurrently.  Each receives the component library
-        and copy-pastes the exact SVG markup into its frame, guaranteeing
-        pixel-identical icons across frames.
-
-    Args:
-        plan:            GenerationPlan produced by the planner.
-        prompt_template: Contents of svg_prompt.md, loaded by the caller.
-        output_dir:      Directory where per-frame subdirectories are created.
+    Stage 2 — Frame generation (parallel):
+      All N frames run concurrently.  Each receives the component library and
+      injects exact SVG fragments into its frame description, guaranteeing
+      pixel-identical icons across frames.
     """
-    # ── Stage 1.5: build component library ───────────────────────────────────
-    component_library: dict[str, SVGComponent] = {}
-    if plan.element_vocabulary:
-        print(f"[svg_generator] Building component library for {len(plan.element_vocabulary)} entity/entities")
-        component_library = await generate_svg_components(plan)
-        print(f"[svg_generator] Component library ready: {list(component_library.keys())}")
+    # ── Stage 1.5: build component library only if not already provided ───────
+    if component_library is None:
+        component_library = {}
+        if plan.element_vocabulary:
+            print(f"[svg_generator] Building component library for {len(plan.element_vocabulary)} entity/entities")
+            component_library, _ = await generate_svg_components(plan)
+            print(f"[svg_generator] Component library ready: {list(component_library.keys())}")
 
     # ── Stage 2: all frames in parallel ──────────────────────────────────────
     tasks = [

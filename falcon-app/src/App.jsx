@@ -15,6 +15,13 @@ export const useColorMode = () => useContext(ColorModeContext)
 // ─── Theme factory ────────────────────────────────────────────────────────────
 const buildTheme = (mode) =>
   createTheme({
+    typography: {
+      fontFamily: '"Sora", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      fontWeightLight:   300,
+      fontWeightRegular: 400,
+      fontWeightMedium:  500,
+      fontWeightBold:    600,
+    },
     palette: {
       mode,
       primary: { main: mode === 'dark' ? '#4F6EFF' : '#001AFF' },
@@ -31,7 +38,10 @@ const buildTheme = (mode) =>
     components: {
       MuiCssBaseline: {
         styleOverrides: {
-          body: { backgroundColor: mode === 'dark' ? '#111111' : '#f8fafc' },
+          body: {
+            backgroundColor: mode === 'dark' ? '#111111' : '#f8fafc',
+            fontFamily: '"Sora", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+          },
         },
       },
     },

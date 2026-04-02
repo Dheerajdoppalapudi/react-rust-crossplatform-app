@@ -17,7 +17,8 @@
       "Bash(sqlite3 database.sqlite \".schema conversations\")",
       "Bash(sqlite3 database.sqlite \".schema sessions\")",
       "Bash(sqlite3 database.sqlite \"SELECT conversation_id, count\\(*\\) as msg_count FROM sessions GROUP BY conversation_id ORDER BY msg_count DESC;\")",
-      "Bash(sqlite3 database.sqlite \":*)"
+      "Bash(sqlite3 database.sqlite \":*)",
+      "Bash(find '/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/' -type f -name *svg* -o -type d -name *svg*)"
     ]
   }
 }

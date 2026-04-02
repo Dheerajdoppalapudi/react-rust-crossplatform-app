@@ -1,17 +1,26 @@
 """
-Planner — Stages 1 & 2 of the multi-frame pipeline.
+Planner — SVG pipeline orchestration.
 
-Stage 1 (create_plan):
-    One LLM call that reads the user's prompt and decides:
-    - How many frames are needed
-    - What each frame should show (description)
-    - What caption/label goes under each frame
-    - A shared visual style so all frames look consistent
+The SVG pipeline runs in three sequential stages before frame rendering:
 
-Stage 2 (generate_all_frames):
-    N parallel LLM calls — one per frame — each producing a slim JSON
-    that the excalidraw enhancer already understands.
-    Uses asyncio.gather so all N calls run simultaneously.
+  Stage 1A — create_vocab_plan():
+    One LLM call (Phase A prompt). Classifies intent, decides frame count,
+    builds element_vocabulary with entity identity (entity_type, visual,
+    fill, label) — NO geometry, NO pixel coordinates.
+
+  Stage 1B — create_spatial_plan():
+    One LLM call (Phase B prompt). Receives the vocabulary plan AND the
+    dimension map from Prompt 2 (exact icon sizes). Computes all pixel
+    coordinates, arrow endpoints, viewBox heights. Outputs the full
+    GenerationPlan with complete frame descriptions.
+
+  Stage 1.5 — generate_svg_components() (in component_generator.py):
+    Runs between Stage 1A and Stage 1B.
+    Builds the icon library from element_vocabulary — DB lookup first,
+    LLM generation for novel entities. Returns dimension map.
+
+Non-SVG paths (Mermaid, Manim) still use create_plan() which calls
+planning_prompt.md as before.
 """
 
 import asyncio
@@ -20,15 +29,32 @@ import os
 import re
 import time
 from contextvars import ContextVar
-from typing import List
+from typing import List, Union
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
-from services.llm_service import default_llm_service
+from services.llm_service import LLMService, default_llm_service
 
 # Per-request lifecycle log. main.py sets this before each pipeline run.
-# Every LLM call appends an entry automatically; main.py adds stage events.
 request_log: ContextVar[list | None] = ContextVar("request_log", default=None)
+
+# Per-request token accumulator. main.py resets this before each pipeline run.
+# Holds {"prompt_tokens": int, "completion_tokens": int, "total_tokens": int}
+token_usage: ContextVar[dict | None] = ContextVar("token_usage", default=None)
+
+# Per-request LLM service override. When set, call_llm() uses this instead of
+# default_llm_service — allows the UI to choose Claude vs OpenAI per request.
+request_llm_service: ContextVar[LLMService | None] = ContextVar("request_llm_service", default=None)
+
+
+def _accumulate_tokens(usage: dict):
+    """Add one call's usage into the per-request running total."""
+    acc = token_usage.get()
+    if acc is None or not usage:
+        return
+    acc["prompt_tokens"]     += usage.get("prompt_tokens", 0)
+    acc["completion_tokens"] += usage.get("completion_tokens", 0)
+    acc["total_tokens"]      += usage.get("total_tokens", 0)
 
 
 def _log(entry: dict):
@@ -39,110 +65,212 @@ def _log(entry: dict):
 
 
 # ---------------------------------------------------------------------------
-# Pydantic models — validate the planning call's JSON output
+# Pydantic models
 # ---------------------------------------------------------------------------
 
 class SharedStyle(BaseModel):
     """Visual style applied consistently across every frame."""
     strokeColor: str = "#1e1e1e"
     backgroundColor: str = "#a5d8ff"
-    roughness: int = 1
+    strokeWidth: int = 2
+
+
+class VocabEntry(BaseModel):
+    """One entity in the element_vocabulary (Phase A output)."""
+    entity_type: str = "generic"   # browser | server | database | router | person | document | api | phone | cloud | queue | generic
+    visual: str = ""               # free-text description for generic entities
+    fill: str = "#a5d8ff"
+    label: str = ""
+
+
+class VocabularyPlan(BaseModel):
+    """
+    Phase A output — what to teach, which entities exist, no coordinates.
+    Used to drive Prompt 2 (icon generation) before spatial math runs.
+    """
+    intent_type: str = "process"
+    frame_count: int
+    shared_style: SharedStyle
+    element_vocabulary: dict = {}   # entity_key → VocabEntry (or raw dict — both accepted)
+    frames: list = []               # list of dicts with teaching_intent, entities_used, caption, narration
+    suggested_followups: List[str] = []
+    notes: Union[str, List[str]] = ""
+
+    @field_validator("notes", mode="before")
+    @classmethod
+    def coerce_notes(cls, v):
+        if isinstance(v, list):
+            return "\n".join(v)
+        return v
 
 
 class FramePlan(BaseModel):
-    """Everything needed to generate one frame."""
+    """Everything needed to generate one SVG frame."""
     index: int
-    description: str   # self-contained prompt sent to the diagram generator
-    caption: str       # short label placed below the frame on the canvas
-    narration: str = ""  # 2-3 sentence teaching-voice explanation for this frame
+    description: str       # complete ordered draw list — sent to Prompt 3
+    caption: str
+    narration: str = ""
+    spatial_plan: dict = {}
+    intent_type: str = ""
 
 
 class GenerationPlan(BaseModel):
-    """Full plan returned by the planning call."""
+    """
+    Full plan — Phase B output.
+    Contains all pixel coordinates and complete frame descriptions.
+    Used by svg_generator to drive Prompt 3.
+    """
     frame_count: int
-    layout: str
-    intent_type: str = "process"  # process | architecture | concept_analogy | math | comparison | timeline
+    layout: str = "horizontal"
+    intent_type: str = "process"
+    canvas: dict = {}
     shared_style: SharedStyle
-    element_vocabulary: dict = {}  # maps entity key → visual spec string, shared across all frames
+    element_vocabulary: dict = {}
     frames: List[FramePlan]
-    suggested_followups: List[str] = []  # 3-4 specific follow-up questions for this lesson
-    notes: str = ""                      # concise lesson summary shown as collapsible notes in the UI
+    suggested_followups: List[str] = []
+    notes: Union[str, List[str]] = ""
+
+    @field_validator("notes", mode="before")
+    @classmethod
+    def coerce_notes(cls, v):
+        if isinstance(v, list):
+            return "\n".join(v)
+        return v
 
 
 # ---------------------------------------------------------------------------
-# Modular LLM call
+# LLM call
 # ---------------------------------------------------------------------------
 
-def call_llm(prompt: str) -> str:
+def call_llm(prompt: str, max_tokens: int = 8192) -> str:
     """
-    Single entry point for all LLM calls in the image generation pipeline.
-
-    Sends a single-prompt request through the shared LLMService instance
-    and returns the raw text response.
-
-    Using one function here means:
-    - Swapping the LLM provider only requires changing this function.
-    - All calls (planning + frame generation) share the same config.
-    - Easy to add logging, retries, or token counting in one place.
-
-    Args:
-        prompt: The full prompt string to send to the model.
-
-    Returns:
-        The model's text reply as a string.
-
-    Raises:
-        RuntimeError: If the LLM service returns None (network/auth failure).
+    Single entry point for all LLM calls in the pipeline.
+    max_tokens defaults to 8192 — Phase B and component gen produce large JSON
+    that easily exceeds the old 4096 default, causing mid-JSON truncation.
     """
-    result = default_llm_service.make_single_prompt_request(prompt)
+    svc = request_llm_service.get() or default_llm_service
+    result, usage = svc.make_single_prompt_request(prompt, max_tokens=max_tokens)
     if result is None:
         raise RuntimeError("LLM service returned None — check server connectivity and credentials.")
+    _accumulate_tokens(usage)
     _log({
         "event": "llm_call",
         "prompt_preview": prompt[:600] + ("…" if len(prompt) > 600 else ""),
         "response_preview": result[:600] + ("…" if len(result) > 600 else ""),
         "full_prompt": prompt,
         "full_response": result,
+        "usage": usage,
     })
     return result
 
 
 # ---------------------------------------------------------------------------
-# JSON extraction helper
+# JSON extraction
 # ---------------------------------------------------------------------------
 
 def _extract_json(text: str) -> dict:
     """
-    Pull a JSON object out of an LLM response.
-    Handles two common cases:
-      1. Raw JSON (ideal — what we asked for)
-      2. JSON wrapped in markdown code fences (```json ... ```)
+    Pull the top-level JSON object out of an LLM response.
+
+    Only attempts the FIRST '{' found — never falls back to inner sub-objects,
+    which would silently return the wrong dict (e.g. a canvas sub-object
+    instead of the full GenerationPlan).
     """
-    # Try markdown code fences first
-    fence = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
+    decoder = json.JSONDecoder()
+
+    # Try markdown fence content first
+    fence = re.search(r"```(?:json)?\s*(\{.*?)\s*```", text, re.DOTALL)
     if fence:
-        return json.loads(fence.group(1))
+        candidate = fence.group(1).strip()
+        try:
+            obj, _ = decoder.raw_decode(candidate)
+            return obj
+        except json.JSONDecodeError:
+            pass
 
-    # Fall back to first bare JSON object in the text
-    obj = re.search(r"\{.*\}", text, re.DOTALL)
-    if obj:
-        return json.loads(obj.group())
+    # Find the first '{' — this must be the top-level object
+    start = text.find("{")
+    if start == -1:
+        raise ValueError(f"No JSON object found in LLM response:\n{text[:300]}")
 
-    raise ValueError(f"No JSON object found in LLM response:\n{text[:300]}")
+    try:
+        obj, _ = decoder.raw_decode(text, start)
+        return obj
+    except json.JSONDecodeError as e:
+        raise ValueError(
+            f"JSON parse error at char {e.pos}: {e.msg}\n"
+            f"Near: …{text[max(0, e.pos - 80):e.pos + 80]}…"
+        ) from e
 
 
 # ---------------------------------------------------------------------------
-# Stage 1 — Planning call
+# Stage 1A — Vocabulary plan (no geometry)
+# ---------------------------------------------------------------------------
+
+async def create_vocab_plan(user_prompt: str, conversation_context: str = "") -> VocabularyPlan:
+    """
+    Phase A: classify intent, build element_vocabulary with entity identity
+    (entity_type, visual, fill, label) — NO pixel coordinates.
+
+    Output drives Prompt 2 (icon generation). Phase B runs after Prompt 2
+    returns real dimensions.
+    """
+    template_path = os.path.join(os.path.dirname(__file__), "prompts", "planning_prompt_phase_a.md")
+    with open(template_path) as f:
+        template = f.read()
+
+    prompt = (
+        template
+        .replace("{{USER_PROMPT}}", user_prompt)
+        .replace("{{CONVERSATION_CONTEXT}}", conversation_context)
+    )
+
+    raw = await asyncio.to_thread(call_llm, prompt)
+    plan_dict = _extract_json(raw)
+    return VocabularyPlan(**plan_dict)
+
+
+# ---------------------------------------------------------------------------
+# Stage 1B — Spatial plan (full coordinates, uses real icon dimensions)
+# ---------------------------------------------------------------------------
+
+async def create_spatial_plan(
+    vocab_plan: VocabularyPlan,
+    dimension_map: dict,
+) -> GenerationPlan:
+    """
+    Phase B: compute ALL pixel coordinates using the real icon dimensions
+    from Prompt 2. Outputs GenerationPlan with complete frame descriptions
+    ready for Prompt 3 (SVG renderer).
+
+    dimension_map: { entity_key: { width, height, right_edge_y, bottom_edge_x } }
+    """
+    template_path = os.path.join(os.path.dirname(__file__), "prompts", "planning_prompt_phase_b.md")
+    with open(template_path) as f:
+        template = f.read()
+
+    vocab_json  = json.dumps(vocab_plan.model_dump(), indent=2)
+    dims_json   = json.dumps(dimension_map, indent=2)
+
+    prompt = (
+        template
+        .replace("{{VOCAB_PLAN}}", vocab_json)
+        .replace("{{DIMENSION_MAP}}", dims_json)
+    )
+
+    raw = await asyncio.to_thread(call_llm, prompt)
+    plan_dict = _extract_json(raw)
+    return GenerationPlan(**plan_dict)
+
+
+# ---------------------------------------------------------------------------
+# Legacy single-pass planning (used by Mermaid / Manim paths)
 # ---------------------------------------------------------------------------
 
 async def create_plan(user_prompt: str, conversation_context: str = "") -> GenerationPlan:
     """
-    Ask the LLM to plan the full multi-frame sequence.
-
-    conversation_context — optional block injected before the user prompt that
-    summarises prior turns in the conversation and any pause-point context.
-    When provided, the LLM is instructed to build on what was already taught
-    rather than starting from scratch.
+    Single-pass planning for non-SVG paths (Mermaid, Manim).
+    Uses the original planning_prompt.md.
     """
     template_path = os.path.join(os.path.dirname(__file__), "prompts", "planning_prompt.md")
     with open(template_path) as f:
@@ -160,7 +288,7 @@ async def create_plan(user_prompt: str, conversation_context: str = "") -> Gener
 
 
 # ---------------------------------------------------------------------------
-# Stage 2 — Single frame generation
+# Stage 2 — Single frame generation (non-SVG paths only)
 # ---------------------------------------------------------------------------
 
 async def _generate_one_frame(
@@ -169,34 +297,19 @@ async def _generate_one_frame(
     prompt_template: str,
     element_vocabulary: dict = {},
 ) -> dict:
-    """
-    Generate the slim JSON for a single frame.
-
-    Injects the frame's self-contained description + the shared style
-    constraints + the element vocabulary into prompt_template.md, then
-    calls the LLM via call_llm().
-
-    The style note forces the model to use the same colors and roughness
-    as every other frame. The vocabulary note forces the model to reuse
-    the exact same shape/color/size for recurring entities, ensuring
-    visual consistency across all frames generated in parallel.
-    """
+    """Generate slim JSON for one frame (Mermaid / Manim paths)."""
     style_note = (
         f"\n\nStyle constraints (strictly follow for consistency across all frames):\n"
         f'- strokeColor must be "{shared_style.strokeColor}" on all elements\n'
         f'- Use "{shared_style.backgroundColor}" as the primary backgroundColor for key shapes\n'
-        f"- roughness must be {shared_style.roughness} on all elements\n"
-        f"- IMPORTANT: use string IDs (e.g. \"box1\", \"arrow_ab\") for every element "
-        f"and in all arrow from/to fields — never use integer indices"
+        f"- IMPORTANT: use string IDs for every element and in all arrow from/to fields"
     )
 
     vocab_note = ""
     if element_vocabulary:
         lines = [f'  - "{k}": {v}' for k, v in element_vocabulary.items()]
         vocab_note = (
-            "\n\nElement vocabulary (STRICTLY reproduce these exact specs for each named entity "
-            "— same shape type, backgroundColor, width, height, and label as defined here. "
-            "This is critical for visual consistency across frames):\n"
+            "\n\nElement vocabulary (STRICTLY reproduce these exact specs for each named entity):\n"
             + "\n".join(lines)
         )
 
@@ -208,41 +321,24 @@ async def _generate_one_frame(
 
 
 # ---------------------------------------------------------------------------
-# Stage 2 — All frames in parallel
+# Stage 2 — All frames in parallel (non-SVG paths only)
 # ---------------------------------------------------------------------------
 
 async def generate_all_frames(
     plan: GenerationPlan,
     prompt_template: str,
 ) -> List[dict]:
-    """
-    Run all frame generation calls simultaneously using asyncio.gather.
-
-    Each frame's call goes through call_llm() → asyncio.to_thread, so
-    all N HTTP requests to the LLM server run concurrently without
-    blocking each other or the event loop.
-
-    If any individual frame fails (bad JSON, network error, etc.) it is
-    replaced with an empty elements list so the rest of the pipeline
-    continues — a bad frame shows as blank rather than crashing everything.
-
-    Returns a list of slim JSON dicts, one per frame, in order.
-    """
+    """Run all frame generation calls concurrently (Mermaid / Manim paths)."""
     tasks = [
         _generate_one_frame(frame, plan.shared_style, prompt_template, plan.element_vocabulary)
         for frame in plan.frames
     ]
-
-    # return_exceptions=True means a failed task returns an Exception
-    # object instead of raising and cancelling the other tasks
     results = await asyncio.gather(*tasks, return_exceptions=True)
-
     slims = []
     for i, result in enumerate(results):
         if isinstance(result, Exception):
             print(f"[planner] Frame {i} failed: {result}")
-            slims.append({"elements": []})  # blank fallback
+            slims.append({"elements": []})
         else:
             slims.append(result)
-
     return slims

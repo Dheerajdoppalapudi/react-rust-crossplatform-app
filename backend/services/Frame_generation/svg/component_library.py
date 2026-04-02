@@ -170,13 +170,24 @@ init_db()
 @dataclass
 class SVGComponent:
     """A single pre-built SVG icon."""
-    svg: str    # raw SVG markup (no surrounding <g>)
-    width: int  # always 100
-    height: int # always 120
+    svg: str          # raw SVG markup (no surrounding <g>)
+    width: int        # bounding box width
+    height: int       # bounding box height
+    right_edge_y: int = 0   # y midpoint of right edge (for rightward arrow source)
+    bottom_edge_x: int = 0  # x midpoint of bottom edge (for downward arrow source)
+
+    def __post_init__(self):
+        # Default to geometric midpoints if not explicitly set
+        if self.right_edge_y == 0:
+            self.right_edge_y = self.height // 2
+        if self.bottom_edge_x == 0:
+            self.bottom_edge_x = self.width // 2
 
 
-def _extract_label(spec: str, key: str) -> str:
-    """Extract label text from an element_vocabulary spec, or prettify the key."""
+def _extract_label(spec, key: str) -> str:
+    """Extract label text from an element_vocabulary spec (string or dict), or prettify the key."""
+    if isinstance(spec, dict):
+        return spec.get("label", key.replace("_", " ").title())
     m = re.search(r"label\s+'([^']+)'", spec, re.IGNORECASE)
     if m:
         return m.group(1)
@@ -185,7 +196,7 @@ def _extract_label(spec: str, key: str) -> str:
 
 def get_builtin_component(
     key: str,
-    spec: str,
+    spec,
     fill: str,
     stroke: str,
 ) -> Optional[SVGComponent]:
@@ -193,6 +204,7 @@ def get_builtin_component(
     Return a pre-built SVGComponent for *key*, or None if no icon matches.
 
     Looks up svg_components in database.sqlite using keyword substring matching.
+    spec may be a string (old planner format) or dict (new planner format).
     Run  python backend/scripts/seed_components.py  if the table is empty.
     """
     label = _extract_label(spec, key)
@@ -205,4 +217,6 @@ def get_builtin_component(
         .replace("{stroke}", stroke)
         .replace("{label}",  label)
     )
-    return SVGComponent(svg=svg, width=row["width"], height=row["height"])
+    w = row["width"]
+    h = row["height"]
+    return SVGComponent(svg=svg, width=w, height=h, right_edge_y=h // 2, bottom_edge_x=w // 2)
