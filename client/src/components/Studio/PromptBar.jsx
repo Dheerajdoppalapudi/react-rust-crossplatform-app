@@ -119,9 +119,10 @@ export default function PromptBar({
                 onChange={(e) => onPromptChange(e.target.value)}
                 onKeyDown={onKeyDown}
                 placeholder={
-                  pauseContext ? 'Ask your question about this moment…' :
-                  isFollowUp   ? 'Ask a follow-up…' :
-                                 'What do you want to visualize today?'
+                  isGenerating ? 'Generating your visual…' :
+                  pauseContext  ? 'Ask your question about this moment…' :
+                  isFollowUp    ? 'Ask a follow-up…' :
+                                  'What do you want to visualize today?'
                 }
                 multiline
                 minRows={1}
@@ -233,8 +234,8 @@ export default function PromptBar({
                 </Menu>
               </Box>
 
-              {/* Send button */}
-              <Tooltip title="Generate (Enter)">
+              {/* Send button — tooltip explains disabled state */}
+              <Tooltip title={isGenerating ? 'Generating…' : !prompt.trim() ? 'Type something to generate' : 'Generate (Enter)'}>
                 <span>
                   <IconButton
                     onClick={onSubmit}

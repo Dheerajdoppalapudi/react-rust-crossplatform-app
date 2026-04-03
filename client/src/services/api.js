@@ -1,31 +1,6 @@
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 export const api = {
-  health: async () => {
-    const res = await fetch(`${API_BASE}/api/health`)
-    return res.json()
-  },
-
-  chat: async (message) => {
-    const formData = new FormData()
-    formData.append('message', message)
-    const res = await fetch(`${API_BASE}/api/chat`, {
-      method: 'POST',
-      body: formData,
-    })
-    return res.json()
-  },
-
-  upload: async (files) => {
-    const formData = new FormData()
-    files.forEach((file) => formData.append('files', file))
-    const res = await fetch(`${API_BASE}/api/upload`, {
-      method: 'POST',
-      body: formData,
-    })
-    return res.json()
-  },
-
   excelFormatting: async (file) => {
     const formData = new FormData()
     formData.append('file', file)
@@ -37,7 +12,6 @@ export const api = {
     // Check if it's a file response or a JSON error
     const contentType = res.headers.get('content-type') || ''
     if (contentType.includes('application/json')) {
-      // Error response
       return { error: (await res.json()).error || 'Formatting failed' }
     }
 
@@ -111,11 +85,6 @@ export const api = {
     return res.json()
   },
 
-  getSessions: async () => {
-    const res = await fetch(`${API_BASE}/api/sessions`)
-    return res.json()
-  },
-
   generateVideoStream: (sessionId, onEvent) => {
     // Returns a Promise that resolves when the stream closes (done or error).
     // onEvent is called for every SSE event object the server sends:
@@ -166,15 +135,6 @@ export const api = {
     return res.json()
   },
 
-  checkVideoExists: async (sessionId) => {
-    try {
-      const res = await fetch(`${API_BASE}/api/sessions/${sessionId}/video`, { method: 'HEAD' })
-      return res.ok
-    } catch {
-      return false
-    }
-  },
-
   mergeConversation: async (convId) => {
     const res = await fetch(`${API_BASE}/api/conversations/${convId}/merge`, { method: 'POST' })
     if (!res.ok) throw new Error(await res.text())
@@ -182,7 +142,7 @@ export const api = {
   },
 
   // URL builders (not async — just return the URL string)
-  getVideoUrl:      (sessionId)             => `${API_BASE}/api/sessions/${sessionId}/video`,
-  getFrameUrl:      (sessionId, frameIndex) => `${API_BASE}/api/sessions/${sessionId}/frame/${frameIndex}`,
+  getVideoUrl:       (sessionId)             => `${API_BASE}/api/sessions/${sessionId}/video`,
+  getFrameUrl:       (sessionId, frameIndex) => `${API_BASE}/api/sessions/${sessionId}/frame/${frameIndex}`,
   getMergedVideoUrl: (convId)               => `${API_BASE}/api/conversations/${convId}/merged_video`,
 }

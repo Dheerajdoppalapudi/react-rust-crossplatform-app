@@ -1,8 +1,7 @@
 import { useState } from 'react'
-import { Box, Typography } from '@mui/material'
+import { Box, Typography, useTheme } from '@mui/material'
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline'
-import { useTheme } from '@mui/material'
 import { api } from '../../services/api'
 
 export default function FrameThumbnail({ sessionId, frameIndex, caption, type, isActive, onClick }) {

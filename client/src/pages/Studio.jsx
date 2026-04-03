@@ -4,19 +4,21 @@ import NotesOutlinedIcon from '@mui/icons-material/NotesOutlined'
 
 import LoadingView         from '../components/Studio/LoadingView'
 import EmptyView           from '../components/Studio/EmptyView'
-import ConversationThread  from '../components/Studio/ConversationThread'
+import ConversationThread, { UserBubble } from '../components/Studio/ConversationThread'
 import PromptBar           from '../components/Studio/PromptBar'
 import LearningView        from '../components/Studio/LearningView/index'
 
 import { api } from '../services/api'
+import { useToast } from '../contexts/ToastContext'
 import { DEFAULT_MODEL, FOLLOWUP_SUGGESTIONS } from '../components/Studio/constants'
 
 // ─── Studio ────────────────────────────────────────────────────────────────────
 export default function Studio({ activeConvId, onActiveConvIdChange, onConversationsRefresh }) {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
+  const toast  = useToast()
 
-  // ── Notes toggle — persisted across sessions ──────────────────────────────────
+  // ── Notes toggle — persisted across sessions ─────────────────────────────────
   const [notesEnabled, setNotesEnabled] = useState(
     () => localStorage.getItem('studio-notes-enabled') === 'true'
   )
@@ -26,43 +28,47 @@ export default function Studio({ activeConvId, onActiveConvIdChange, onConversat
     return next
   })
 
-  // ── Prompt input ─────────────────────────────────────────────────────────────
+  // ── Prompt input ──────────────────────────────────────────────────────────────
   const [prompt, setPrompt]               = useState('')
   const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL)
-  const inputRef                                = useRef(null)
-  const threadBottomRef       = useRef(null)
-  const contentScrollRef      = useRef(null)
+  const inputRef           = useRef(null)
+  const threadBottomRef    = useRef(null)
+  const contentScrollRef   = useRef(null)
 
   // ── Active conversation turns ─────────────────────────────────────────────────
   const [turns, setTurns] = useState([])
 
-  // True while the FIRST turn of a brand-new conversation is being submitted
-  const [isBootstrapping, setIsBootstrapping]   = useState(false)
-  const [bootstrapStage, setBootstrapStage]     = useState('planning')
-  const [bootstrapPrompt, setBootstrapPrompt]   = useState('')
-  const [bootstrapFrames, setBootstrapFrames]   = useState(null)
+  // True while the first turn of a brand-new conversation is being submitted
+  const [isBootstrapping, setIsBootstrapping] = useState(false)
+  const [bootstrapStage, setBootstrapStage]   = useState('planning')
+  const [bootstrapPrompt, setBootstrapPrompt] = useState('')
+  const [bootstrapFrames, setBootstrapFrames] = useState(null)
 
   // ── View mode ─────────────────────────────────────────────────────────────────
-  const [viewMode, setViewMode] = useState('chat')  // 'chat' | 'learn'
+  const [viewMode, setViewMode] = useState('chat') // 'chat' | 'learn'
 
   // ── Pause context ─────────────────────────────────────────────────────────────
   const [pauseContext, setPauseContext] = useState(null)
 
-  // ── Track which convId we've already loaded to avoid duplicate loads ──────────
+  // Track which convId we've already loaded to avoid duplicate loads
   const loadedConvIdRef = useRef(null)
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
 
-  // Update the videoPhase on a specific turn (matched by tempId or real id)
+  const scrollToTop = useCallback(() => {
+    if (contentScrollRef.current) contentScrollRef.current.scrollTop = 0
+  }, [])
+
   const setTurnVideoPhase = useCallback((tempId, sessionId, phase) => {
     setTurns((prev) =>
       prev.map((t) =>
-        t.tempId === tempId || (sessionId && t.id === sessionId) ? { ...t, videoPhase: phase } : t
+        t.tempId === tempId || (sessionId && t.id === sessionId)
+          ? { ...t, videoPhase: phase }
+          : t
       )
     )
   }, [])
 
-  // Run video generation for a turn; streams SSE progress and updates videoPhase
   const runVideoGenerationForTurn = useCallback(async (tempId, sessionId, onDone) => {
     try {
       await api.generateVideoStream(sessionId, (event) => {
@@ -79,77 +85,101 @@ export default function Studio({ activeConvId, onActiveConvIdChange, onConversat
     }
   }, [setTurnVideoPhase])
 
-  // Scroll the thread to the bottom whenever turns change
+  // Retry video generation for a specific failed turn
+  const handleRetryTurn = useCallback((turn) => {
+    if (!turn.id) return
+    setTurnVideoPhase(turn.tempId, turn.id, 'generating')
+    runVideoGenerationForTurn(turn.tempId, turn.id)
+  }, [setTurnVideoPhase, runVideoGenerationForTurn])
+
+  // Scroll to bottom when new turns are added
   useEffect(() => {
-    if (threadBottomRef.current) {
-      threadBottomRef.current.scrollIntoView({ behavior: 'smooth' })
-    }
+    threadBottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [turns.length])
+
+  // Auto-focus input when the empty view is shown
+  useEffect(() => {
+    const showEmpty = !isBootstrapping && turns.length === 0
+    if (showEmpty) {
+      const t = setTimeout(() => inputRef.current?.focus(), 100)
+      return () => clearTimeout(t)
+    }
+  }, [isBootstrapping, turns.length])
 
   // ── Load conversation by id ───────────────────────────────────────────────────
   const loadConversationById = useCallback(async (convId) => {
     setTurns([])
-    if (contentScrollRef.current) contentScrollRef.current.scrollTop = 0
+    scrollToTop()
 
-    const data = await api.getConversation(convId)
-    if (!data) return
-
-    const loadedTurns = data.turns.map((t) => ({
-      tempId:           t.id,
-      id:               t.id,
-      prompt:           t.prompt,
-      intent_type:      t.intent_type,
-      render_path:      t.render_path,
-      frame_count:      t.frame_count,
-      isLoading:        false,
-      framesData:       null,
-      videoPhase:       t.video_path ? 'ready' : (t.status === 'error' ? 'error' : 'generating'),
-      parentSessionId:  t.parent_session_id  ?? null,
-      parentFrameIndex: t.parent_frame_index ?? null,
-    }))
-
-    setTurns(loadedTurns)
-
-    // Load frames meta + trigger missing video generation for each turn
-    loadedTurns.forEach(async (turn) => {
-      try {
-        const raw = await api.getFramesMeta(turn.id)
-        if (raw) {
-          const framesData = {
-            render_path:         raw.render_path,
-            images:              raw.images              || [],
-            captions:            raw.captions            || [],
-            suggested_followups: raw.suggested_followups || [],
-            notes:               raw.notes               || '',
-          }
-          setTurns((prev) => prev.map((t) => t.id === turn.id ? { ...t, framesData } : t))
-        }
-      } catch { /* non-critical */ }
-
-      if (turn.videoPhase === 'generating') {
-        runVideoGenerationForTurn(turn.tempId, turn.id)
+    try {
+      const data = await api.getConversation(convId)
+      if (!data) {
+        toast.error('Could not load this conversation. It may have been deleted.')
+        return
       }
-    })
-  }, [runVideoGenerationForTurn])
 
-  // Keep a ref so useEffect doesn't need loadConversationById in its dep array
+      const loadedTurns = data.turns.map((t) => ({
+        tempId:           t.id,
+        id:               t.id,
+        prompt:           t.prompt,
+        intent_type:      t.intent_type,
+        render_path:      t.render_path,
+        frame_count:      t.frame_count,
+        isLoading:        false,
+        framesData:       null,
+        videoPhase:       t.video_path ? 'ready' : (t.status === 'error' ? 'error' : 'generating'),
+        parentSessionId:  t.parent_session_id  ?? null,
+        parentFrameIndex: t.parent_frame_index ?? null,
+      }))
+
+      setTurns(loadedTurns)
+
+      loadedTurns.forEach(async (turn) => {
+        try {
+          const raw = await api.getFramesMeta(turn.id)
+          if (raw) {
+            const framesData = {
+              render_path:         raw.render_path,
+              images:              raw.images              || [],
+              captions:            raw.captions            || [],
+              suggested_followups: raw.suggested_followups || [],
+              notes:               raw.notes               || '',
+            }
+            setTurns((prev) => prev.map((t) => t.id === turn.id ? { ...t, framesData } : t))
+          }
+        } catch { /* frame meta is non-critical */ }
+
+        if (turn.videoPhase === 'generating') {
+          runVideoGenerationForTurn(turn.tempId, turn.id)
+        }
+      })
+    } catch {
+      toast.error('Failed to load the conversation. Please try again.')
+    }
+  }, [runVideoGenerationForTurn, scrollToTop, toast])
+
+  // Stable ref to loadConversationById so the activeConvId effect below never
+  // stales — updating the ref on every render is intentional and cheaper than
+  // including loadConversationById in the effect dependency array.
   const loadConversationByIdRef = useRef(loadConversationById)
   loadConversationByIdRef.current = loadConversationById
 
-  // ── React to activeConvId prop changes (driven by Sidebar selection) ──────────
+  // ── React to activeConvId prop changes ────────────────────────────────────────
   useEffect(() => {
+    // Always clear stale pause context when switching conversations
+    setPauseContext(null)
+
     if (activeConvId && activeConvId !== loadedConvIdRef.current) {
       loadedConvIdRef.current = activeConvId
       loadConversationByIdRef.current(activeConvId)
     } else if (!activeConvId && loadedConvIdRef.current !== null) {
-      // Sidebar "New Chat" was clicked — clear all local state
       loadedConvIdRef.current = null
       setTurns([])
       setPrompt('')
       setIsBootstrapping(false)
-      if (contentScrollRef.current) contentScrollRef.current.scrollTop = 0
+      scrollToTop()
     }
-  }, [activeConvId])
+  }, [activeConvId, scrollToTop])
 
   // ── Submit handler ────────────────────────────────────────────────────────────
   const handleGenerate = useCallback(async () => {
@@ -166,7 +196,7 @@ export default function Studio({ activeConvId, onActiveConvIdChange, onConversat
       setBootstrapStage('planning')
       setBootstrapPrompt(submittedPrompt)
       setTurns([])
-      if (contentScrollRef.current) contentScrollRef.current.scrollTop = 0
+      scrollToTop()
     } else {
       setTurns((prev) => [...prev, {
         tempId,
@@ -195,7 +225,10 @@ export default function Studio({ activeConvId, onActiveConvIdChange, onConversat
     setPauseContext(null)
 
     try {
-      const data = await api.imageGeneration(submittedPrompt, activeConvId, capturedPauseContext, notesEnabled, selectedModel.provider, selectedModel.model)
+      const data = await api.imageGeneration(
+        submittedPrompt, activeConvId, capturedPauseContext,
+        notesEnabled, selectedModel.provider, selectedModel.model,
+      )
 
       const framesData = {
         render_path:         data.render_path,
@@ -222,7 +255,6 @@ export default function Studio({ activeConvId, onActiveConvIdChange, onConversat
       }
 
       if (isFirstTurn) {
-        // Mark as loaded before notifying parent to prevent useEffect re-load
         loadedConvIdRef.current = data.conversation_id
         onActiveConvIdChange(data.conversation_id)
         setBootstrapStage('frames')
@@ -241,6 +273,7 @@ export default function Studio({ activeConvId, onActiveConvIdChange, onConversat
       }
     } catch (err) {
       console.error('[Studio] handleGenerate:', err)
+      toast.error('Generation failed. Please try again.')
       if (isFirstTurn) {
         setIsBootstrapping(false)
         setTurns([])
@@ -256,8 +289,11 @@ export default function Studio({ activeConvId, onActiveConvIdChange, onConversat
       if (it1) clearTimeout(it1)
       if (it2) clearTimeout(it2)
     }
-  }, [prompt, isBootstrapping, turns, activeConvId, notesEnabled, pauseContext, onActiveConvIdChange, onConversationsRefresh, runVideoGenerationForTurn])
-
+  }, [
+    prompt, isBootstrapping, turns, activeConvId, notesEnabled,
+    pauseContext, selectedModel, onActiveConvIdChange,
+    onConversationsRefresh, runVideoGenerationForTurn, scrollToTop, toast,
+  ])
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleGenerate() }
@@ -269,7 +305,7 @@ export default function Studio({ activeConvId, onActiveConvIdChange, onConversat
     setTurns([])
     setPrompt('')
     setIsBootstrapping(false)
-    if (contentScrollRef.current) contentScrollRef.current.scrollTop = 0
+    scrollToTop()
     inputRef.current?.focus()
   }
 
@@ -283,7 +319,7 @@ export default function Studio({ activeConvId, onActiveConvIdChange, onConversat
     const caption = directCaption ?? turn.framesData?.captions?.[frameIndex] ?? null
     setPauseContext({ sessionId, frameIndex, caption })
     inputRef.current?.focus()
-  }, [turns, inputRef])
+  }, [turns])
 
   const lastTurn = turns.filter((t) => t.intent_type).at(-1) ?? null
   const activeConversationMeta = activeConvId ? {
@@ -293,9 +329,18 @@ export default function Studio({ activeConvId, onActiveConvIdChange, onConversat
   } : null
 
   const isAnyGenerating = isBootstrapping || turns.some((t) => t.isLoading)
-  const showEmpty  = !isBootstrapping && turns.length === 0
-  const showLoader = isBootstrapping
-  const showThread = !isBootstrapping && turns.length > 0
+  const showEmpty       = !isBootstrapping && turns.length === 0
+  const showLoader      = isBootstrapping
+  const showThread      = !isBootstrapping && turns.length > 0
+
+  // Follow-up suggestions: shown below the thread when idle and not in pause-to-ask mode
+  const followUpSuggestions = (() => {
+    const isFollowUp = showThread && !!activeConvId && !isAnyGenerating && !pauseContext
+    if (!isFollowUp) return []
+    return activeConversationMeta?.suggested_followups?.length
+      ? activeConversationMeta.suggested_followups
+      : (FOLLOWUP_SUGGESTIONS[activeConversationMeta?.intent_type] || FOLLOWUP_SUGGESTIONS.illustration)
+  })()
 
   const handleLearnAsk = useCallback(({ question, sessionId, frameIndex, caption }) => {
     setPauseContext({ sessionId, frameIndex: frameIndex ?? undefined, caption: caption ?? undefined })
@@ -304,7 +349,7 @@ export default function Studio({ activeConvId, onActiveConvIdChange, onConversat
     setTimeout(() => inputRef.current?.focus(), 120)
   }, [])
 
-  // ── Learning canvas — full-screen focus mode ──────────────────────────────────
+  // ── Learning view — full-screen focus mode ────────────────────────────────────
   if (viewMode === 'learn') {
     return (
       <LearningView
@@ -326,7 +371,7 @@ export default function Studio({ activeConvId, onActiveConvIdChange, onConversat
       position: 'relative',
     }}>
 
-      {/* ── Floating controls pill — top right ───────────────────────────────── */}
+      {/* ── Floating controls — top right ──────────────────────────────────── */}
       <Box sx={{
         position: 'absolute', top: 12, right: 16, zIndex: 10,
         display: 'flex', alignItems: 'center', gap: 0.75,
@@ -335,16 +380,13 @@ export default function Studio({ activeConvId, onActiveConvIdChange, onConversat
         border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)'}`,
         borderRadius: '10px',
         px: 0.75, py: 0.5,
-        boxShadow: isDark
-          ? '0 4px 16px rgba(0,0,0,0.4)'
-          : '0 4px 16px rgba(0,0,0,0.08)',
+        boxShadow: isDark ? '0 4px 16px rgba(0,0,0,0.4)' : '0 4px 16px rgba(0,0,0,0.08)',
       }}>
         {/* Chat / Learn toggle */}
         <Box sx={{
           display: 'flex',
           border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : '#e2e8f0'}`,
-          borderRadius: '7px',
-          p: 0.25, gap: 0.2,
+          borderRadius: '7px', p: 0.25, gap: 0.2,
         }}>
           {['Chat', 'Learn'].map((label) => {
             const m      = label.toLowerCase()
@@ -354,13 +396,10 @@ export default function Studio({ activeConvId, onActiveConvIdChange, onConversat
                 key={m}
                 onClick={() => setViewMode(m)}
                 sx={{
-                  px: 1.25, py: 0.35,
-                  borderRadius: '5px',
-                  cursor: 'pointer',
-                  fontSize: 11, fontWeight: 600,
-                  userSelect: 'none',
+                  px: 1.25, py: 0.35, borderRadius: '5px', cursor: 'pointer',
+                  fontSize: 11, fontWeight: 600, userSelect: 'none',
                   bgcolor: active ? theme.palette.primary.main : 'transparent',
-                  color: active ? '#fff' : theme.palette.text.secondary,
+                  color:   active ? '#fff' : theme.palette.text.secondary,
                   transition: 'all 0.15s',
                 }}
               >
@@ -375,6 +414,7 @@ export default function Studio({ activeConvId, onActiveConvIdChange, onConversat
           <IconButton
             size="small"
             onClick={toggleNotes}
+            aria-pressed={notesEnabled}
             sx={{
               borderRadius: '7px', p: 0.6,
               border: `1px solid ${notesEnabled
@@ -401,7 +441,7 @@ export default function Studio({ activeConvId, onActiveConvIdChange, onConversat
       {/* ── Body ─────────────────────────────────────────────────────────────── */}
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
 
-        {/* Scrollable middle */}
+        {/* Scrollable content */}
         <Box
           ref={contentScrollRef}
           sx={{
@@ -411,20 +451,12 @@ export default function Studio({ activeConvId, onActiveConvIdChange, onConversat
             '&::-webkit-scrollbar-thumb': { backgroundColor: theme.palette.divider, borderRadius: 2 },
           }}
         >
+          {/* Bootstrap loading state */}
           {showLoader && (
             <Box sx={{ width: '100%', maxWidth: 760, mx: 'auto', px: 3 }}>
               {bootstrapPrompt && (
                 <Box sx={{ display: 'flex', justifyContent: 'flex-end', pt: 3, pb: 1.5 }}>
-                  <Box sx={{
-                    maxWidth: '72%', px: 2.5, py: 1.5,
-                    backgroundColor: isDark ? '#242424' : '#f1f5f9',
-                    color: theme.palette.text.primary,
-                    borderRadius: '18px 18px 4px 18px',
-                    fontSize: 14.5, lineHeight: 1.6,
-                    border: `1px solid ${isDark ? '#2e2e2e' : '#e2e8f0'}`,
-                  }}>
-                    {bootstrapPrompt}
-                  </Box>
+                  <UserBubble prompt={bootstrapPrompt} />
                 </Box>
               )}
               <LoadingView stage={bootstrapStage} framesData={bootstrapFrames} />
@@ -435,48 +467,43 @@ export default function Studio({ activeConvId, onActiveConvIdChange, onConversat
             <EmptyView onSuggestionClick={(s) => { setPrompt(s); inputRef.current?.focus() }} />
           )}
 
-          {showThread && (() => {
-            const isFollowUp = !!activeConvId && !isAnyGenerating
-            const suggestions = isFollowUp && !pauseContext
-              ? (activeConversationMeta?.suggested_followups?.length
-                  ? activeConversationMeta.suggested_followups
-                  : (FOLLOWUP_SUGGESTIONS[activeConversationMeta?.intent_type] || FOLLOWUP_SUGGESTIONS.illustration))
-              : []
+          {showThread && (
+            <>
+              <ConversationThread
+                turns={turns}
+                onPauseAsk={handlePauseAsk}
+                onRetryTurn={handleRetryTurn}
+              />
 
-            return (
-              <>
-                <ConversationThread turns={turns} onPauseAsk={handlePauseAsk} />
-
-                {suggestions.length > 0 && (
-                  <Box sx={{ width: '100%', maxWidth: 760, mx: 'auto', px: 3, pt: 2, pb: 3 }}>
-                    <Typography sx={{ fontSize: 13, fontWeight: 600, color: theme.palette.text.secondary, mb: 0.5 }}>
-                      Follow-ups
-                    </Typography>
-                    {suggestions.map((s, i) => (
-                      <Box key={s}>
-                        {i > 0 && <Divider sx={{ opacity: 0.2 }} />}
-                        <Box
-                          onClick={() => { setPrompt(s); inputRef.current?.focus() }}
-                          sx={{
-                            display: 'flex', alignItems: 'center', gap: 1.5,
-                            py: 0.9, px: 0.5, cursor: 'pointer', userSelect: 'none',
-                            color: theme.palette.text.secondary,
-                            '&:hover': { color: theme.palette.text.primary },
-                            transition: 'color 0.15s',
-                          }}
-                        >
-                          <Typography sx={{ fontSize: 14.5, opacity: 0.35, flexShrink: 0, lineHeight: 1 }}>↳</Typography>
-                          <Typography sx={{ fontSize: 14.5, fontWeight: 400, lineHeight: 1.6 }}>{s}</Typography>
-                        </Box>
+              {followUpSuggestions.length > 0 && (
+                <Box sx={{ width: '100%', maxWidth: 760, mx: 'auto', px: 3, pt: 2, pb: 3 }}>
+                  <Typography sx={{ fontSize: 13, fontWeight: 600, color: theme.palette.text.secondary, mb: 0.5 }}>
+                    Follow-ups
+                  </Typography>
+                  {followUpSuggestions.map((s, i) => (
+                    <Box key={s}>
+                      {i > 0 && <Divider sx={{ opacity: 0.2 }} />}
+                      <Box
+                        onClick={() => { setPrompt(s); inputRef.current?.focus() }}
+                        sx={{
+                          display: 'flex', alignItems: 'center', gap: 1.5,
+                          py: 0.9, px: 0.5, cursor: 'pointer', userSelect: 'none',
+                          color: theme.palette.text.secondary,
+                          '&:hover': { color: theme.palette.text.primary },
+                          transition: 'color 0.15s',
+                        }}
+                      >
+                        <Typography sx={{ fontSize: 14.5, opacity: 0.35, flexShrink: 0, lineHeight: 1 }}>↳</Typography>
+                        <Typography sx={{ fontSize: 14.5, fontWeight: 400, lineHeight: 1.6 }}>{s}</Typography>
                       </Box>
-                    ))}
-                  </Box>
-                )}
+                    </Box>
+                  ))}
+                </Box>
+              )}
 
-                <Box ref={threadBottomRef} sx={{ height: 1 }} />
-              </>
-            )
-          })()}
+              <Box ref={threadBottomRef} sx={{ height: 1 }} />
+            </>
+          )}
         </Box>
 
         {/* Prompt bar */}

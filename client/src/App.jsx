@@ -6,6 +6,8 @@ import Footer from './components/common/Footer'
 import AboutUs from './pages/AboutUs'
 import Settings from './pages/Settings'
 import Studio from './pages/Studio'
+import ErrorBoundary from './components/error/ErrorBoundary'
+import { ToastProvider, useToast } from './contexts/ToastContext'
 import { api } from './services/api'
 
 // ─── Theme context ────────────────────────────────────────────────────────────
@@ -47,32 +49,34 @@ const buildTheme = (mode) =>
     },
   })
 
-// ─── Pages that are full-height — no footer, no padding ──────────────────────
+// ─── Pages that use the full viewport height — no footer, no padding ──────────
 const FULL_HEIGHT_PAGES = ['/studio']
-
-// ─── Pages that are edge-to-edge — no outer padding, keep footer ─────────────
 const NO_PADDING_PAGES  = ['/']
 
-// ─── App ─────────────────────────────────────────────────────────────────────
-function App() {
-  const [mode, setMode] = useState(() => localStorage.getItem('zenith-theme') || 'light')
-  const location  = useLocation()
-  const navigate  = useNavigate()
+// ─── Inner app — has access to ToastProvider ──────────────────────────────────
+function AppInner() {
+  const location    = useLocation()
+  const navigate    = useNavigate()
+  const toast       = useToast()
+  const { mode: themeMode, toggle: onThemeToggle } = useContext(ColorModeContext)
   const isFullHeight = FULL_HEIGHT_PAGES.includes(location.pathname)
   const isNoPadding  = NO_PADDING_PAGES.includes(location.pathname)
 
-  // ── Conversations — lifted so Sidebar and Studio share them ──────────────
-  const [conversations, setConversations] = useState([])
-  const [activeConvId, setActiveConvId]   = useState(null)
+  // ── Conversations — lifted so Sidebar and Studio share state ─────────────
+  const [conversations, setConversations]             = useState([])
+  const [activeConvId, setActiveConvId]               = useState(null)
+  const [isLoadingConversations, setIsLoadingConversations] = useState(true)
 
   const fetchConversations = useCallback(async () => {
     try {
       const data = await api.getConversations()
       setConversations(Array.isArray(data) ? data : [])
-    } catch (err) {
-      console.error('[App] fetchConversations:', err)
+    } catch {
+      toast.error('Could not load your conversations. Check your connection and try again.')
+    } finally {
+      setIsLoadingConversations(false)
     }
-  }, [])
+  }, [toast])
 
   useEffect(() => { fetchConversations() }, [fetchConversations])
 
@@ -85,6 +89,62 @@ function App() {
     setActiveConvId(null)
     navigate('/studio')
   }, [navigate])
+
+  return (
+    <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden', bgcolor: 'background.default' }}>
+
+      <Sidebar
+        conversations={conversations}
+        activeConvId={activeConvId}
+        onSelectConv={handleSelectConv}
+        onNewConversation={handleNewConversation}
+        themeMode={themeMode}
+        onThemeToggle={onThemeToggle}
+        isLoading={isLoadingConversations}
+      />
+
+      <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
+        <Box
+          component="main"
+          sx={{
+            flex: 1,
+            p: (isFullHeight || isNoPadding) ? 0 : 3,
+            display: 'flex',
+            flexDirection: 'column',
+            minHeight: 0,
+            overflow: isFullHeight ? 'hidden' : 'auto',
+            '& > *': { flex: 1, minHeight: 0 },
+          }}
+        >
+          {/* Route-level boundary: page crashes don't take down the sidebar */}
+          <ErrorBoundary level="page" key={location.pathname}>
+            <Routes>
+              <Route path="/"         element={<AboutUs />} />
+              <Route path="/studio"   element={
+                <Studio
+                  activeConvId={activeConvId}
+                  onActiveConvIdChange={setActiveConvId}
+                  onConversationsRefresh={fetchConversations}
+                />
+              } />
+              <Route path="/settings" element={<Settings />} />
+            </Routes>
+          </ErrorBoundary>
+        </Box>
+
+        {!isFullHeight && <Footer />}
+      </Box>
+
+    </Box>
+  )
+}
+
+// ─── App ─────────────────────────────────────────────────────────────────────
+function App() {
+  const [mode, setMode] = useState(() => {
+    const stored = localStorage.getItem('zenith-theme')
+    return stored === 'light' || stored === 'dark' ? stored : 'light'
+  })
 
   const colorMode = useMemo(() => ({
     mode,
@@ -102,47 +162,9 @@ function App() {
     <ColorModeContext.Provider value={colorMode}>
       <ThemeProvider theme={theme}>
         <CssBaseline />
-        <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden', bgcolor: 'background.default' }}>
-
-          <Sidebar
-            conversations={conversations}
-            activeConvId={activeConvId}
-            onSelectConv={handleSelectConv}
-            onNewConversation={handleNewConversation}
-            themeMode={mode}
-            onThemeToggle={colorMode.toggle}
-          />
-
-          <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
-            <Box
-              component="main"
-              sx={{
-                flex: 1,
-                p: (isFullHeight || isNoPadding) ? 0 : 3,
-                display: 'flex',
-                flexDirection: 'column',
-                minHeight: 0,
-                overflow: isFullHeight ? 'hidden' : 'auto',
-                '& > *': { flex: 1, minHeight: 0 },
-              }}
-            >
-              <Routes>
-                <Route path="/"         element={<AboutUs />} />
-                <Route path="/studio"   element={
-                  <Studio
-                    activeConvId={activeConvId}
-                    onActiveConvIdChange={setActiveConvId}
-                    onConversationsRefresh={fetchConversations}
-                  />
-                } />
-                <Route path="/settings" element={<Settings />} />
-              </Routes>
-            </Box>
-
-            {!isFullHeight && <Footer />}
-          </Box>
-
-        </Box>
+        <ToastProvider>
+          <AppInner />
+        </ToastProvider>
       </ThemeProvider>
     </ColorModeContext.Provider>
   )

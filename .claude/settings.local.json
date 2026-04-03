@@ -18,7 +18,8 @@
       "Bash(sqlite3 database.sqlite \".schema sessions\")",
       "Bash(sqlite3 database.sqlite \"SELECT conversation_id, count\\(*\\) as msg_count FROM sessions GROUP BY conversation_id ORDER BY msg_count DESC;\")",
       "Bash(sqlite3 database.sqlite \":*)",
-      "Bash(find '/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/' -type f -name *svg* -o -type d -name *svg*)"
+      "Bash(find '/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/' -type f -name *svg* -o -type d -name *svg*)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\({k:v for k,v in d.items\\(\\) if k in ['build','identifier','productName','bundle']}, indent=2\\)\\)\")"
     ]
   }
 }

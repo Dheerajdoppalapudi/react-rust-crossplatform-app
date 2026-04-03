@@ -71,7 +71,7 @@ function ActualFrames({ sessionId, count, isDark }) {
   const overlayColor = isDark ? 'rgba(255,255,255,1)' : 'rgba(0,0,0,1)'
   return (
     <Box sx={{ display: 'flex', gap: 1, mt: 1.25, mb: 0.5, flexWrap: 'wrap' }}>
-      {Array.from({ length: Math.min(count, 5) }).map((_, i) => (
+      {Array.from({ length: Math.min(count, FRAME_COUNT) }).map((_, i) => (
         <Box
           key={i}
           sx={{
@@ -156,14 +156,30 @@ export default function LoadingView({ stage, compact = false, framesData = null 
   const pendingColor = isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'
   const lineColor    = isDark ? 'rgba(255,255,255,0.1)'  : 'rgba(0,0,0,0.1)'
 
+  const currentStepLabel = STEPS[current]?.label ?? 'Complete'
+
   return (
-    <Box sx={{
-      display:    'flex',
-      alignItems: 'flex-start',
-      minHeight:  compact ? 80 : 240,
-      py:         compact ? 1.5 : 3,
-      px:         compact ? 0   : 4,
-    }}>
+    <Box
+      role="status"
+      aria-live="polite"
+      aria-atomic="false"
+      sx={{
+        position:   'relative',
+        display:    'flex',
+        alignItems: 'flex-start',
+        minHeight:  compact ? 80 : 240,
+        py:         compact ? 1.5 : 3,
+        px:         compact ? 0   : 4,
+      }}
+    >
+      {/* Screen-reader-only live text — updates on each step change */}
+      <Box sx={{
+        position: 'absolute', width: 1, height: 1,
+        overflow: 'hidden', clip: 'rect(0,0,0,0)', whiteSpace: 'nowrap',
+      }}>
+        {currentStepLabel}
+      </Box>
+
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0, maxWidth: 400 }}>
 
         {STEPS.map((step, i) => {
