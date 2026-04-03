@@ -19,7 +19,13 @@
       "Bash(sqlite3 database.sqlite \"SELECT conversation_id, count\\(*\\) as msg_count FROM sessions GROUP BY conversation_id ORDER BY msg_count DESC;\")",
       "Bash(sqlite3 database.sqlite \":*)",
       "Bash(find '/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/' -type f -name *svg* -o -type d -name *svg*)",
-      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\({k:v for k,v in d.items\\(\\) if k in ['build','identifier','productName','bundle']}, indent=2\\)\\)\")"
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\({k:v for k,v in d.items\\(\\) if k in ['build','identifier','productName','bundle']}, indent=2\\)\\)\")",
+      "Bash(mv planning_prompt_phase_a.md planning_vocab.md)",
+      "Bash(mv planning_prompt_phase_b.md planning_spatial.md)",
+      "Bash(mv planning_prompt.md planning_prompt.md.retired)",
+      "Bash(sqlite3 database.sqlite \"PRAGMA table_info\\(sessions\\);\")",
+      "Bash(sqlite3 database.sqlite \"SELECT id, frame_count, render_path FROM sessions LIMIT 5;\")",
+      "Bash(sqlite3 database.sqlite \"SELECT frame_count, COUNT\\(*\\) as cnt FROM sessions GROUP BY frame_count ORDER BY frame_count;\")"
     ]
   }
 }

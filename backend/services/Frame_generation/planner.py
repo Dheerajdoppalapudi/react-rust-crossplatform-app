@@ -218,7 +218,7 @@ async def create_vocab_plan(user_prompt: str, conversation_context: str = "") ->
     Output drives Prompt 2 (icon generation). Phase B runs after Prompt 2
     returns real dimensions.
     """
-    template_path = os.path.join(os.path.dirname(__file__), "prompts", "planning_prompt_phase_a.md")
+    template_path = os.path.join(os.path.dirname(__file__), "prompts", "planning_vocab.md")
     with open(template_path) as f:
         template = f.read()
 
@@ -248,7 +248,7 @@ async def create_spatial_plan(
 
     dimension_map: { entity_key: { width, height, right_edge_y, bottom_edge_x } }
     """
-    template_path = os.path.join(os.path.dirname(__file__), "prompts", "planning_prompt_phase_b.md")
+    template_path = os.path.join(os.path.dirname(__file__), "prompts", "planning_spatial.md")
     with open(template_path) as f:
         template = f.read()
 
@@ -261,33 +261,49 @@ async def create_spatial_plan(
         .replace("{{DIMENSION_MAP}}", dims_json)
     )
 
-    raw = await asyncio.to_thread(call_llm, prompt)
+    raw = await asyncio.to_thread(call_llm, prompt, 16000)
     plan_dict = _extract_json(raw)
     return GenerationPlan(**plan_dict)
 
 
 # ---------------------------------------------------------------------------
-# Legacy single-pass planning (used by Mermaid / Manim paths)
+# Convert VocabularyPlan → GenerationPlan (no LLM call — used by all non-SVG paths)
 # ---------------------------------------------------------------------------
 
-async def create_plan(user_prompt: str, conversation_context: str = "") -> GenerationPlan:
+def _vocab_plan_to_generation_plan(vocab_plan: VocabularyPlan) -> GenerationPlan:
     """
-    Single-pass planning for non-SVG paths (Mermaid, Manim).
-    Uses the original planning_prompt.md.
-    """
-    template_path = os.path.join(os.path.dirname(__file__), "prompts", "planning_prompt.md")
-    with open(template_path) as f:
-        template = f.read()
+    Converts a VocabularyPlan (phase A output) into a GenerationPlan that all
+    non-SVG renderers (Mermaid, Manim, slim JSON) can consume.
 
-    prompt = (
-        template
-        .replace("{{USER_PROMPT}}", user_prompt)
-        .replace("{{CONVERSATION_CONTEXT}}", conversation_context)
+    Builds frame.description from teaching_intent + entities_used + narration —
+    no pixel coordinates. Mermaid and Manim handle their own layout internally;
+    slim JSON lets the LLM place elements without forced coord math.
+    """
+    frames = []
+    for i, f in enumerate(vocab_plan.frames):
+        entities_line = ", ".join(f.get("entities_used", []))
+        description = (
+            f"{f.get('teaching_intent', '')}\n"
+            f"Entities present: {entities_line}\n"
+            f"Narration: {f.get('narration', '')}"
+        )
+        frames.append(FramePlan(
+            index=i,
+            description=description,
+            caption=f.get("caption", ""),
+            narration=f.get("narration", ""),
+            intent_type=vocab_plan.intent_type,
+        ))
+    return GenerationPlan(
+        frame_count=vocab_plan.frame_count,
+        layout="horizontal",
+        intent_type=vocab_plan.intent_type,
+        shared_style=vocab_plan.shared_style,
+        element_vocabulary=vocab_plan.element_vocabulary,
+        frames=frames,
+        suggested_followups=vocab_plan.suggested_followups,
+        notes=vocab_plan.notes,
     )
-
-    raw = await asyncio.to_thread(call_llm, prompt)
-    plan_dict = _extract_json(raw)
-    return GenerationPlan(**plan_dict)
 
 
 # ---------------------------------------------------------------------------

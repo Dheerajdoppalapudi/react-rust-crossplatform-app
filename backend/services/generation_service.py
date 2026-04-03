@@ -27,7 +27,7 @@ from core.database import get_db
 from services.Frame_generation.excalidraw_enhancer import enhance
 from services.Frame_generation.planner import (
     GenerationPlan,
-    create_plan,
+    _vocab_plan_to_generation_plan,
     create_vocab_plan,
     create_spatial_plan,
     generate_all_frames,
@@ -247,7 +247,7 @@ async def run_generation_pipeline(
         _log({"event": "stage_complete", "stage": "component_gen_and_phase_b_parallel",
               "entities": list(component_library.keys()), "frame_count": plan.frame_count})
     else:
-        plan = await create_plan(message, conversation_context)
+        plan = _vocab_plan_to_generation_plan(vocab_plan)
 
     _log({
         "event": "stage_complete",
@@ -301,7 +301,7 @@ async def _run_frame_generation(
 
     # ── Manim ─────────────────────────────────────────────────────────────────
     if plan.intent_type in MANIM_INTENT_TYPES and manim_available():
-        logger.info("Render path → manim  session=%s", session_id)
+        logger.info("Render path → manim  session=%s  intent=%s", session_id, plan.intent_type)
         _log({"event": "stage_start", "stage": "frame_generation", "path": "manim",
               "frame_count": plan.frame_count})
 
@@ -340,7 +340,7 @@ async def _run_frame_generation(
 
     # ── SVG ───────────────────────────────────────────────────────────────────
     if plan.intent_type in SVG_INTENT_TYPES and svg_available():
-        logger.info("Render path → svg  session=%s", session_id)
+        logger.info("Render path → svg  session=%s  intent=%s", session_id, plan.intent_type)
         _log({"event": "stage_start", "stage": "frame_generation", "path": "svg",
               "frame_count": plan.frame_count})
 
@@ -413,7 +413,7 @@ async def _run_frame_generation(
         else:
             logger.info("Render path → slim_json  session=%s  intent=%s", session_id, plan.intent_type)
     else:
-        logger.info("Render path → mermaid  session=%s", session_id)
+        logger.info("Render path → mermaid  session=%s  intent=%s", session_id, plan.intent_type)
 
     _log({"event": "stage_start", "stage": "frame_generation", "path": path_label,
           "frame_count": plan.frame_count})
