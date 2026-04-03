@@ -448,7 +448,7 @@ export default function Studio({ activeConvId, onActiveConvIdChange, onConversat
                 <ConversationThread turns={turns} onPauseAsk={handlePauseAsk} />
 
                 {suggestions.length > 0 && (
-                  <Box sx={{ width: '100%', maxWidth: 760, mx: 'auto', px: 3, pt: 0.5, pb: 3 }}>
+                  <Box sx={{ width: '100%', maxWidth: 760, mx: 'auto', px: 3, pt: 2, pb: 3 }}>
                     <Typography sx={{ fontSize: 13, fontWeight: 600, color: theme.palette.text.secondary, mb: 0.5 }}>
                       Follow-ups
                     </Typography>

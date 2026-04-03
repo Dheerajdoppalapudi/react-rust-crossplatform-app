@@ -44,7 +44,7 @@ function TurnView({ turn, onPauseAsk }) {
   const isDark = theme.palette.mode === 'dark'
 
   return (
-    <Box sx={{ mb: 4 }}>
+    <Box sx={{ mb: 4, '&:last-child': { mb: 0 } }}>
       <ContentColumn>
         <UserBubble prompt={turn.prompt} />
 
