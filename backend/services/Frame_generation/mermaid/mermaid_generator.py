@@ -14,12 +14,16 @@ empty elements list (same graceful fallback as generate_all_frames).
 """
 
 import asyncio
+import logging
 import re
 import requests
 
+from core.config import MERMAID_SIDECAR_URL
 from services.Frame_generation.planner import GenerationPlan, call_llm
 
-SIDECAR_URL = "http://localhost:3001"
+logger = logging.getLogger(__name__)
+
+SIDECAR_URL = MERMAID_SIDECAR_URL
 
 
 # ---------------------------------------------------------------------------
@@ -121,7 +125,7 @@ async def generate_mermaid_frames(
     slims = []
     for i, result in enumerate(results):
         if isinstance(result, Exception):
-            print(f"[mermaid_generator] Frame {i} failed: {result}")
+            logger.error("mermaid_generator frame %d failed: %s", i, result)
             slims.append({"elements": []})
         else:
             slims.append(result)

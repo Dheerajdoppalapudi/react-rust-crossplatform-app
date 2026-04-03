@@ -20,9 +20,12 @@ Requires: pip install cairosvg
 """
 
 import asyncio
+import logging
 import os
 import re
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 try:
     import cairosvg
@@ -260,7 +263,7 @@ def _render_frame(svg_text: str, frame_index: int, output_dir: str) -> tuple[Opt
         )
         return png_path, None
     except Exception as e:
-        print(f"[svg_generator] Frame {frame_index} render error: {e}")
+        logger.error("svg_generator frame %d render error: %s", frame_index, e)
         return None, str(e)
 
 
@@ -338,7 +341,7 @@ async def _generate_one_svg_frame(
 
     # ── Retry if extraction produced no valid SVG ────────────────────────────
     if not svg_text.lower().startswith("<svg"):
-        print(f"[svg_generator] Frame {frame_index}: no valid SVG in LLM response — retrying with correction")
+        logger.warning("svg_generator frame %d: no valid SVG in LLM response — retrying", frame_index)
         raw = await asyncio.to_thread(
             _generate_svg_code_retry, frame, plan,
             failure_reason="Your response did not contain valid SVG markup. "
@@ -347,7 +350,7 @@ async def _generate_one_svg_frame(
         )
         svg_text = _extract_svg(raw)
         if not svg_text.lower().startswith("<svg"):
-            print(f"[svg_generator] Frame {frame_index}: retry also failed to produce valid SVG — skipping frame")
+            logger.warning("svg_generator frame %d: retry also failed to produce valid SVG — skipping", frame_index)
             return None
 
     # ── Render SVG → PNG ─────────────────────────────────────────────────────
@@ -355,7 +358,7 @@ async def _generate_one_svg_frame(
 
     # ── Retry if cairosvg crashed ─────────────────────────────────────────────
     if png_path is None:
-        print(f"[svg_generator] Frame {frame_index}: render failed — retrying with correction")
+        logger.warning("svg_generator frame %d: render failed — retrying with correction", frame_index)
         raw = await asyncio.to_thread(
             _generate_svg_code_retry, frame, plan,
             failure_reason=(
@@ -369,7 +372,7 @@ async def _generate_one_svg_frame(
         )
         svg_text = _extract_svg(raw)
         if not svg_text.lower().startswith("<svg"):
-            print(f"[svg_generator] Frame {frame_index}: retry produced no valid SVG — skipping frame")
+            logger.warning("svg_generator frame %d: retry produced no valid SVG — skipping", frame_index)
             return None
         png_path, _ = await asyncio.to_thread(_render_frame, svg_text, frame_index, output_dir)
 
@@ -405,9 +408,9 @@ async def generate_svg_frames(
     if component_library is None:
         component_library = {}
         if plan.element_vocabulary:
-            print(f"[svg_generator] Building component library for {len(plan.element_vocabulary)} entity/entities")
+            logger.info("svg_generator building component library for %d entity/entities", len(plan.element_vocabulary))
             component_library, _ = await generate_svg_components(plan)
-            print(f"[svg_generator] Component library ready: {list(component_library.keys())}")
+            logger.info("svg_generator component library ready: %s", list(component_library.keys()))
 
     # ── Stage 2: all frames in parallel ──────────────────────────────────────
     tasks = [
@@ -420,7 +423,7 @@ async def generate_svg_frames(
     paths: list[Optional[str]] = []
     for i, result in enumerate(results):
         if isinstance(result, Exception):
-            print(f"[svg_generator] Frame {i} exception: {result}")
+            logger.error("svg_generator frame %d exception: %s", i, result)
             paths.append(None)
         else:
             paths.append(result)

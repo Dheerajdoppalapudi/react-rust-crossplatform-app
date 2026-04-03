@@ -25,10 +25,13 @@ planning_prompt.md as before.
 
 import asyncio
 import json
+import logging
 import os
 import re
 import time
 from contextvars import ContextVar
+
+logger = logging.getLogger(__name__)
 from typing import List, Union
 
 from pydantic import BaseModel, field_validator
@@ -337,7 +340,7 @@ async def generate_all_frames(
     slims = []
     for i, result in enumerate(results):
         if isinstance(result, Exception):
-            print(f"[planner] Frame {i} failed: {result}")
+            logger.error("planner frame %d failed: %s", i, result)
             slims.append({"elements": []})
         else:
             slims.append(result)

@@ -20,8 +20,11 @@ Prompt 3 (SVG renderer) uses the component_library SVG fragments directly.
 
 import asyncio
 import json
+import logging
 import os
 import re
+
+logger = logging.getLogger(__name__)
 
 from services.Frame_generation.planner import VocabularyPlan, call_llm
 from services.Frame_generation.svg.component_library import SVGComponent, get_builtin_component
@@ -118,7 +121,7 @@ def _generate_novel_components_sync(
     try:
         data = _extract_json(raw)
     except (ValueError, json.JSONDecodeError) as e:
-        print(f"[component_generator] LLM JSON parse error: {e}")
+        logger.error("component_generator LLM JSON parse error: %s", e)
         data = {}
 
     result: dict[str, SVGComponent] = {}
@@ -194,14 +197,14 @@ async def generate_svg_components(
         comp = get_builtin_component(key, spec, fill, stroke)
         if comp:
             builtin[key] = comp
-            print(f"[component_generator] '{key}' → pre-built icon ({comp.width}×{comp.height})")
+            logger.debug("component_generator '%s' → pre-built icon (%d×%d)", key, comp.width, comp.height)
         else:
             novel[key] = spec
-            print(f"[component_generator] '{key}' → LLM generation queued")
+            logger.debug("component_generator '%s' → LLM generation queued", key)
 
     generated: dict[str, SVGComponent] = {}
     if novel:
-        print(f"[component_generator] Calling LLM for {len(novel)} novel component(s): {list(novel.keys())}")
+        logger.info("component_generator calling LLM for %d novel component(s): %s", len(novel), list(novel.keys()))
         generated = await asyncio.to_thread(
             _generate_novel_components_sync, novel, fill, stroke
         )

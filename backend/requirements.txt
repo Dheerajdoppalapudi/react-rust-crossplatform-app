@@ -1,14 +1,27 @@
-fastapi
-uvicorn[standard]
-python-dotenv
-python-multipart
-langchain
-langchain-openai
-openai
+# Web framework
+fastapi>=0.115
+uvicorn[standard]>=0.30
+
+# Configuration & environment
+python-dotenv>=1.0
+pydantic>=2.0
+
+# Form / file upload support
+python-multipart>=0.0.9
+
+# LLM providers
+openai>=1.0
+anthropic>=0.25
+
+# Frame generation
 manim
-pydantic
-requests
 cairosvg
+requests
+
+# Video pipeline
 moviepy
+imageio-ffmpeg
+Pillow>=10.0
+
+# Text-to-speech
 gtts
-Pillow

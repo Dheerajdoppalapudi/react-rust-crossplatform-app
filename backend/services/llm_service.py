@@ -16,11 +16,13 @@ Public API (unchanged — all callers continue to work):
   llm_service.make_system_user_request(system_prompt, user_prompt)
 """
 
-import os
+import logging
 import re
 import time
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 # How many times to retry a 429 before giving up
 _MAX_RETRIES = 3
@@ -63,7 +65,8 @@ class OpenAIProvider(LLMProvider):
     """
 
     def __init__(self, model: str = None):
-        self.model = model or os.getenv("OPENAI_MODEL", "gpt-4.1")
+        from core.config import OPENAI_MODEL
+        self.model = model or OPENAI_MODEL
 
     def complete(self, messages: List[Dict[str, str]], **kwargs) -> tuple[Optional[str], dict]:
         from openai import OpenAI, RateLimitError
@@ -86,17 +89,18 @@ class OpenAIProvider(LLMProvider):
 
             except RateLimitError as e:
                 if attempt == _MAX_RETRIES - 1:
-                    print(f"[OpenAIProvider] Rate limit — all {_MAX_RETRIES} retries exhausted: {e}")
+                    logger.error("OpenAIProvider rate limit — all %d retries exhausted: %s", _MAX_RETRIES, e)
                     return None, {}
-                # OpenAI tells us exactly how long to wait in the error message.
-                # Parse it; fall back to an increasing fixed delay if not found.
                 match = _WAIT_RE.search(str(e))
                 wait = (float(match.group(1)) + 0.5) if match else (5.0 * (attempt + 1))
-                print(f"[OpenAIProvider] Rate limit — waiting {wait:.1f}s then retry {attempt + 1}/{_MAX_RETRIES - 1}")
+                logger.warning(
+                    "OpenAIProvider rate limit — waiting %.1fs then retry %d/%d",
+                    wait, attempt + 1, _MAX_RETRIES - 1,
+                )
                 time.sleep(wait)
 
             except Exception as e:
-                print(f"[OpenAIProvider] Request failed: {e}")
+                logger.error("OpenAIProvider request failed: %s", e)
                 return None, {}
 
         return None, {}
@@ -115,7 +119,8 @@ class ClaudeProvider(LLMProvider):
     """
 
     def __init__(self, model: str = None):
-        self.model = model or os.getenv("CLAUDE_MODEL", "claude-sonnet-4-6")
+        from core.config import CLAUDE_MODEL
+        self.model = model or CLAUDE_MODEL
 
     def complete(self, messages: List[Dict[str, str]], **kwargs) -> tuple[Optional[str], dict]:
         try:
@@ -145,7 +150,7 @@ class ClaudeProvider(LLMProvider):
             } if usage else {}
             return response.content[0].text, usage_dict
         except Exception as e:
-            print(f"[ClaudeProvider] Request failed: {e}")
+            logger.error("ClaudeProvider request failed: %s", e)
             return None, {}
 
 
