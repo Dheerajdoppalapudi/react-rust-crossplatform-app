@@ -6,10 +6,13 @@ import json
 import logging
 import os
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 
 from core.database import get_db
+from core.db_models import User
+from core.responses import success
+from dependencies.auth import get_current_user
 from schemas.sessions import (
     SessionSummary,
     ConversationDetail,
@@ -21,22 +24,24 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.get("/api/sessions", response_model=list[SessionSummary])
-def list_sessions():
+@router.get("/api/sessions")
+def list_sessions(current_user: User = Depends(get_current_user)):
     with get_db() as conn:
         rows = conn.execute(
             "SELECT id, prompt, created_at, status, intent_type, render_path, frame_count, "
             "api_call_count, prompt_tokens, completion_tokens, total_tokens, model_name "
-            "FROM sessions ORDER BY created_at DESC"
+            "FROM sessions WHERE user_id = ? ORDER BY created_at DESC",
+            (current_user.id,),
         ).fetchall()
-    return [dict(r) for r in rows]
+    return success([dict(r) for r in rows])
 
 
-@router.get("/api/sessions/{session_id}/output", response_model=SessionOutputResponse)
-def get_session_output(session_id: str):
+@router.get("/api/sessions/{session_id}/output")
+def get_session_output(session_id: str, current_user: User = Depends(get_current_user)):
     with get_db() as conn:
         row = conn.execute(
-            "SELECT ui_output_file, status FROM sessions WHERE id = ?", (session_id,)
+            "SELECT ui_output_file, status FROM sessions WHERE id = ? AND user_id = ?",
+            (session_id, current_user.id),
         ).fetchone()
 
     if not row:
@@ -51,14 +56,15 @@ def get_session_output(session_id: str):
     file_type = "python" if path.endswith(".py") else "json"
     with open(path) as f:
         content = f.read()
-    return {"file_type": file_type, "content": content}
+    return success({"file_type": file_type, "content": content})
 
 
 @router.get("/api/sessions/{session_id}/log")
-def get_session_log(session_id: str):
+def get_session_log(session_id: str, current_user: User = Depends(get_current_user)):
     with get_db() as conn:
         row = conn.execute(
-            "SELECT output_dir FROM sessions WHERE id = ?", (session_id,)
+            "SELECT output_dir FROM sessions WHERE id = ? AND user_id = ?",
+            (session_id, current_user.id),
         ).fetchone()
 
     if not row or not row["output_dir"]:
@@ -69,15 +75,16 @@ def get_session_log(session_id: str):
         raise HTTPException(status_code=404, detail="Log not available")
 
     with open(log_path) as f:
-        return {"log": json.load(f)}
+        return success({"log": json.load(f)})
 
 
 @router.get("/api/sessions/{session_id}/frames-meta")
-def get_session_frames_meta(session_id: str):
+def get_session_frames_meta(session_id: str, current_user: User = Depends(get_current_user)):
     """Return the frames.json content (image paths, captions, render_path)."""
     with get_db() as conn:
         row = conn.execute(
-            "SELECT output_dir FROM sessions WHERE id = ?", (session_id,)
+            "SELECT output_dir FROM sessions WHERE id = ? AND user_id = ?",
+            (session_id, current_user.id),
         ).fetchone()
 
     if not row or not row["output_dir"]:
@@ -88,15 +95,16 @@ def get_session_frames_meta(session_id: str):
         raise HTTPException(status_code=404, detail="frames.json not found")
 
     with open(frames_path) as f:
-        return json.load(f)
+        return success(json.load(f))
 
 
 @router.get("/api/sessions/{session_id}/frame/{frame_index}")
-def get_session_frame(session_id: str, frame_index: int):
+def get_session_frame(session_id: str, frame_index: int, current_user: User = Depends(get_current_user)):
     """Serve a rendered frame as a PNG image."""
     with get_db() as conn:
         row = conn.execute(
-            "SELECT output_dir FROM sessions WHERE id = ?", (session_id,)
+            "SELECT output_dir FROM sessions WHERE id = ? AND user_id = ?",
+            (session_id, current_user.id),
         ).fetchone()
 
     if not row or not row["output_dir"]:

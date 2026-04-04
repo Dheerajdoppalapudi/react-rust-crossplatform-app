@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import {
   Drawer, List, ListItem, ListItemButton, ListItemIcon, ListItemText,
-  Tooltip, Typography, Box, Divider, useTheme, InputBase, IconButton, Skeleton,
+  Tooltip, Typography, Box, Divider, useTheme, InputBase, IconButton, Skeleton, Avatar,
 } from '@mui/material'
 import HomeOutlinedIcon        from '@mui/icons-material/HomeOutlined'
 import SettingsOutlinedIcon    from '@mui/icons-material/SettingsOutlined'
@@ -12,8 +12,10 @@ import DarkModeOutlinedIcon    from '@mui/icons-material/DarkModeOutlined'
 import LightModeOutlinedIcon   from '@mui/icons-material/LightModeOutlined'
 import AutoAwesomeIcon         from '@mui/icons-material/AutoAwesome'
 import ChevronLeftIcon         from '@mui/icons-material/ChevronLeft'
+import LogoutOutlinedIcon      from '@mui/icons-material/LogoutOutlined'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { relativeTime } from '../Studio/constants'
+import { useAuth } from '../../contexts/AuthContext'
 
 const DRAWER_OPEN   = 260
 const DRAWER_CLOSED = 56
@@ -211,6 +213,7 @@ const Sidebar = ({
   const location = useLocation()
   const isDark   = theme.palette.mode === 'dark'
   const accent   = theme.palette.primary.main
+  const { user, logout } = useAuth()
 
   const [open, setOpen]   = useState(false)
   const [search, setSearch] = useState('')
@@ -515,9 +518,60 @@ const Sidebar = ({
           </Box>
         </Box>
 
-        {/* ── Bottom: theme + settings ─────────────────────────────────────── */}
+        {/* ── Bottom: user profile + theme + settings ──────────────────────── */}
         <Box sx={{ flexShrink: 0 }}>
           <Divider sx={{ mx: 1, mb: 1, borderColor: theme.palette.divider }} />
+
+          {/* User profile */}
+          {user && (
+            open ? (
+              <Box sx={{
+                display: 'flex', alignItems: 'center', gap: 1.25,
+                px: 1.75, py: 1, mb: 0.5,
+              }}>
+                <Avatar
+                  src={user.avatar}
+                  alt={user.name}
+                  sx={{ width: 28, height: 28, flexShrink: 0 }}
+                />
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography noWrap sx={{ fontSize: 12.5, fontWeight: 600, color: 'text.primary', lineHeight: 1.3 }}>
+                    {user.name}
+                  </Typography>
+                  <Typography noWrap sx={{ fontSize: 10.5, color: 'text.secondary' }}>
+                    {user.email}
+                  </Typography>
+                </Box>
+                <Tooltip title="Sign out" placement="right" arrow>
+                  <IconButton
+                    size="small"
+                    onClick={logout}
+                    sx={{
+                      flexShrink: 0, color: theme.palette.text.disabled,
+                      '&:hover': { color: theme.palette.text.secondary },
+                    }}
+                  >
+                    <LogoutOutlinedIcon sx={{ fontSize: 15 }} />
+                  </IconButton>
+                </Tooltip>
+              </Box>
+            ) : (
+              <Box sx={{ display: 'flex', justifyContent: 'center', mb: 0.5 }}>
+                <Tooltip title={`${user.name} — Sign out`} placement="right" arrow>
+                  <Box
+                    onClick={logout}
+                    sx={{
+                      cursor: 'pointer', borderRadius: '50%',
+                      '&:hover': { opacity: 0.75 },
+                      transition: 'opacity 0.15s',
+                    }}
+                  >
+                    <Avatar src={user.avatar} alt={user.name} sx={{ width: 24, height: 24 }} />
+                  </Box>
+                </Tooltip>
+              </Box>
+            )
+          )}
 
           {open ? (
             <ListItem disablePadding sx={{ px: 0.75, mb: 0.25 }}>

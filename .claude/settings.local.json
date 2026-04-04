@@ -25,7 +25,16 @@
       "Bash(mv planning_prompt.md planning_prompt.md.retired)",
       "Bash(sqlite3 database.sqlite \"PRAGMA table_info\\(sessions\\);\")",
       "Bash(sqlite3 database.sqlite \"SELECT id, frame_count, render_path FROM sessions LIMIT 5;\")",
-      "Bash(sqlite3 database.sqlite \"SELECT frame_count, COUNT\\(*\\) as cnt FROM sessions GROUP BY frame_count ORDER BY frame_count;\")"
+      "Bash(sqlite3 database.sqlite \"SELECT frame_count, COUNT\\(*\\) as cnt FROM sessions GROUP BY frame_count ORDER BY frame_count;\")",
+      "Bash(sqlite3 database.sqlite \"PRAGMA table_info\\(conversations\\);\")",
+      "Bash(sqlite3 database.sqlite \"SELECT id, created_at FROM conversations ORDER BY created_at DESC LIMIT 5;\")",
+      "Bash(sqlite3 database.sqlite \"SELECT conversation_id, COUNT\\(*\\) as turns FROM sessions GROUP BY conversation_id ORDER BY turns DESC;\")",
+      "Bash(sqlite3 database.sqlite ':*)",
+      "Bash(sqlite3 database.sqlite \"SELECT COUNT\\(*\\) FROM sessions;\")",
+      "Bash(sqlite3 database.sqlite \"SELECT id, title, created_at FROM conversations ORDER BY created_at DESC;\")",
+      "Bash(sqlite3 database.sqlite \"SELECT id FROM sessions;\")",
+      "Read(//tmp/**)",
+      "Bash(pkill -f \"python main.py\")"
     ]
   }
 }

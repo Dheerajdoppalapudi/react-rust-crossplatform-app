@@ -38,6 +38,16 @@ VIDEO_HEIGHT: int = 1080
 VIDEO_FPS: int    = 24
 TTS_WORDS_PER_SECOND: float = 2.3
 
+# ── Auth ──────────────────────────────────────────────────────────────────────
+GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "")
+JWT_SECRET_KEY:   str = os.getenv("JWT_SECRET_KEY", "CHANGE_ME_IN_PRODUCTION")
+JWT_ALGORITHM:    str = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
+REFRESH_TOKEN_EXPIRE_DAYS:   int = 30
+# COOKIE_SECURE=True forces HTTPS-only cookies — set ENV=production on the server
+COOKIE_SECURE:   bool = os.getenv("ENV", "development") == "production"
+COOKIE_SAMESITE: str  = "lax"
+
 # ── Intent routing ────────────────────────────────────────────────────────────
 MERMAID_INTENT_TYPES: frozenset[str] = frozenset({"process", "architecture", "timeline"})
 MANIM_INTENT_TYPES: frozenset[str]   = frozenset({"math"})

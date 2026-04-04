@@ -1,13 +1,17 @@
 import { useState, useMemo, createContext, useContext, useCallback, useEffect } from 'react'
-import { Routes, Route, useLocation, useNavigate } from 'react-router-dom'
+import { Routes, Route, useLocation, useNavigate, Navigate } from 'react-router-dom'
 import { Box, ThemeProvider, CssBaseline, createTheme } from '@mui/material'
 import Sidebar from './components/common/Sidebar'
 import Footer from './components/common/Footer'
 import AboutUs from './pages/AboutUs'
 import Settings from './pages/Settings'
 import Studio from './pages/Studio'
+import Login from './pages/Login'
+import Register from './pages/Register'
+import ProtectedRoute from './components/common/ProtectedRoute'
 import ErrorBoundary from './components/error/ErrorBoundary'
 import { ToastProvider, useToast } from './contexts/ToastContext'
+import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { api } from './services/api'
 
 // ─── Theme context ────────────────────────────────────────────────────────────
@@ -53,14 +57,16 @@ const buildTheme = (mode) =>
 const FULL_HEIGHT_PAGES = ['/studio']
 const NO_PADDING_PAGES  = ['/']
 
-// ─── Inner app — has access to ToastProvider ──────────────────────────────────
+// ─── Inner app — has access to ToastProvider + AuthContext ────────────────────
 function AppInner() {
   const location    = useLocation()
   const navigate    = useNavigate()
   const toast       = useToast()
+  const { user }    = useAuth()
   const { mode: themeMode, toggle: onThemeToggle } = useContext(ColorModeContext)
   const isFullHeight = FULL_HEIGHT_PAGES.includes(location.pathname)
   const isNoPadding  = NO_PADDING_PAGES.includes(location.pathname)
+  const isLoginPage  = location.pathname === '/login' || location.pathname === '/register'
 
   // ── Conversations — lifted so Sidebar and Studio share state ─────────────
   const [conversations, setConversations]             = useState([])
@@ -68,6 +74,11 @@ function AppInner() {
   const [isLoadingConversations, setIsLoadingConversations] = useState(true)
 
   const fetchConversations = useCallback(async () => {
+    if (!user) {
+      setConversations([])
+      setIsLoadingConversations(false)
+      return
+    }
     try {
       const data = await api.getConversations()
       setConversations(Array.isArray(data) ? data : [])
@@ -76,7 +87,7 @@ function AppInner() {
     } finally {
       setIsLoadingConversations(false)
     }
-  }, [toast])
+  }, [toast, user])
 
   useEffect(() => { fetchConversations() }, [fetchConversations])
 
@@ -93,46 +104,64 @@ function AppInner() {
   return (
     <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden', bgcolor: 'background.default' }}>
 
-      <Sidebar
-        conversations={conversations}
-        activeConvId={activeConvId}
-        onSelectConv={handleSelectConv}
-        onNewConversation={handleNewConversation}
-        themeMode={themeMode}
-        onThemeToggle={onThemeToggle}
-        isLoading={isLoadingConversations}
-      />
+      {/* Sidebar is hidden on the login page */}
+      {!isLoginPage && (
+        <Sidebar
+          conversations={conversations}
+          activeConvId={activeConvId}
+          onSelectConv={handleSelectConv}
+          onNewConversation={handleNewConversation}
+          themeMode={themeMode}
+          onThemeToggle={onThemeToggle}
+          isLoading={isLoadingConversations}
+        />
+      )}
 
       <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
         <Box
           component="main"
           sx={{
             flex: 1,
-            p: (isFullHeight || isNoPadding) ? 0 : 3,
+            p: (isFullHeight || isNoPadding || isLoginPage) ? 0 : 3,
             display: 'flex',
             flexDirection: 'column',
             minHeight: 0,
-            overflow: isFullHeight ? 'hidden' : 'auto',
+            overflow: (isFullHeight || isLoginPage) ? 'hidden' : 'auto',
             '& > *': { flex: 1, minHeight: 0 },
           }}
         >
           {/* Route-level boundary: page crashes don't take down the sidebar */}
           <ErrorBoundary level="page" key={location.pathname}>
             <Routes>
-              <Route path="/"         element={<AboutUs />} />
-              <Route path="/studio"   element={
-                <Studio
-                  activeConvId={activeConvId}
-                  onActiveConvIdChange={setActiveConvId}
-                  onConversationsRefresh={fetchConversations}
-                />
+              {/* Always public */}
+              <Route path="/"      element={<AboutUs />} />
+              <Route path="/login" element={
+                user ? <Navigate to="/studio" replace /> : <Login />
               } />
-              <Route path="/settings" element={<Settings />} />
+              <Route path="/register" element={
+                user ? <Navigate to="/studio" replace /> : <Register />
+              } />
+
+              {/* Protected — require login */}
+              <Route path="/studio" element={
+                <ProtectedRoute>
+                  <Studio
+                    activeConvId={activeConvId}
+                    onActiveConvIdChange={setActiveConvId}
+                    onConversationsRefresh={fetchConversations}
+                  />
+                </ProtectedRoute>
+              } />
+              <Route path="/settings" element={
+                <ProtectedRoute>
+                  <Settings />
+                </ProtectedRoute>
+              } />
             </Routes>
           </ErrorBoundary>
         </Box>
 
-        {!isFullHeight && <Footer />}
+        {!isFullHeight && !isLoginPage && <Footer />}
       </Box>
 
     </Box>
@@ -162,9 +191,11 @@ function App() {
     <ColorModeContext.Provider value={colorMode}>
       <ThemeProvider theme={theme}>
         <CssBaseline />
-        <ToastProvider>
-          <AppInner />
-        </ToastProvider>
+        <AuthProvider>
+          <ToastProvider>
+            <AppInner />
+          </ToastProvider>
+        </AuthProvider>
       </ThemeProvider>
     </ColorModeContext.Provider>
   )

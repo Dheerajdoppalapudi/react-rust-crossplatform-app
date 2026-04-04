@@ -18,13 +18,15 @@ import logging
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from core.config import CORS_ORIGINS
 from core.database import init_db
-from routers import conversations, generation, sessions, upload, video
+from core.responses import success
+from routers import auth, conversations, generation, sessions, upload, video
 
 logger = logging.getLogger(__name__)
 
@@ -52,23 +54,46 @@ app.add_middleware(
 
 # ── Routers ───────────────────────────────────────────────────────────────────
 
+app.include_router(auth.router)
 app.include_router(generation.router)
 app.include_router(conversations.router)
 app.include_router(sessions.router)
 app.include_router(video.router)
 app.include_router(upload.router)
 
-# ── Global exception handler ──────────────────────────────────────────────────
+# ── Exception handlers ────────────────────────────────────────────────────────
+# All error responses follow the same envelope: { "status": "error", "error": "..." }
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+    return JSONResponse(
+        {"status": "error", "error": exc.detail},
+        status_code=exc.status_code,
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    # Collect field-level errors into a single readable string
+    messages = "; ".join(
+        f"{' → '.join(str(l) for l in e['loc'])}: {e['msg']}"
+        for e in exc.errors()
+    )
+    return JSONResponse(
+        {"status": "error", "error": f"Validation error: {messages}"},
+        status_code=422,
+    )
+
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     logger.error("Unhandled exception  path=%s", request.url.path, exc_info=True)
-    return JSONResponse({"error": "Internal server error"}, status_code=500)
+    return JSONResponse({"status": "error", "error": "Internal server error"}, status_code=500)
 
 
 @app.get("/api/health")
 def health_check():
-    return {"status": "ok"}
+    return success({"status": "ok"})
 
 
 # ── Dev server ────────────────────────────────────────────────────────────────

@@ -19,9 +19,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 │   ├── main.py                    # App init ONLY: app, middleware, routers, lifespan (~65 lines)
 │   ├── core/
 │   │   ├── config.py              # ALL env vars and constants — import from here, never os.getenv()
-│   │   ├── database.py            # ALL SQLite helpers — get_db(), init_db(), insert_*/update_*
+│   │   ├── database.py            # ALL SQLite helpers — get_db(), init_db(), insert_*/update_*, auth helpers
+│   │   ├── db_models.py           # Typed dataclasses for DB rows: User, RefreshToken
+│   │   ├── responses.py           # success() envelope helper
 │   │   └── logging_config.py      # setup_logging() — called once at process start in main.py
+│   ├── dependencies/
+│   │   └── auth.py                # get_current_user() FastAPI dependency — validates Bearer JWT
 │   ├── routers/
+│   │   ├── auth.py                # POST /auth/google, POST /auth/refresh, POST /auth/logout, GET /auth/me
 │   │   ├── generation.py          # POST /api/image_generation, POST /api/chat
 │   │   ├── conversations.py       # GET/POST /api/conversations/**
 │   │   ├── sessions.py            # GET /api/sessions/**
@@ -81,6 +86,120 @@ npm start        # Express on :3001 (used by backend, not the frontend)
 
 ---
 
+## API response format
+
+Every JSON endpoint returns the same envelope:
+
+```json
+// Success
+{ "status": "success", "data": <payload> }
+
+// Error
+{ "status": "error", "error": "<human-readable message>" }
+```
+
+The `core/responses.py` helper:
+```python
+from core.responses import success
+return success({"key": "value"})   # → {"status":"success","data":{"key":"value"}}
+```
+
+**Never** return raw `JSONResponse({"error": ...})` — always `raise HTTPException(status_code=N, detail="...")` and let the global handler in `main.py` format it into the envelope.
+
+**Exceptions (not wrapped):**
+- `POST /api/generate_video/{id}` — raw SSE stream, not JSON
+- File download endpoints (`/video`, `/frame/{n}`, `/merged_video`) — binary responses
+
+The frontend `_request()` helper in `client/src/services/api.js` unwraps the envelope automatically and throws on `status:"error"`.
+
+---
+
+## Authentication
+
+**Pattern:** dual-token — access JWT in React memory + refresh token in HTTP-only cookie.
+
+| Token | Lifetime | Stored in | Immune to |
+|---|---|---|---|
+| Access JWT | 15 min | React `AuthContext` state (memory) | XSS |
+| Refresh token (opaque UUID) | 30 days | HTTP-only `Secure` cookie | XSS |
+
+### Auth flow summary
+
+```
+LOGIN
+  User clicks "Continue with Google"
+  → useGoogleLogin() (implicit flow) → access_token from Google
+  → POST /auth/google { access_token }
+  → Backend calls Google userinfo endpoint to verify + get profile
+  → Backend upserts user row, issues access JWT + refresh token
+  → Backend sets refresh_token HTTP-only cookie, returns access JWT in body
+  → AuthContext stores access JWT in state (memory only)
+
+SUBSEQUENT API CALLS
+  → _request() in api.js reads token via getAccessToken() (module-level getter)
+  → Adds Authorization: Bearer <access_token> header to every request
+  → On 401: calls /auth/refresh → rotates refresh token → retries original request
+
+PAGE REFRESH (silent restore)
+  → AuthContext mounts → calls POST /auth/refresh (browser sends cookie)
+  → If valid: stores new access JWT in state → user restored silently
+  → If invalid/expired: state stays null → ProtectedRoute redirects to /login
+
+LOGOUT
+  → POST /auth/logout (deletes refresh token row from DB, clears cookie)
+  → AuthContext wipes access JWT from state → Navigate to /login
+```
+
+### Backend auth files
+
+- `backend/dependencies/auth.py` — `get_current_user(credentials) → User` — import and use as `Depends(get_current_user)` on any protected endpoint
+- `backend/routers/auth.py` — all four auth endpoints
+- `backend/core/db_models.py` — `User` and `RefreshToken` dataclasses (not ORM — plain Python)
+- `backend/core/database.py` — auth DB helpers: `upsert_user`, `create_refresh_token`, `rotate_refresh_token`, `delete_refresh_token`, `delete_user_refresh_tokens`
+
+### Protecting a new endpoint
+
+```python
+from dependencies.auth import get_current_user
+from core.db_models import User
+
+@router.get("/api/my-resource")
+def my_resource(current_user: User = Depends(get_current_user)):
+    # current_user.id, current_user.email, current_user.name, current_user.avatar
+    ...
+```
+
+Always filter DB queries by `user_id = current_user.id` to enforce data isolation.
+
+### Frontend auth files
+
+- `client/src/contexts/AuthContext.jsx` — `AuthProvider`, `useAuth()` hook, `getAccessToken()` module-level getter
+- `client/src/pages/Login.jsx` — full-screen branded login page with animated orbs + Google button
+- `client/src/components/common/ProtectedRoute.jsx` — wraps routes that require login
+- `client/src/services/api.js` — `setAuthCallbacks(refresh, logout)` wired from `AuthContext`
+
+### Refresh token rotation
+
+Every `/auth/refresh` call invalidates the old token and issues a new one. If an already-used token arrives again, it means the token was stolen — `rotate_refresh_token()` returns `None` and the endpoint clears the cookie and returns 401.
+
+### Environment variables required
+
+```
+# backend/.env
+JWT_SECRET_KEY=<64-char cryptographically random string>
+ENV=production           # set on EC2 — makes cookies Secure + SameSite=Lax
+
+# client/.env  (also add VITE_GOOGLE_CLIENT_ID to GitHub secrets for CI)
+VITE_GOOGLE_CLIENT_ID=<from Google Cloud Console>
+```
+
+**Google Cloud Console setup:**
+1. Create OAuth 2.0 Client ID → Web application type
+2. Authorised JavaScript origins: `http://localhost:5173` + your CloudFront domain
+3. No redirect URIs needed — popup flow only (no `GOOGLE_CLIENT_ID` needed in backend; verification is done via Google's userinfo endpoint)
+
+---
+
 ## Architecture: end-to-end generation pipeline
 
 1. **Frontend** (`client/src/services/api.js` → `api.imageGeneration(...)`) sends prompt + conversation context to `POST /api/image_generation`.
@@ -126,12 +245,20 @@ Key config values:
 - `MERMAID_SIDECAR_URL` — Node sidecar URL (default: `http://localhost:3001`)
 - `DB_PATH`, `UPLOAD_DIR`, `OUTPUTS_DIR` — storage paths
 - `VIDEO_WIDTH`, `VIDEO_HEIGHT`, `VIDEO_FPS`, `TTS_WORDS_PER_SECOND`
+- `JWT_SECRET_KEY`, `ACCESS_TOKEN_EXPIRE_MINUTES`, `REFRESH_TOKEN_EXPIRE_DAYS` — auth
+- `COOKIE_SECURE`, `COOKIE_SAMESITE` — cookie flags (COOKIE_SECURE=True when `ENV=production`)
 
 ### Database
 
 SQLite (`backend/database.sqlite`). Schema and safe `ALTER TABLE` migrations live in `core/database.py → init_db()`, which is called once at startup via the FastAPI lifespan hook in `main.py`. No migration tool — migrations run on every startup, guarded by `try/except` (intentional — SQLite has no IF NOT EXISTS for ALTER TABLE).
 
-All DB helpers (`get_db`, `insert_session`, `update_session`, `insert_conversation`, etc.) are in `core/database.py`. Import from there — do not open SQLite connections directly in routers or services.
+Tables:
+- `users` — Google sub as primary key, email, name, avatar, timestamps
+- `refresh_tokens` — opaque UUID tokens, FK to users, expires_at
+- `conversations` — has `user_id` column (FK to users)
+- `sessions` — has `user_id` column (FK to users)
+
+All DB helpers (`get_db`, `insert_session`, `update_session`, `insert_conversation`, auth helpers) are in `core/database.py`. Import from there — do not open SQLite connections directly in routers or services.
 
 ### Conversation threading
 
@@ -144,12 +271,14 @@ Conversation context is built in `services/generation_service.py → build_conve
 ## Adding a new endpoint — checklist
 
 1. **Add the route** in the appropriate file under `routers/`. If it doesn't fit any existing router, create a new one and `include_router()` in `main.py`.
-2. **Add request/response schemas** in `schemas/`. Every endpoint must have a typed `response_model=`.
+2. **Add request/response schemas** in `schemas/`. Keep for documentation/IDE support (do not use `response_model=` on the decorator — it conflicts with the success envelope wrapper).
 3. **Put business logic in `services/`**, not in the route handler. Route handlers should: validate input → call service → return response.
 4. **Read config from `core/config.py`** — never hardcode URLs, paths, or model names.
 5. **Use `get_db()` from `core/database.py`** for any DB access.
 6. **Use `logger = logging.getLogger(__name__)`** — never `print()`.
 7. **Use `raise HTTPException(...)`** — never return raw `JSONResponse({"error": ...})` for error cases.
+8. **Add `Depends(get_current_user)`** to any endpoint that should require login. Always filter queries by `user_id = current_user.id`.
+9. **Wrap the return value** with `success(...)` from `core/responses.py`.
 
 ---
 
@@ -166,7 +295,7 @@ Conversation context is built in `services/generation_service.py → build_conve
 
 - **Route handlers**: always `raise HTTPException(status_code=N, detail="...")` — never return raw JSON error dicts.
 - **Services**: raise plain Python exceptions (`ValueError`, `RuntimeError`, etc.) — let the route handler or global handler catch them.
-- **Global handler** in `main.py` catches any unhandled `Exception` and returns `{"error": "Internal server error"}` with a 500. Raw tracebacks never reach the client.
+- **Global handler** in `main.py` catches any unhandled `Exception` and returns `{"status":"error","error":"Internal server error"}` with a 500. Raw tracebacks never reach the client.
 - **Bare `except Exception: pass`** is intentional ONLY in `core/database.py → init_db()` for ALTER TABLE migrations. Do not copy this pattern anywhere else.
 
 ---
@@ -197,7 +326,9 @@ CI/CD lives in `.github/workflows/deploy.yml` (triggers on push to `main`):
 - **Frontend**: `npm ci` → `npm run build` → S3 sync → CloudFront invalidation.
 - **Backend**: SSH to EC2, `git pull`, `pip install -r requirements.txt`, restart systemd services for `backend` and `mermaid-converter`.
 
-Required GitHub secrets: `VITE_API_URL`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `S3_BUCKET_NAME`, `CLOUDFRONT_DISTRIBUTION_ID`, `EC2_HOST`, `EC2_USER`, `EC2_SSH_KEY`.
+Required GitHub secrets: `VITE_API_URL`, `VITE_GOOGLE_CLIENT_ID`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `S3_BUCKET_NAME`, `CLOUDFRONT_DISTRIBUTION_ID`, `EC2_HOST`, `EC2_USER`, `EC2_SSH_KEY`.
+
+Backend `.env` on EC2 must include: `JWT_SECRET_KEY`, `ENV=production`.
 
 ---
 
@@ -205,11 +336,11 @@ Required GitHub secrets: `VITE_API_URL`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS
 
 | Item | Status | Notes |
 |---|---|---|
-| Auth on API endpoints | Not implemented | All endpoints are public. Add before any multi-user deployment. |
 | CORS `allow_methods=["*"]` | Permissive | Restrict to `["GET", "POST"]` for production. |
 | `/api/chat` endpoint | Stub — echoes message back | Confirm with team: implement or delete. |
 | `Frame_generation/` folder name | PascalCase (non-standard) | Rename to `frame_generation/` when ready — touches ~15 import paths. |
 | Video generation blocking | Runs in-process | At scale, push to Celery/RQ task queue so long jobs don't block workers. |
+| Token revocation list | Not implemented | Access tokens are short-lived (15 min); acceptable. Add Redis blocklist if needed. |
 
 ---
 

@@ -7,11 +7,14 @@ import os
 import subprocess
 import tempfile
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 
 from core.config import OUTPUTS_DIR
 from core.database import get_db, update_session
+from core.db_models import User
+from core.responses import success
+from dependencies.auth import get_current_user
 from schemas.sessions import (
     ConversationSummary,
     ConversationDetail,
@@ -24,8 +27,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.get("/api/conversations", response_model=list[ConversationSummary])
-def list_conversations():
+@router.get("/api/conversations")
+def list_conversations(current_user: User = Depends(get_current_user)):
     with get_db() as conn:
         rows = conn.execute("""
             SELECT c.id, c.title, c.created_at, c.updated_at,
@@ -33,17 +36,19 @@ def list_conversations():
                    MIN(s.intent_type) AS intent_type
             FROM conversations c
             LEFT JOIN sessions s ON s.conversation_id = c.id AND s.status = 'done'
+            WHERE c.user_id = ?
             GROUP BY c.id
             ORDER BY c.updated_at DESC
-        """).fetchall()
-    return [dict(r) for r in rows]
+        """, (current_user.id,)).fetchall()
+    return success([dict(r) for r in rows])
 
 
-@router.get("/api/conversations/{conversation_id}", response_model=ConversationDetail)
-def get_conversation(conversation_id: str):
+@router.get("/api/conversations/{conversation_id}")
+def get_conversation(conversation_id: str, current_user: User = Depends(get_current_user)):
     with get_db() as conn:
         conv = conn.execute(
-            "SELECT * FROM conversations WHERE id = ?", (conversation_id,)
+            "SELECT * FROM conversations WHERE id = ? AND user_id = ?",
+            (conversation_id, current_user.id),
         ).fetchone()
         if not conv:
             raise HTTPException(status_code=404, detail="Conversation not found")
@@ -53,15 +58,16 @@ def get_conversation(conversation_id: str):
             "FROM sessions WHERE conversation_id = ? ORDER BY turn_index ASC",
             (conversation_id,),
         ).fetchall()
-    return {**dict(conv), "turns": [dict(t) for t in turns]}
+    return success({**dict(conv), "turns": [dict(t) for t in turns]})
 
 
-@router.get("/api/conversations/{conversation_id}/tree", response_model=ConversationTree)
-def get_conversation_tree(conversation_id: str):
+@router.get("/api/conversations/{conversation_id}/tree")
+def get_conversation_tree(conversation_id: str, current_user: User = Depends(get_current_user)):
     """Lightweight endpoint for the canvas tree view — returns only node/edge fields."""
     with get_db() as conn:
         conv = conn.execute(
-            "SELECT id, title FROM conversations WHERE id = ?", (conversation_id,)
+            "SELECT id, title FROM conversations WHERE id = ? AND user_id = ?",
+            (conversation_id, current_user.id),
         ).fetchone()
         if not conv:
             raise HTTPException(status_code=404, detail="Conversation not found")
@@ -72,19 +78,26 @@ def get_conversation_tree(conversation_id: str):
             (conversation_id,),
         ).fetchall()
 
-    return {
+    return success({
         "conversation_id": conv["id"],
         "title":           conv["title"],
         "nodes": [
             {**dict(n), "video_ready": bool(n["video_path"] and os.path.exists(n["video_path"]))}
             for n in nodes
         ],
-    }
+    })
 
 
-@router.post("/api/conversations/{conversation_id}/merge", response_model=MergeResponse)
-def merge_conversation_videos(conversation_id: str):
+@router.post("/api/conversations/{conversation_id}/merge")
+def merge_conversation_videos(conversation_id: str, current_user: User = Depends(get_current_user)):
     with get_db() as conn:
+        # Verify ownership first
+        conv = conn.execute(
+            "SELECT id FROM conversations WHERE id = ? AND user_id = ?",
+            (conversation_id, current_user.id),
+        ).fetchone()
+        if not conv:
+            raise HTTPException(status_code=404, detail="Conversation not found")
         rows = conn.execute(
             "SELECT id, prompt, video_path, parent_session_id, turn_index "
             "FROM sessions WHERE conversation_id = ? AND status = 'done' ORDER BY turn_index ASC",
@@ -141,18 +154,19 @@ def merge_conversation_videos(conversation_id: str):
         "Merge complete  conversation=%s  sessions=%d  output=%s",
         conversation_id, len(video_paths), output_path,
     )
-    return {
+    return success({
         "merged_video_url": f"/api/conversations/{conversation_id}/merged_video",
         "session_count":    len(ordered_sessions),
         "sessions":         ordered_sessions,
-    }
+    })
 
 
 @router.get("/api/conversations/{conversation_id}/merged_video")
-def get_merged_video(conversation_id: str):
+def get_merged_video(conversation_id: str, current_user: User = Depends(get_current_user)):
     with get_db() as conn:
         row = conn.execute(
-            "SELECT merged_video_path FROM conversations WHERE id = ?", (conversation_id,)
+            "SELECT merged_video_path FROM conversations WHERE id = ? AND user_id = ?",
+            (conversation_id, current_user.id),
         ).fetchone()
 
     if not row:

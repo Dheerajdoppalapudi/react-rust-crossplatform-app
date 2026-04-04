@@ -9,6 +9,7 @@ import uuid
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from core.config import UPLOAD_DIR
+from core.responses import success
 from schemas.sessions import UploadResponse, ChatWithFilesResponse
 
 logger = logging.getLogger(__name__)
@@ -18,7 +19,7 @@ router = APIRouter()
 _MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50 MB per file
 
 
-@router.post("/api/upload", response_model=UploadResponse)
+@router.post("/api/upload")
 async def upload_files(files: list[UploadFile] = File(...)):
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     saved = []
@@ -39,10 +40,10 @@ async def upload_files(files: list[UploadFile] = File(...)):
             "size":          len(content),
             "content_type":  file.content_type,
         })
-    return {"files": saved}
+    return success({"files": saved})
 
 
-@router.post("/api/chat-with-files", response_model=ChatWithFilesResponse)
+@router.post("/api/chat-with-files")
 async def chat_with_files(
     message: str = Form(""),
     files: list[UploadFile] = File(default=[]),
@@ -73,4 +74,4 @@ async def chat_with_files(
     else:
         reply = message
 
-    return {"reply": reply, "files": saved}
+    return success({"reply": reply, "files": saved})

@@ -8,9 +8,11 @@ import time
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Form, HTTPException
+from fastapi import APIRouter, Depends, Form, HTTPException
 from fastapi.responses import JSONResponse
 
+from core.db_models import User
+from core.responses import success
 from core.database import (
     get_db,
     insert_conversation,
@@ -27,6 +29,7 @@ from services.generation_service import (
     count_llm_calls,
 )
 from services.llm_service import LLMService, OpenAIProvider, ClaudeProvider
+from dependencies.auth import get_current_user
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +48,7 @@ async def image_generation(
     notes_enabled:       str  = Form("false"),
     provider:            str  = Form("claude"),
     model:               Optional[str] = Form(None),
+    current_user:        User = Depends(get_current_user),
 ):
     session_id = uuid.uuid4().hex
     output_dir = session_output_dir(session_id)
@@ -53,13 +57,13 @@ async def image_generation(
     # ── Resolve conversation ───────────────────────────────────────────────────
     if not conversation_id:
         conversation_id = uuid.uuid4().hex
-        insert_conversation(conversation_id, message[:80])
+        insert_conversation(conversation_id, message[:80], user_id=current_user.id)
         turn_index = 1
     else:
         with get_db() as conn:
             row = conn.execute(
-                "SELECT COUNT(*) AS cnt FROM sessions WHERE conversation_id = ?",
-                (conversation_id,),
+                "SELECT COUNT(*) AS cnt FROM sessions WHERE conversation_id = ? AND user_id = ?",
+                (conversation_id, current_user.id),
             ).fetchone()
             turn_index = (row["cnt"] or 0) + 1
 
@@ -67,6 +71,7 @@ async def image_generation(
         session_id, message, conversation_id, turn_index,
         parent_session_id=parent_session_id,
         parent_frame_index=parent_frame_index,
+        user_id=current_user.id,
     )
     touch_conversation(conversation_id)
 
@@ -145,7 +150,7 @@ async def image_generation(
         result_payload["turn_index"]         = turn_index
         result_payload["parent_session_id"]  = parent_session_id
         result_payload["parent_frame_index"] = parent_frame_index
-        return result_payload
+        return success(result_payload)
 
     except Exception as exc:
         logger.error("Request failed  session=%s  error=%s", session_id, exc, exc_info=True)
@@ -163,5 +168,5 @@ async def image_generation(
 
 @router.post("/api/chat")
 async def chat(message: str = Form("")):
-    # NOTE: This is a stub endpoint. See TASK 2 flag — confirm with team if it should be removed.
-    return {"reply": message}
+    # NOTE: Stub endpoint — confirm with team if it should be implemented or removed.
+    return success({"reply": message})

@@ -7,10 +7,12 @@ import json
 import logging
 import os
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from core.database import get_db, update_session
+from core.db_models import User
+from dependencies.auth import get_current_user
 from services.video.frame_exporter import export_frames
 from services.video.tts_service import parse_narration, generate_audio_parallel
 from services.video.video_assembler import assemble, moviepy_available
@@ -32,7 +34,11 @@ def _sse(payload: dict) -> str:
 
 
 @router.post("/api/generate_video/{session_id}")
-async def generate_video(session_id: str, use_openai_tts: bool = False):
+async def generate_video(
+    session_id: str,
+    use_openai_tts: bool = False,
+    current_user: User = Depends(get_current_user),
+):
     """
     Generate a video for an existing session — streams progress via SSE.
 
@@ -52,8 +58,9 @@ async def generate_video(session_id: str, use_openai_tts: bool = False):
 
     with get_db() as conn:
         row = conn.execute(
-            "SELECT output_dir, frame_count, status, render_path, video_path FROM sessions WHERE id = ?",
-            (session_id,),
+            "SELECT output_dir, frame_count, status, render_path, video_path FROM sessions "
+            "WHERE id = ? AND user_id = ?",
+            (session_id, current_user.id),
         ).fetchone()
 
     if not row:
@@ -196,11 +203,12 @@ async def generate_video(session_id: str, use_openai_tts: bool = False):
 
 
 @router.get("/api/sessions/{session_id}/video")
-def get_session_video(session_id: str):
+def get_session_video(session_id: str, current_user: User = Depends(get_current_user)):
     """Stream the generated .mp4 video for a session."""
     with get_db() as conn:
         row = conn.execute(
-            "SELECT video_path FROM sessions WHERE id = ?", (session_id,)
+            "SELECT video_path FROM sessions WHERE id = ? AND user_id = ?",
+            (session_id, current_user.id),
         ).fetchone()
 
     if not row:
