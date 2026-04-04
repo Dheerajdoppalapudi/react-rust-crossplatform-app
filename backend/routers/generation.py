@@ -45,7 +45,7 @@ async def image_generation(
     pause_caption:       Optional[str] = Form(None),
     parent_session_id:   Optional[str] = Form(None),
     parent_frame_index:  Optional[int] = Form(None),
-    notes_enabled:       str  = Form("false"),
+    notes_enabled:       bool = Form(False),
     provider:            str  = Form("claude"),
     model:               Optional[str] = Form(None),
     current_user:        User = Depends(get_current_user),
@@ -114,7 +114,7 @@ async def image_generation(
             session_id=session_id,
             output_dir=output_dir,
             conversation_context=conversation_context,
-            notes_enabled=notes_enabled.lower() == "true",
+            notes_enabled=notes_enabled,
         )
 
         # ── Persist ──────────────────────────────────────────────────────────
@@ -166,7 +166,3 @@ async def image_generation(
         request_llm_service.reset(svc_token)
 
 
-@router.post("/api/chat")
-async def chat(message: str = Form("")):
-    # NOTE: Stub endpoint — confirm with team if it should be implemented or removed.
-    return success({"reply": message})

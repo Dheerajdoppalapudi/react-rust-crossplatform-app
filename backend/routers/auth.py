@@ -212,10 +212,10 @@ def register(body: RegisterRequest, response: Response):
     Register a new user with name, email, and password.
     Returns an access token and sets a refresh cookie — same as Google login.
     """
-    if len(body.password) < 8:
+    if len(body.password) < 8 or len(body.password) > 128:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Password must be at least 8 characters",
+            detail="Password must be 8–128 characters",
         )
 
     existing = get_user_by_email(body.email)
@@ -274,6 +274,9 @@ def login_with_password(body: PasswordLoginRequest, response: Response):
             status_code=status.HTTP_409_CONFLICT,
             detail="This email is linked to a Google account. Sign in with Google instead.",
         )
+
+    if len(body.password) > 128:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
 
     stored_hash = get_user_password_hash(body.email)
     if not stored_hash or not bcrypt.checkpw(body.password.encode(), stored_hash.encode()):

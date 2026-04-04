@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Optional
 
 from core.config import (
+    ENABLE_COMPONENT_GEN,
     MERMAID_INTENT_TYPES,
     MANIM_INTENT_TYPES,
     SVG_INTENT_TYPES,
@@ -206,12 +207,11 @@ async def run_generation_pipeline(
 
     component_library: dict = {}
 
-    # component_prompt.md disabled for testing — SVG renderer uses text vocabulary only
-    # if vocab_plan.intent_type in SVG_INTENT_TYPES and svg_available():
-    #     _log({"event": "stage_start", "stage": "component_gen"})
-    #     component_library, _ = await generate_svg_components(vocab_plan)
-    #     _log({"event": "stage_complete", "stage": "component_gen",
-    #           "entities": list(component_library.keys())})
+    if ENABLE_COMPONENT_GEN and vocab_plan.intent_type in SVG_INTENT_TYPES and svg_available():
+        _log({"event": "stage_start", "stage": "component_gen"})
+        component_library, _ = await generate_svg_components(vocab_plan)
+        _log({"event": "stage_complete", "stage": "component_gen",
+              "entities": list(component_library.keys())})
 
     plan = _vocab_plan_to_generation_plan(vocab_plan)
 

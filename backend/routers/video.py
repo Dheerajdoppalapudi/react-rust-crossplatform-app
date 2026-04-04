@@ -242,6 +242,9 @@ def get_session_video(
         except ValueError:
             raise HTTPException(status_code=416, detail="Invalid Range header")
 
+        if start >= file_size or start > end:
+            raise HTTPException(status_code=416, detail="Range Not Satisfiable")
+
         end = min(end, file_size - 1)
         chunk_size = end - start + 1
 

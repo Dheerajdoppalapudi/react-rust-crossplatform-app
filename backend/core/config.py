@@ -40,13 +40,17 @@ TTS_WORDS_PER_SECOND: float = 2.3
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
 GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "")
-JWT_SECRET_KEY:   str = os.getenv("JWT_SECRET_KEY", "CHANGE_ME_IN_PRODUCTION")
+JWT_SECRET_KEY:   str = os.getenv("JWT_SECRET_KEY", "af56052647ec69ba5e14f01aba0d234d8f308e3afffce788cb97311ef9aea741")
 JWT_ALGORITHM:    str = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
 REFRESH_TOKEN_EXPIRE_DAYS:   int = 30
 # COOKIE_SECURE=True forces HTTPS-only cookies — set ENV=production on the server
 COOKIE_SECURE:   bool = os.getenv("ENV", "development") == "production"
 COOKIE_SAMESITE: str  = "lax"
+
+# ── Feature flags ────────────────────────────────────────────────────────────
+# Set ENABLE_COMPONENT_GEN=true in .env to enable component_prompt.md in the SVG path.
+ENABLE_COMPONENT_GEN: bool = os.getenv("ENABLE_COMPONENT_GEN", "false").lower() == "true"
 
 # ── Intent routing ────────────────────────────────────────────────────────────
 MERMAID_INTENT_TYPES: frozenset[str] = frozenset({"process", "architecture", "timeline"})
