@@ -7,12 +7,12 @@ import json
 import logging
 import os
 
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import StreamingResponse
 
 from core.database import get_db, update_session
 from core.db_models import User
-from dependencies.auth import get_current_user
+from dependencies.auth import get_current_user, get_current_user_media
 from services.video.frame_exporter import export_frames
 from services.video.tts_service import parse_narration, generate_audio_parallel
 from services.video.video_assembler import assemble, moviepy_available
@@ -36,7 +36,7 @@ def _sse(payload: dict) -> str:
 @router.post("/api/generate_video/{session_id}")
 async def generate_video(
     session_id: str,
-    use_openai_tts: bool = False,
+    use_openai_tts: bool = True,
     current_user: User = Depends(get_current_user),
 ):
     """
@@ -203,8 +203,17 @@ async def generate_video(
 
 
 @router.get("/api/sessions/{session_id}/video")
-def get_session_video(session_id: str, current_user: User = Depends(get_current_user)):
-    """Stream the generated .mp4 video for a session."""
+def get_session_video(
+    session_id: str,
+    request: Request,
+    current_user: User = Depends(get_current_user_media),
+):
+    """
+    Stream the generated .mp4 video with Range request support.
+
+    Browsers require HTTP 206 Partial Content (Range requests) to seek and
+    buffer video. FileResponse does not support this — we handle it manually.
+    """
     with get_db() as conn:
         row = conn.execute(
             "SELECT video_path FROM sessions WHERE id = ? AND user_id = ?",
@@ -220,5 +229,51 @@ def get_session_video(session_id: str, current_user: User = Depends(get_current_
     if not os.path.exists(video_path):
         raise HTTPException(status_code=404, detail="Video file missing from disk")
 
-    return FileResponse(video_path, media_type="video/mp4",
-                        filename=f"lesson_{session_id[:8]}.mp4")
+    file_size = os.path.getsize(video_path)
+    range_header = request.headers.get("range")
+
+    if range_header:
+        # Parse "bytes=start-end"
+        try:
+            range_val  = range_header.replace("bytes=", "")
+            start_str, end_str = range_val.split("-")
+            start = int(start_str)
+            end   = int(end_str) if end_str else file_size - 1
+        except ValueError:
+            raise HTTPException(status_code=416, detail="Invalid Range header")
+
+        end = min(end, file_size - 1)
+        chunk_size = end - start + 1
+
+        def iter_chunk():
+            with open(video_path, "rb") as f:
+                f.seek(start)
+                remaining = chunk_size
+                while remaining > 0:
+                    data = f.read(min(65536, remaining))
+                    if not data:
+                        break
+                    remaining -= len(data)
+                    yield data
+
+        headers = {
+            "Content-Range":  f"bytes {start}-{end}/{file_size}",
+            "Accept-Ranges":  "bytes",
+            "Content-Length": str(chunk_size),
+            "Content-Type":   "video/mp4",
+        }
+        return StreamingResponse(iter_chunk(), status_code=206, headers=headers)
+
+    # No Range header — serve the full file
+    def iter_full():
+        with open(video_path, "rb") as f:
+            while chunk := f.read(65536):
+                yield chunk
+
+    headers = {
+        "Content-Length": str(file_size),
+        "Accept-Ranges":  "bytes",
+        "Content-Type":   "video/mp4",
+        "Content-Disposition": f'inline; filename="lesson_{session_id[:8]}.mp4"',
+    }
+    return StreamingResponse(iter_full(), status_code=200, headers=headers)

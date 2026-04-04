@@ -6,7 +6,7 @@ import logging
 from typing import Optional
 
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Query, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from core.config import JWT_ALGORITHM, JWT_SECRET_KEY
@@ -16,6 +16,33 @@ from core.db_models import User
 logger = logging.getLogger(__name__)
 
 _bearer = HTTPBearer(auto_error=False)
+
+
+def _resolve_user(token_str: str) -> User:
+    """Decode a raw JWT string and return the User, or raise 401."""
+    try:
+        payload = jwt.decode(token_str, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token expired",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    except jwt.PyJWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    user_id = payload.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
+
+    user = get_user_by_id(user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    return user
 
 
 def get_current_user(
@@ -32,35 +59,25 @@ def get_current_user(
             detail="Not authenticated",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    return _resolve_user(credentials.credentials)
 
-    token = credentials.credentials
-    try:
-        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
-    except jwt.ExpiredSignatureError:
+
+def get_current_user_media(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
+    token: Optional[str] = Query(default=None),
+) -> User:
+    """
+    Like get_current_user but also accepts a ?token= query parameter.
+
+    Used for media endpoints (video, frame images) where the browser makes
+    requests directly via <video src> / <img src> and cannot send an
+    Authorization header.
+    """
+    raw = credentials.credentials if credentials else token
+    if not raw:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token expired",
+            detail="Not authenticated",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    except jwt.PyJWTError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    user_id = payload.get("sub")
-    if not user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token payload",
-        )
-
-    user = get_user_by_id(user_id)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
-        )
-
-    return user
+    return _resolve_user(raw)

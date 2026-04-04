@@ -177,7 +177,7 @@ export const api = {
 
   generateVideoStream: (sessionId, onEvent) => {
     const token = getAccessToken()
-    return fetch(`${API_BASE}/api/generate_video/${sessionId}`, {
+    return fetch(`${API_BASE}/api/generate_video/${sessionId}?use_openai_tts=true`, {
       method: 'POST',
       credentials: 'include',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -217,7 +217,7 @@ export const api = {
 
   // ── URL builders (synchronous — return strings, not Promises) ─────────────────
 
-  getVideoUrl:       (sessionId)             => `${API_BASE}/api/sessions/${sessionId}/video`,
-  getFrameUrl:       (sessionId, frameIndex) => `${API_BASE}/api/sessions/${sessionId}/frame/${frameIndex}`,
+  getVideoUrl:       (sessionId)             => { const t = getAccessToken(); return `${API_BASE}/api/sessions/${sessionId}/video${t ? `?token=${t}` : ''}` },
+  getFrameUrl:       (sessionId, frameIndex) => { const t = getAccessToken(); return `${API_BASE}/api/sessions/${sessionId}/frame/${frameIndex}${t ? `?token=${t}` : ''}` },
   getMergedVideoUrl: (convId)               => `${API_BASE}/api/conversations/${convId}/merged_video`,
 }

@@ -10,7 +10,6 @@ The route handler in routers/generation.py is responsible for:
 This module owns everything in between.
 """
 
-import asyncio
 import json
 import logging
 import os
@@ -29,7 +28,6 @@ from services.Frame_generation.planner import (
     GenerationPlan,
     _vocab_plan_to_generation_plan,
     create_vocab_plan,
-    create_spatial_plan,
     generate_all_frames,
     _log,
 )
@@ -41,7 +39,6 @@ from services.Frame_generation.mermaid.mermaid_generator import (
 from services.Frame_generation.manim.manim_generator import generate_manim_frames, manim_available
 from services.Frame_generation.svg.svg_generator import generate_svg_frames, svg_available
 from services.Frame_generation.svg.component_generator import generate_svg_components
-from services.Frame_generation.svg.component_library import get_builtin_component
 
 logger = logging.getLogger(__name__)
 
@@ -87,32 +84,6 @@ def _parse_narrations_from_file(narration_path: str) -> list[str]:
         blocks.append(narration)
     return blocks
 
-
-def _build_estimated_dimension_map(vocab_plan) -> dict:
-    """
-    Build a dimension map instantly (no LLM call) from the pre-built component DB.
-
-    Known entity types → exact DB dimensions.
-    Novel/generic entities → safe default 140×80.
-
-    This lets Phase B start in parallel with the component-gen LLM call,
-    saving ~15-18s of sequential waiting.
-    """
-    fill   = vocab_plan.shared_style.backgroundColor
-    stroke = vocab_plan.shared_style.strokeColor
-    dim_map: dict = {}
-    for key, spec in vocab_plan.element_vocabulary.items():
-        comp = get_builtin_component(key, spec, fill, stroke)
-        if comp:
-            dim_map[key] = {
-                "width":         comp.width,
-                "height":        comp.height,
-                "right_edge_y":  comp.right_edge_y,
-                "bottom_edge_x": comp.bottom_edge_x,
-            }
-        else:
-            dim_map[key] = {"width": 140, "height": 80, "right_edge_y": 40, "bottom_edge_x": 70}
-    return dim_map
 
 
 def build_conversation_context(
@@ -236,18 +207,12 @@ async def run_generation_pipeline(
     component_library: dict = {}
 
     if vocab_plan.intent_type in SVG_INTENT_TYPES and svg_available():
-        estimated_dim_map = _build_estimated_dimension_map(vocab_plan)
-        _log({"event": "stage_start", "stage": "component_gen_and_phase_b_parallel"})
+        _log({"event": "stage_start", "stage": "component_gen"})
+        component_library, _ = await generate_svg_components(vocab_plan)
+        _log({"event": "stage_complete", "stage": "component_gen",
+              "entities": list(component_library.keys())})
 
-        (component_library, _), plan = await asyncio.gather(
-            generate_svg_components(vocab_plan),
-            create_spatial_plan(vocab_plan, estimated_dim_map),
-        )
-
-        _log({"event": "stage_complete", "stage": "component_gen_and_phase_b_parallel",
-              "entities": list(component_library.keys()), "frame_count": plan.frame_count})
-    else:
-        plan = _vocab_plan_to_generation_plan(vocab_plan)
+    plan = _vocab_plan_to_generation_plan(vocab_plan)
 
     _log({
         "event": "stage_complete",

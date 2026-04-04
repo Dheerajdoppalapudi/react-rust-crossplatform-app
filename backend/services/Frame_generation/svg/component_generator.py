@@ -116,7 +116,7 @@ def _generate_novel_components_sync(
         .replace("{{ENTITY_LIST}}", _build_entity_list(entities))
     )
 
-    raw = call_llm(prompt)
+    raw = call_llm(prompt, prompt_name=f"component_prompt.md ({len(entities)} entities)")
 
     try:
         data = _extract_json(raw)

@@ -34,7 +34,10 @@
       "Bash(sqlite3 database.sqlite \"SELECT id, title, created_at FROM conversations ORDER BY created_at DESC;\")",
       "Bash(sqlite3 database.sqlite \"SELECT id FROM sessions;\")",
       "Read(//tmp/**)",
-      "Bash(pkill -f \"python main.py\")"
+      "Bash(pkill -f \"python main.py\")",
+      "Bash(python3 -c ':*)",
+      "Bash(python3)",
+      "Bash(grep -h '\"intent_type\"' \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/\"*/activity_log.json)"
     ]
   }
 }

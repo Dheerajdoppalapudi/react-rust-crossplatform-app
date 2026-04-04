@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse
 from core.database import get_db
 from core.db_models import User
 from core.responses import success
-from dependencies.auth import get_current_user
+from dependencies.auth import get_current_user, get_current_user_media
 from schemas.sessions import (
     SessionSummary,
     ConversationDetail,
@@ -99,7 +99,7 @@ def get_session_frames_meta(session_id: str, current_user: User = Depends(get_cu
 
 
 @router.get("/api/sessions/{session_id}/frame/{frame_index}")
-def get_session_frame(session_id: str, frame_index: int, current_user: User = Depends(get_current_user)):
+def get_session_frame(session_id: str, frame_index: int, current_user: User = Depends(get_current_user_media)):
     """Serve a rendered frame as a PNG image."""
     with get_db() as conn:
         row = conn.execute(

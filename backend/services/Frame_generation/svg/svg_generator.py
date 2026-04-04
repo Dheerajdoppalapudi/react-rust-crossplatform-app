@@ -35,7 +35,7 @@ except (ImportError, OSError):
 
 from services.Frame_generation.planner import GenerationPlan, FramePlan, call_llm
 from services.Frame_generation.svg.component_library import SVGComponent
-from services.Frame_generation.svg.component_generator import generate_svg_components, build_component_injection
+from services.Frame_generation.svg.component_generator import generate_svg_components
 
 
 # ---------------------------------------------------------------------------
@@ -168,6 +168,7 @@ def _generate_svg_code(
     plan: GenerationPlan,
     prompt_template: str,
     component_library: dict[str, SVGComponent] | None = None,
+    frame_index: int = 0,
 ) -> str:
     """
     Synchronous LLM call that returns the raw LLM response for one frame.
@@ -193,11 +194,20 @@ def _generate_svg_code(
     )
 
     if component_library:
-        # Replace/append COMPONENTS block in the description with exact SVG markup
-        # and pre-computed edge coordinates — renderer never has to guess dimensions
-        description = build_component_injection(frame.description, component_library) + style_note
+        # Inject component SVG fragments as visual reference — renderer picks positions freely
+        lines = [
+            "\n\nCOMPONENT LIBRARY (use these exact SVG fragments for each named entity —"
+            " paste verbatim inside <g transform=\"translate(X,Y)\"> and choose positions freely):"
+        ]
+        for key, comp in component_library.items():
+            lines.append(
+                f"\n  {key} (bounding box: {comp.width}×{comp.height},"
+                f" right_edge_y={comp.right_edge_y}, bottom_edge_x={comp.bottom_edge_x}):\n"
+                f"  {comp.svg}"
+            )
+        description = frame.description + style_note + "\n".join(lines)
         prompt = prompt_template.replace("{{DIAGRAM_DESCRIPTION}}", description)
-        return call_llm(prompt)
+        return call_llm(prompt, prompt_name=f"svg_prompt.md (frame {frame_index})")
     elif plan.element_vocabulary:
         # Fallback: text descriptions only (no component library available)
         # Normalise values — new planner uses dicts, old planner uses strings
@@ -225,7 +235,7 @@ def _generate_svg_code(
 
     description = frame.description + style_note + vocab_note
     prompt = prompt_template.replace("{{DIAGRAM_DESCRIPTION}}", description)
-    return call_llm(prompt)
+    return call_llm(prompt, prompt_name=f"svg_prompt.md (frame {frame_index})")
 
 
 # ---------------------------------------------------------------------------
@@ -311,7 +321,7 @@ def _generate_svg_code_retry(
         f"- Flat fills only (no opacity, no semi-transparent overlaps)\n"
         f"- All text within x: 40–1160, y: 30–860\n"
     )
-    return call_llm(correction_prompt)
+    return call_llm(correction_prompt, prompt_name=f"svg_prompt.md (frame {frame.index} retry)")
 
 
 # ---------------------------------------------------------------------------
@@ -336,7 +346,7 @@ async def _generate_one_svg_frame(
     is attempted with the specific error included in the prompt. Only the
     failing frame retries — successful frames are never re-run.
     """
-    raw = await asyncio.to_thread(_generate_svg_code, frame, plan, prompt_template, component_library)
+    raw = await asyncio.to_thread(_generate_svg_code, frame, plan, prompt_template, component_library, frame_index)
     svg_text = _extract_svg(raw)
 
     # ── Retry if extraction produced no valid SVG ────────────────────────────
@@ -404,13 +414,8 @@ async def generate_svg_frames(
       injects exact SVG fragments into its frame description, guaranteeing
       pixel-identical icons across frames.
     """
-    # ── Stage 1.5: build component library only if not already provided ───────
     if component_library is None:
         component_library = {}
-        if plan.element_vocabulary:
-            logger.info("svg_generator building component library for %d entity/entities", len(plan.element_vocabulary))
-            component_library, _ = await generate_svg_components(plan)
-            logger.info("svg_generator component library ready: %s", list(component_library.keys()))
 
     # ── Stage 2: all frames in parallel ──────────────────────────────────────
     tasks = [

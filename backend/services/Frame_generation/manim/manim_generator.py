@@ -87,7 +87,7 @@ def _generate_manim_code(
         .replace("{{DIAGRAM_DESCRIPTION}}", frame.description)
         .replace("{{PRIMARY_COLOR}}", primary_color)
     )
-    return call_llm(prompt)
+    return call_llm(prompt, prompt_name=f"manim_prompt.md (frame {frame.index})")
 
 
 # ---------------------------------------------------------------------------

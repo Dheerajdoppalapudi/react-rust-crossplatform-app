@@ -145,19 +145,24 @@ class GenerationPlan(BaseModel):
 # LLM call
 # ---------------------------------------------------------------------------
 
-def call_llm(prompt: str, max_tokens: int = 8192) -> str:
+def call_llm(prompt: str, max_tokens: int = 8192, prompt_name: str = "") -> str:
     """
     Single entry point for all LLM calls in the pipeline.
     max_tokens defaults to 8192 — Phase B and component gen produce large JSON
     that easily exceeds the old 4096 default, causing mid-JSON truncation.
     """
+    label = prompt_name or "unknown"
+    logger.info("LLM call  prompt=%s  chars=%d", label, len(prompt))
     svc = request_llm_service.get() or default_llm_service
     result, usage = svc.make_single_prompt_request(prompt, max_tokens=max_tokens)
     if result is None:
         raise RuntimeError("LLM service returned None — check server connectivity and credentials.")
     _accumulate_tokens(usage)
+    total_tokens = (usage or {}).get("total_tokens", 0)
+    logger.info("LLM done  prompt=%s  tokens=%d", label, total_tokens)
     _log({
         "event": "llm_call",
+        "prompt_name": label,
         "prompt_preview": prompt[:600] + ("…" if len(prompt) > 600 else ""),
         "response_preview": result[:600] + ("…" if len(result) > 600 else ""),
         "full_prompt": prompt,
@@ -228,7 +233,7 @@ async def create_vocab_plan(user_prompt: str, conversation_context: str = "") ->
         .replace("{{CONVERSATION_CONTEXT}}", conversation_context)
     )
 
-    raw = await asyncio.to_thread(call_llm, prompt)
+    raw = await asyncio.to_thread(call_llm, prompt, prompt_name="planning_vocab.md")
     plan_dict = _extract_json(raw)
     return VocabularyPlan(**plan_dict)
 
@@ -261,7 +266,7 @@ async def create_spatial_plan(
         .replace("{{DIMENSION_MAP}}", dims_json)
     )
 
-    raw = await asyncio.to_thread(call_llm, prompt, 16000)
+    raw = await asyncio.to_thread(call_llm, prompt, 16000, prompt_name="planning_spatial.md")
     plan_dict = _extract_json(raw)
     return GenerationPlan(**plan_dict)
 
@@ -335,7 +340,7 @@ async def _generate_one_frame(
     description = frame.description + style_note + vocab_note
     prompt = prompt_template.replace("{{DIAGRAM_DESCRIPTION}}", description)
 
-    raw = await asyncio.to_thread(call_llm, prompt)
+    raw = await asyncio.to_thread(call_llm, prompt, prompt_name=f"prompt_template.md (frame {frame.index})")
     return _extract_json(raw)
 
 
