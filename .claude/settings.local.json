@@ -37,7 +37,8 @@
       "Bash(pkill -f \"python main.py\")",
       "Bash(python3 -c ':*)",
       "Bash(python3)",
-      "Bash(grep -h '\"intent_type\"' \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/\"*/activity_log.json)"
+      "Bash(grep -h '\"intent_type\"' \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/\"*/activity_log.json)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(list\\(d.keys\\(\\)\\)\\); print\\('images count:', len\\(d.get\\('images',[]\\)\\)\\);  print\\('captions:', d.get\\('captions',[]\\)\\); print\\('notes?:', bool\\(d.get\\('notes'\\)\\)\\)\")"
     ]
   }
 }

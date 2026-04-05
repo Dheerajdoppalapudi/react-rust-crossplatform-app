@@ -40,6 +40,7 @@ from services.Frame_generation.mermaid.mermaid_generator import (
 from services.Frame_generation.manim.manim_generator import generate_manim_frames, manim_available
 from services.Frame_generation.svg.svg_generator import generate_svg_frames, svg_available
 from services.Frame_generation.svg.component_generator import generate_svg_components
+from services.Frame_generation.slide_generator import generate_slide, generate_summary_slide
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +86,105 @@ def _parse_narrations_from_file(narration_path: str) -> list[str]:
         blocks.append(narration)
     return blocks
 
+
+
+def _interleave_slides(
+    png_paths: list,
+    captions: list[str],
+    narrations: list[str],
+    slide_specs: list[dict],
+    output_dir: str,
+    accent_color: str,
+) -> tuple[list, list[str], list[str]]:
+    """
+    Generate slide PNGs and interleave them with diagram frames.
+
+    Args:
+        png_paths:    per-diagram-frame PNG paths (may include None for failed frames)
+        captions:     per-diagram-frame captions
+        narrations:   per-diagram-frame narration strings
+        slide_specs:  list of slide_frames dicts from the planner
+        output_dir:   session output directory; slides go into output_dir/slides/
+        accent_color: fallback accent if a slide spec omits accent_color
+
+    Returns:
+        (all_images, all_captions, all_narrations) with slides interleaved.
+        Slide entries use their narration field as the per-frame narration text.
+    """
+    slides_dir = os.path.join(output_dir, "slides")
+    os.makedirs(slides_dir, exist_ok=True)
+
+    # Build insertion map: diagram_index → list of (slide_png, slide_caption, slide_narration)
+    insertions: dict[int, list] = {}
+    for i, spec in enumerate(slide_specs or []):
+        insert_before = spec.get("insert_before", 0)
+        slide_filename = f"slide_{i:03d}.png"
+        slide_path = os.path.join(slides_dir, slide_filename)
+        try:
+            generate_slide(spec, slide_path)
+        except Exception as e:
+            logger.error("slide_generator failed for slide %d: %s", i, e, exc_info=True)
+            continue
+        slide_narration = spec.get("narration", "")
+        slide_caption   = spec.get("title") or spec.get("heading") or "Slide"
+        insertions.setdefault(insert_before, []).append(
+            (slide_path, slide_caption, slide_narration)
+        )
+
+    # Build interleaved lists
+    all_images, all_captions, all_narrations = [], [], []
+    for idx, (png, cap, narr) in enumerate(zip(png_paths, captions, narrations)):
+        for slide_path, slide_cap, slide_narr in insertions.get(idx, []):
+            all_images.append(slide_path)
+            all_captions.append(slide_cap)
+            all_narrations.append(slide_narr)
+        all_images.append(png)
+        all_captions.append(cap)
+        all_narrations.append(narr)
+
+    # Slides with insert_before >= len(png_paths) go at the end (before summary)
+    for idx in sorted(k for k in insertions if k >= len(png_paths)):
+        for slide_path, slide_cap, slide_narr in insertions[idx]:
+            all_images.append(slide_path)
+            all_captions.append(slide_cap)
+            all_narrations.append(slide_narr)
+
+    return all_images, all_captions, all_narrations
+
+
+def _append_summary_slide(
+    all_images: list,
+    all_captions: list[str],
+    all_narrations: list[str],
+    notes: str,
+    accent_color: str,
+    output_dir: str,
+) -> tuple[list, list[str], list[str]]:
+    """
+    Generate a 'Key Takeaways' summary slide from plan.notes and append it.
+    """
+    if not notes:
+        return all_images, all_captions, all_narrations
+
+    bullets = [line.strip().lstrip("•-").strip() for line in notes.splitlines() if line.strip()]
+    if not bullets:
+        return all_images, all_captions, all_narrations
+
+    slides_dir = os.path.join(output_dir, "slides")
+    os.makedirs(slides_dir, exist_ok=True)
+    summary_path = os.path.join(slides_dir, "summary.png")
+
+    try:
+        generate_summary_slide(bullets=bullets, accent_color=accent_color, out_path=summary_path)
+    except Exception as e:
+        logger.error("summary slide generation failed: %s", e, exc_info=True)
+        return all_images, all_captions, all_narrations
+
+    summary_narration = "To summarize what we covered: " + " ".join(bullets[:3])
+    all_images.append(summary_path)
+    all_captions.append("Key Takeaways")
+    all_narrations.append(summary_narration)
+    return all_images, all_captions, all_narrations
 
 
 def build_conversation_context(
@@ -228,6 +328,7 @@ async def run_generation_pipeline(
     )
 
     captions            = [frame.caption for frame in plan.frames]
+    frame_narrations    = [frame.narration for frame in plan.frames]
     suggested_followups = plan.suggested_followups or [] if notes_enabled else []
     notes               = (plan.notes or "")              if notes_enabled else ""
 
@@ -239,12 +340,25 @@ async def run_generation_pipeline(
 
     # ── Stage 2: Frame generation ─────────────────────────────────────────────
     result_payload, ui_output_file = await _run_frame_generation(
-        plan, session_id, output_dir, captions, suggested_followups, notes, component_library,
+        plan, session_id, output_dir, captions, frame_narrations,
+        suggested_followups, notes, component_library,
     )
 
-    # ── Save narration ────────────────────────────────────────────────────────
-    with open(os.path.join(output_dir, "narration.txt"), "w") as f:
-        f.write("\n".join(narration_lines).strip() + "\n")
+    # ── Save narration (includes slide narrations from interleaving) ──────────
+    final_narrations = result_payload.get("_narrations", [])
+    if final_narrations:
+        final_captions_list = result_payload.get("captions", captions)
+        interleaved_lines: list[str] = []
+        for i, (cap, narr) in enumerate(zip(final_captions_list, final_narrations)):
+            interleaved_lines.append(f"Frame {i + 1}: {cap}")
+            interleaved_lines.append(narr)
+            interleaved_lines.append("")
+        with open(os.path.join(output_dir, "narration.txt"), "w") as f:
+            f.write("\n".join(interleaved_lines).strip() + "\n")
+    else:
+        with open(os.path.join(output_dir, "narration.txt"), "w") as f:
+            f.write("\n".join(narration_lines).strip() + "\n")
+    result_payload.pop("_narrations", None)
 
     result_payload["ui_output_file"] = ui_output_file
     return result_payload
@@ -255,6 +369,7 @@ async def _run_frame_generation(
     session_id:         str,
     output_dir:         str,
     captions:           list[str],
+    frame_narrations:   list[str],
     suggested_followups: list[str],
     notes:              str,
     component_library:  dict,
@@ -288,20 +403,29 @@ async def _run_frame_generation(
         with open(ui_output_file, "w") as f:
             f.write(py_content)
 
+        accent = plan.shared_style.backgroundColor
+        all_images, all_captions, all_narrations = _interleave_slides(
+            png_paths, captions, frame_narrations, plan.slide_frames, output_dir, accent
+        )
+        all_images, all_captions, all_narrations = _append_summary_slide(
+            all_images, all_captions, all_narrations, notes, accent, output_dir
+        )
+
         with open(os.path.join(output_dir, "frames.json"), "w") as f:
-            json.dump({"render_path": "manim", "images": png_paths, "captions": captions,
+            json.dump({"render_path": "manim", "images": all_images, "captions": all_captions,
                        "suggested_followups": suggested_followups, "notes": notes}, f, indent=2)
 
         return {
             "session_id":          session_id,
             "render_path":         "manim",
-            "frame_count":         plan.frame_count,
+            "frame_count":         len(all_images),
             "intent_type":         plan.intent_type,
-            "captions":            captions,
-            "images":              png_paths,
+            "captions":            all_captions,
+            "images":              all_images,
             "ui_file_type":        "python",
             "suggested_followups": suggested_followups,
             "notes":               notes,
+            "_narrations":         all_narrations,
         }, ui_output_file
 
     # ── SVG ───────────────────────────────────────────────────────────────────
@@ -314,23 +438,32 @@ async def _run_frame_generation(
         png_paths = await generate_svg_frames(plan, _SVG_PROMPT_TEMPLATE, svg_dir, component_library)
         _log({"event": "stage_complete", "stage": "frame_generation", "path": "svg"})
 
+        accent = plan.shared_style.backgroundColor
+        all_images, all_captions, all_narrations = _interleave_slides(
+            png_paths, captions, frame_narrations, plan.slide_frames, output_dir, accent
+        )
+        all_images, all_captions, all_narrations = _append_summary_slide(
+            all_images, all_captions, all_narrations, notes, accent, output_dir
+        )
+
         ui_output_file = os.path.join(output_dir, "final_output.json")
         with open(os.path.join(output_dir, "frames.json"), "w") as f:
-            json.dump({"render_path": "svg", "images": png_paths, "captions": captions,
+            json.dump({"render_path": "svg", "images": all_images, "captions": all_captions,
                        "suggested_followups": suggested_followups, "notes": notes}, f, indent=2)
         with open(ui_output_file, "w") as f:
-            json.dump({"render_path": "svg", "images": png_paths, "captions": captions}, f, indent=2)
+            json.dump({"render_path": "svg", "images": all_images, "captions": all_captions}, f, indent=2)
 
         return {
             "session_id":          session_id,
             "render_path":         "svg",
-            "frame_count":         plan.frame_count,
+            "frame_count":         len(all_images),
             "intent_type":         plan.intent_type,
-            "captions":            captions,
-            "images":              png_paths,
+            "captions":            all_captions,
+            "images":              all_images,
             "ui_file_type":        "images",
             "suggested_followups": suggested_followups,
             "notes":               notes,
+            "_narrations":         all_narrations,
         }, ui_output_file
 
     # ── Mermaid sidecar down → fall back to SVG ───────────────────────────────
@@ -347,23 +480,32 @@ async def _run_frame_generation(
         png_paths = await generate_svg_frames(plan, _SVG_PROMPT_TEMPLATE, svg_dir, component_library)
         _log({"event": "stage_complete", "stage": "frame_generation", "path": "svg_fallback"})
 
+        accent = plan.shared_style.backgroundColor
+        all_images, all_captions, all_narrations = _interleave_slides(
+            png_paths, captions, frame_narrations, plan.slide_frames, output_dir, accent
+        )
+        all_images, all_captions, all_narrations = _append_summary_slide(
+            all_images, all_captions, all_narrations, notes, accent, output_dir
+        )
+
         ui_output_file = os.path.join(output_dir, "final_output.json")
         with open(os.path.join(output_dir, "frames.json"), "w") as f:
-            json.dump({"render_path": "svg", "images": png_paths, "captions": captions,
+            json.dump({"render_path": "svg", "images": all_images, "captions": all_captions,
                        "suggested_followups": suggested_followups, "notes": notes}, f, indent=2)
         with open(ui_output_file, "w") as f:
-            json.dump({"render_path": "svg", "images": png_paths, "captions": captions}, f, indent=2)
+            json.dump({"render_path": "svg", "images": all_images, "captions": all_captions}, f, indent=2)
 
         return {
             "session_id":          session_id,
             "render_path":         "svg",
-            "frame_count":         plan.frame_count,
+            "frame_count":         len(all_images),
             "intent_type":         plan.intent_type,
-            "captions":            captions,
-            "images":              png_paths,
+            "captions":            all_captions,
+            "images":              all_images,
             "ui_file_type":        "images",
             "suggested_followups": suggested_followups,
             "notes":               notes,
+            "_narrations":         all_narrations,
         }, ui_output_file
 
     # ── Mermaid or slim JSON ──────────────────────────────────────────────────
@@ -409,20 +551,32 @@ async def _run_frame_generation(
     with open(ui_output_file, "w") as f:
         json.dump(excalidraw_result, f, indent=2)
 
+    # Interleave slides and summary for Mermaid/slim JSON paths too
+    # (diagram frames have None image paths — slides will have real PNGs)
+    none_images = [None] * plan.frame_count
+    accent = plan.shared_style.backgroundColor
+    all_images, all_captions, all_narrations = _interleave_slides(
+        none_images, captions, frame_narrations, plan.slide_frames, output_dir, accent
+    )
+    all_images, all_captions, all_narrations = _append_summary_slide(
+        all_images, all_captions, all_narrations, notes, accent, output_dir
+    )
+
     with open(os.path.join(output_dir, "frames.json"), "w") as f:
-        json.dump({"render_path": path_label, "images": [None] * plan.frame_count,
-                   "captions": captions, "suggested_followups": suggested_followups,
+        json.dump({"render_path": path_label, "images": all_images,
+                   "captions": all_captions, "suggested_followups": suggested_followups,
                    "notes": notes}, f, indent=2)
 
     return {
         "session_id":          session_id,
         "excalidraw":          excalidraw_result,
         "elements_count":      len(excalidraw_result["elements"]),
-        "frame_count":         plan.frame_count,
+        "frame_count":         len(all_images),
         "intent_type":         plan.intent_type,
         "render_path":         path_label,
-        "captions":            captions,
+        "captions":            all_captions,
         "ui_file_type":        "json",
         "suggested_followups": suggested_followups,
         "notes":               notes,
+        "_narrations":         all_narrations,
     }, ui_output_file

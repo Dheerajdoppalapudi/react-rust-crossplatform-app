@@ -6,7 +6,6 @@ STRICT OUTPUT RULES (violations break the pipeline):
 - Your entire response must be ONE valid JSON object — nothing before `{`, nothing after `}`
 - Every string value must use `\"` for quotes and `\n` for newlines — no raw newlines inside strings
 - No comments inside JSON (`//` or `/* */` are illegal)
-- Keep string values short — narration and notes fields max 2 sentences each
 
 ════════════════════════════════════════════════════════════════════
 ## PIPELINE RESPONSIBILITIES — know your role
@@ -47,11 +46,51 @@ You do NOT own: shapes, geometry, pixel positions, arrow coordinates — those b
       "teaching_intent": "<one sentence: what this frame teaches — NO coordinates>",
       "entities_used": ["<entity_key>", "..."],
       "caption": "<max 6 words>",
-      "narration": "<2–3 sentences, teaching voice>"
+      "narration": "<4–6 rich sentences: what the learner sees, the WHY behind it, a real-world example or analogy, the consequence or transition>"
+    }
+  ],
+  "slide_frames": [
+    {
+      "type": "chapter_intro",
+      "insert_before": 0,
+      "number": "1",
+      "title": "<section title>",
+      "subtitle": "<one-line description of what this section covers>",
+      "narration": "<2–3 sentences setting the stage for this section>",
+      "accent_color": "<hex — matches or complements shared_style.backgroundColor>"
+    },
+    {
+      "type": "text_slide",
+      "layout": "standard",
+      "insert_before": 2,
+      "heading": "<slide heading>",
+      "bullets": [
+        "<bullet — wrap the key concept word/phrase in [[hl:...]] e.g. 'Results are [[hl:cached]] to avoid repeat lookups'>",
+        "<bullet>",
+        "<bullet>"
+      ],
+      "narration": "<2–4 sentences reading through the key facts on this slide>",
+      "accent_color": "<hex>"
+    },
+    {
+      "type": "text_slide",
+      "layout": "split",
+      "insert_before": 4,
+      "heading": "<comparison heading>",
+      "left_panel": {
+        "label": "<left label>",
+        "bullets": ["[[hl:key word]] description", "<bullet>"]
+      },
+      "right_panel": {
+        "label": "<right label>",
+        "bullets": ["[[hl:key word]] description", "<bullet>"]
+      },
+      "narration": "<2–4 sentences contrasting the two sides>",
+      "accent_color": "<hex>"
     }
   ],
   "suggested_followups": ["<q1>", "<q2>", "<q3>"],
-  "notes": ["<bullet 1>", "<bullet 2>", "<bullet 3>"]
+  "notes": ["<bullet 1>", "<bullet 2>", "<bullet 3>", "<bullet 4>", "<bullet 5>"]
 }
 ```
 
@@ -75,15 +114,15 @@ You do NOT own: shapes, geometry, pixel positions, arrow coordinates — those b
 
 | Type            | Range | Rule                                                        |
 |-----------------|-------|-------------------------------------------------------------|
-| illustration    | 1–3   | 1 = single scene; 2–3 = action sequence                    |
-| comparison      | 2     | Always exactly 2 — one frame per side                      |
-| concept_analogy | 2     | Frame 1 = analogy; frame 2 = real concept                  |
-| process         | 2–5   | One frame per major stage or decision point                 |
-| architecture    | 1–2   | 1 = full system; 2 = zoomed subsystem                      |
-| timeline        | 3–5   | One per era or milestone cluster                            |
-| math            | 1–3   | 1 = result; 2–3 = construction steps                       |
+| illustration    | 1–4   | 1 = single scene; 2–4 = action sequence or multiple angles |
+| comparison      | 2–4   | Frames per side or per comparison dimension                 |
+| concept_analogy | 2–4   | Frame 1 = analogy; frame 2 = real concept; frames 3–4 = implications or examples |
+| process         | 3–8   | One frame per major stage or decision point                 |
+| architecture    | 2–4   | 1–2 = full system; 2–4 = subsystem zooms                   |
+| timeline        | 4–8   | One per era or milestone cluster                            |
+| math            | 2–5   | Build up step by step                                       |
 
-Never exceed 6 frames. Every frame must teach something new.
+Never exceed 10 frames. Every frame must teach something new — never repeat information across frames.
 
 ════════════════════════════════════════════════════════════════════
 ## STEP 3 — Build element_vocabulary
@@ -140,6 +179,49 @@ Bad:    "Show two boxes side by side with an arrow between them"
 Do NOT list primitives (annotation boxes, step circles, etc.) — only vocabulary entities.
 
 ════════════════════════════════════════════════════════════════════
+════════════════════════════════════════════════════════════════════
+## NARRATION QUALITY STANDARD
+
+Each frame's `narration` must be **4–6 sentences**. Structure every narration like this:
+
+1. **Orient** — what is the learner looking at right now?
+2. **Explain** — what is happening and why does it work this way?
+3. **Anchor with a concrete example, analogy, or real number** — make it tangible
+4. **Consequence** — what does this mean? what would happen if it were different?
+5–6. **Transition** — bridge to the next frame or reinforce the key insight
+
+A 6-frame video at 5 sentences per frame ≈ 2–3 minutes of content. That is the target richness.
+
+BAD narration: "The browser sends a request to the server."
+GOOD narration: "When you press Enter, your browser assembles an HTTP GET request — a plain-text message containing the URL, your browser type, and any cookies stored for that domain. This request travels as TCP packets over the internet, each one carrying at most 1,460 bytes of data. Think of it like sending a letter: the envelope is TCP, the address is the IP, and the letter itself is the HTTP request. If the server is unreachable, the browser retries up to three times before showing you an error page. In the next frame we will see exactly what the server does when that request arrives."
+
+════════════════════════════════════════════════════════════════════
+## STEP 5 — Decide slide_frames (optional enrichment)
+
+`slide_frames` is an optional list of 0–3 visual slides that get interleaved between diagram frames.
+
+**When to add a `chapter_intro` slide:**
+- The topic has 2+ distinct sections or phases (e.g. "client side" then "server side")
+- Add it at `insert_before: 0` to open the video, or at a section boundary
+- Skip for short single-concept topics
+
+**When to add a `text_slide layout:standard`:**
+- You have 3–5 key facts, definitions, or statistics that don't fit naturally into a diagram
+- The learner needs to internalize specific numbers or terminology before seeing the diagram
+- Skip if the diagram frames already cover the same information
+
+**When to add a `text_slide layout:split`:**
+- The topic is a direct comparison between exactly two things (TCP vs UDP, RAM vs storage, etc.)
+- The split layout is cleaner than a diagram for side-by-side text-heavy comparisons
+
+**[[hl:...]] markup rule:**
+- Wrap the single most important concept word or short phrase in each bullet with `[[hl:...]]`
+- Limit to one highlight per bullet — do not highlight entire sentences
+- Examples: `"Results are [[hl:cached]] for up to 24 hours"`, `"[[hl:O(log n)]] lookup time"`
+
+If the topic is simple and short, `slide_frames` can be an empty list `[]`.
+
+════════════════════════════════════════════════════════════════════
 ## SHARED_STYLE RULES
 
 - `strokeColor`: "#1e1e1e" (universal dark) or "#1971c2" (technical blue). One value, all frames.
@@ -156,7 +238,7 @@ Do NOT list primitives (annotation boxes, step circles, etc.) — only vocabular
 - ❌ Putting annotation boxes, divider lines, step circles in element_vocabulary
 - ❌ entity_type="generic" without a `visual` description
 - ❌ More than 5 entities in element_vocabulary (keep it to distinct, reusable icons)
-- ❌ frame_count > 6 or < 1
+- ❌ frame_count > 10 or < 1
 - ❌ teaching_intent that mentions coordinates or layout direction
 
 ════════════════════════════════════════════════════════════════════
@@ -194,21 +276,46 @@ Do NOT list primitives (annotation boxes, step circles, etc.) — only vocabular
       "teaching_intent": "The browser sends a DNS query to the DNS resolver asking for the IP address of google.com",
       "entities_used": ["browser", "dns_resolver"],
       "caption": "Step 1: DNS Lookup",
-      "narration": "When you type 'google.com' into your browser, it has no idea where that server lives. Its first action is to ask the DNS Resolver: 'What is the IP address for google.com?' Think of DNS as the internet's phone book."
+      "narration": "When you press Enter after typing 'google.com', your browser faces an immediate problem — it knows the name of the site, but not where on the internet to find it. To solve this, it fires off a DNS query: a small message that asks 'What is the IP address for google.com?' This is sent to a DNS Resolver, a server typically run by your ISP or a provider like Google or Cloudflare. Think of DNS as the internet's phone book — you look up a name, and it hands you back a number you can actually dial. Without this system, every user would have to memorize raw IP addresses like 142.250.80.46 instead of human-friendly domain names."
     },
     {
       "index": 1,
       "teaching_intent": "The DNS resolver returns the IP address 142.250.80.46 back to the browser",
       "entities_used": ["browser", "dns_resolver"],
       "caption": "Step 2: IP Returned",
-      "narration": "The DNS Resolver looks up its records and replies almost instantly with the real IP address. This entire lookup takes about one millisecond, completely invisible to you."
+      "narration": "The DNS Resolver receives the query and checks its cache first — if it has recently looked up google.com, it replies immediately without contacting anyone else. If not, it queries a chain of authoritative name servers, starting from the root, to the .com registry, to Google's own name servers. This entire process typically completes in under 20 milliseconds, completely invisible to you. The Resolver then sends the IP address back to your browser and caches the result for a set period — called the TTL or Time To Live — so future requests are even faster. DNS caching is one of the reasons the internet feels instant despite millions of requests happening every second."
     },
     {
       "index": 2,
       "teaching_intent": "The browser connects directly to the web server using the IP address and requests the page",
       "entities_used": ["browser", "web_server"],
       "caption": "Step 3: Page Delivered",
-      "narration": "Armed with the IP address, your browser connects directly to Google's server and requests the page. The server responds with HTML, CSS, and JavaScript which your browser renders into what you see."
+      "narration": "Armed with the IP address, your browser opens a TCP connection to Google's web server — this is a three-way handshake that ensures both sides are ready to communicate reliably. Over this connection it sends an HTTP GET request, a plain-text message asking for the page at that URL. The server processes the request, assembles an HTTP response containing HTML, CSS, JavaScript, and images, and streams it back. Your browser reads that response and begins rendering the page — layout, styling, and scripts all executing within milliseconds. The whole journey from Enter key to rendered page typically takes under 500 milliseconds on a good connection."
+    }
+  ],
+  "slide_frames": [
+    {
+      "type": "chapter_intro",
+      "insert_before": 0,
+      "number": "1",
+      "title": "How DNS Works",
+      "subtitle": "Translating Names Into Addresses",
+      "narration": "Before we trace each step of a web request, we need to understand the system that makes human-readable addresses possible. DNS — the Domain Name System — is the silent directory that every browser consults before loading a single byte of a webpage.",
+      "accent_color": "#a5d8ff"
+    },
+    {
+      "type": "text_slide",
+      "layout": "standard",
+      "insert_before": 2,
+      "heading": "Key DNS Facts",
+      "bullets": [
+        "DNS lookup typically completes in [[hl:under 20ms]]",
+        "Results are [[hl:cached]] for a period set by TTL",
+        "Your ISP, Google (8.8.8.8), and Cloudflare (1.1.1.1) all run resolvers",
+        "[[hl:DNS poisoning]] is an attack that injects fake IP addresses"
+      ],
+      "narration": "Before we see the browser connect to the server, let us anchor four facts about DNS that will make the next frame much clearer. Speed, caching, and security are the three pillars of how DNS operates in practice.",
+      "accent_color": "#a5d8ff"
     }
   ],
   "suggested_followups": [
@@ -219,9 +326,11 @@ Do NOT list primitives (annotation boxes, step circles, etc.) — only vocabular
   "notes": [
     "DNS translates domain names like google.com into IP addresses like 142.250.80.46",
     "Every browser request starts with a DNS lookup — DNS acts as the internet's phone book",
-    "DNS resolvers cache results so repeated visits skip the lookup entirely",
-    "The full DNS → HTTP round trip typically completes in under 100 milliseconds",
-    "Without DNS, users would need to memorise raw IP addresses to visit any website"
+    "DNS resolvers cache results using TTL (Time To Live) — repeated visits skip the full lookup",
+    "The full DNS resolution chain goes: root servers → TLD servers → authoritative name servers",
+    "DNS lookup typically completes in under 20ms; the full page load under 500ms on a fast connection",
+    "DNS poisoning is a security attack where fake IP addresses are injected into a resolver's cache",
+    "DNSSEC is a security extension that digitally signs DNS records to prevent tampering"
   ]
 }
 ```

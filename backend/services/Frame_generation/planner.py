@@ -96,6 +96,7 @@ class VocabularyPlan(BaseModel):
     shared_style: SharedStyle
     element_vocabulary: dict = {}   # entity_key → VocabEntry (or raw dict — both accepted)
     frames: list = []               # list of dicts with teaching_intent, entities_used, caption, narration
+    slide_frames: list = []         # optional list of chapter_intro / text_slide specs
     suggested_followups: List[str] = []
     notes: Union[str, List[str]] = ""
 
@@ -130,6 +131,7 @@ class GenerationPlan(BaseModel):
     shared_style: SharedStyle
     element_vocabulary: dict = {}
     frames: List[FramePlan]
+    slide_frames: list = []         # optional list of chapter_intro / text_slide specs
     suggested_followups: List[str] = []
     notes: Union[str, List[str]] = ""
 
@@ -306,6 +308,7 @@ def _vocab_plan_to_generation_plan(vocab_plan: VocabularyPlan) -> GenerationPlan
         shared_style=vocab_plan.shared_style,
         element_vocabulary=vocab_plan.element_vocabulary,
         frames=frames,
+        slide_frames=vocab_plan.slide_frames,
         suggested_followups=vocab_plan.suggested_followups,
         notes=vocab_plan.notes,
     )
