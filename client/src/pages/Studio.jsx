@@ -1,12 +1,14 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { Box, Tooltip, IconButton, Typography, Divider, useTheme } from '@mui/material'
 import NotesOutlinedIcon from '@mui/icons-material/NotesOutlined'
+import EditNoteIcon      from '@mui/icons-material/EditNote'
 
 import LoadingView         from '../components/Studio/LoadingView'
 import EmptyView           from '../components/Studio/EmptyView'
 import ConversationThread, { UserBubble } from '../components/Studio/ConversationThread'
 import PromptBar           from '../components/Studio/PromptBar'
 import LearningView        from '../components/Studio/LearningView/index'
+import UserNotesPanel      from '../components/Studio/UserNotesPanel/index'
 
 import { api } from '../services/api'
 import { useToast } from '../contexts/ToastContext'
@@ -27,6 +29,23 @@ export default function Studio({ activeConvId, onActiveConvIdChange, onConversat
     localStorage.setItem('studio-notes-enabled', String(next))
     return next
   })
+
+  // ── User notes panel ──────────────────────────────────────────────────────────
+  const [userNotesOpen, setUserNotesOpen] = useState(false)
+  const toggleUserNotes = () => setUserNotesOpen((prev) => !prev)
+
+  // Keyboard shortcut: Cmd/Ctrl+Shift+N
+  useEffect(() => {
+    const isMac = navigator.platform.toUpperCase().includes('MAC')
+    const handleKey = (e) => {
+      if ((isMac ? e.metaKey : e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'n') {
+        e.preventDefault()
+        toggleUserNotes()
+      }
+    }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [])
 
   // ── Prompt input ──────────────────────────────────────────────────────────────
   const [prompt, setPrompt]               = useState('')
@@ -365,10 +384,18 @@ export default function Studio({ activeConvId, onActiveConvIdChange, onConversat
   return (
     <Box sx={{
       height: '100%',
-      display: 'flex', flexDirection: 'column',
+      display: 'flex', flexDirection: 'row',
       overflow: 'hidden',
       bgcolor: 'background.default',
+    }}>
+
+    {/* Main column */}
+    <Box sx={{
+      flex: 1,
+      display: 'flex', flexDirection: 'column',
+      overflow: 'hidden',
       position: 'relative',
+      minWidth: 0,
     }}>
 
       {/* ── Floating controls — top right ──────────────────────────────────── */}
@@ -409,8 +436,8 @@ export default function Studio({ activeConvId, onActiveConvIdChange, onConversat
           })}
         </Box>
 
-        {/* Notes toggle */}
-        <Tooltip title={notesEnabled ? 'Notes on' : 'Notes off'}>
+        {/* AI notes toggle */}
+        <Tooltip title={notesEnabled ? 'AI Notes on' : 'AI Notes off'}>
           <IconButton
             size="small"
             onClick={toggleNotes}
@@ -434,6 +461,34 @@ export default function Studio({ activeConvId, onActiveConvIdChange, onConversat
             }}
           >
             <NotesOutlinedIcon sx={{ fontSize: 15 }} />
+          </IconButton>
+        </Tooltip>
+
+        {/* My Notes toggle */}
+        <Tooltip title={`My Notes (${navigator.platform.toUpperCase().includes('MAC') ? '⇧⌘N' : 'Ctrl+Shift+N'})`}>
+          <IconButton
+            size="small"
+            onClick={toggleUserNotes}
+            aria-pressed={userNotesOpen}
+            sx={{
+              borderRadius: '7px', p: 0.6,
+              border: `1px solid ${userNotesOpen
+                ? (isDark ? 'rgba(79,110,255,0.45)' : '#c7d2fe')
+                : (isDark ? 'rgba(255,255,255,0.12)' : '#e2e8f0')}`,
+              color: userNotesOpen
+                ? theme.palette.primary.main
+                : (isDark ? 'rgba(255,255,255,0.4)' : '#94a3b8'),
+              bgcolor: userNotesOpen
+                ? (isDark ? 'rgba(79,110,255,0.1)' : '#f0f4ff')
+                : 'transparent',
+              '&:hover': {
+                borderColor: isDark ? 'rgba(255,255,255,0.25)' : '#94a3b8',
+                color: userNotesOpen ? theme.palette.primary.main : (isDark ? '#fff' : '#374151'),
+              },
+              transition: 'all 0.15s',
+            }}
+          >
+            <EditNoteIcon sx={{ fontSize: 16 }} />
           </IconButton>
         </Tooltip>
       </Box>
@@ -522,6 +577,14 @@ export default function Studio({ activeConvId, onActiveConvIdChange, onConversat
           onModelChange={setSelectedModel}
         />
       </Box>
+
+    </Box>{/* end main column */}
+
+    {/* User notes panel — right-side slide-in */}
+    <UserNotesPanel
+      conversationId={activeConvId}
+      isOpen={userNotesOpen}
+    />
 
     </Box>
   )

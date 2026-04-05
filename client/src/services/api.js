@@ -153,6 +153,23 @@ export const api = {
     return _request(`${API_BASE}/api/conversations/${convId}/merge`, { method: 'POST' })
   },
 
+  // Returns { content, updated_at } or null on error.
+  getConversationNotes: async (convId) => {
+    try {
+      return await _request(`${API_BASE}/api/conversations/${convId}/notes`)
+    } catch {
+      return null
+    }
+  },
+
+  updateConversationNotes: async (convId, content) => {
+    return _request(`${API_BASE}/api/conversations/${convId}/notes`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content }),
+    })
+  },
+
   // ── Sessions ──────────────────────────────────────────────────────────────────
 
   // Returns the frames metadata object or null on any error.

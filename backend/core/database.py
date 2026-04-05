@@ -82,6 +82,18 @@ def init_db() -> None:
             )
         """)
 
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS conversation_notes (
+                conversation_id  TEXT NOT NULL,
+                user_id          TEXT NOT NULL,
+                content          TEXT NOT NULL DEFAULT '{}',
+                updated_at       TEXT NOT NULL,
+                PRIMARY KEY (conversation_id, user_id),
+                FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
+                FOREIGN KEY (user_id)         REFERENCES users(id)         ON DELETE CASCADE
+            )
+        """)
+
         # Safe migrations — "column already exists" errors are silently swallowed
         # (SQLite has no IF NOT EXISTS for ALTER TABLE).
         for col, typedef in [
@@ -155,6 +167,39 @@ def touch_conversation(conv_id: str) -> None:
             (now_iso(), conv_id),
         )
         conn.commit()
+
+
+# ── User notes helpers ────────────────────────────────────────────────────────
+
+def get_conversation_notes(conversation_id: str, user_id: str) -> Optional[dict]:
+    """Return the user's notes for a conversation, or None if none exist yet."""
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT content, updated_at FROM conversation_notes "
+            "WHERE conversation_id = ? AND user_id = ?",
+            (conversation_id, user_id),
+        ).fetchone()
+    if not row:
+        return None
+    return {"content": row["content"], "updated_at": row["updated_at"]}
+
+
+def upsert_conversation_notes(conversation_id: str, user_id: str, content: str) -> str:
+    """Insert or update the user's notes for a conversation. Returns the updated_at timestamp."""
+    ts = now_iso()
+    with get_db() as conn:
+        conn.execute(
+            """
+            INSERT INTO conversation_notes (conversation_id, user_id, content, updated_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(conversation_id, user_id) DO UPDATE SET
+                content    = excluded.content,
+                updated_at = excluded.updated_at
+            """,
+            (conversation_id, user_id, content, ts),
+        )
+        conn.commit()
+    return ts
 
 
 # ── Session writes ────────────────────────────────────────────────────────────

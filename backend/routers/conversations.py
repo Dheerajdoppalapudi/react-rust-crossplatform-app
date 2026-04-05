@@ -11,7 +11,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 
 from core.config import OUTPUTS_DIR
-from core.database import get_db, update_session
+from pydantic import BaseModel
+
+from core.database import get_db, update_session, get_conversation_notes, upsert_conversation_notes
 from core.db_models import User
 from core.responses import success
 from dependencies.auth import get_current_user
@@ -178,6 +180,46 @@ def get_merged_video(conversation_id: str, current_user: User = Depends(get_curr
                             filename=f"merged_{conversation_id[:8]}.mp4")
 
     raise HTTPException(status_code=404, detail="Merged video not found")
+
+
+# ── User notes ────────────────────────────────────────────────────────────────
+
+class NotesUpdateBody(BaseModel):
+    content: str  # TipTap JSONContent serialized as a string by the client
+
+
+@router.get("/api/conversations/{conversation_id}/notes")
+def get_notes(conversation_id: str, current_user: User = Depends(get_current_user)):
+    with get_db() as conn:
+        conv = conn.execute(
+            "SELECT id FROM conversations WHERE id = ? AND user_id = ?",
+            (conversation_id, current_user.id),
+        ).fetchone()
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    notes = get_conversation_notes(conversation_id, current_user.id)
+    if notes is None:
+        return success({"content": None, "updated_at": None})
+    return success(notes)
+
+
+@router.put("/api/conversations/{conversation_id}/notes")
+def update_notes(
+    conversation_id: str,
+    body: NotesUpdateBody,
+    current_user: User = Depends(get_current_user),
+):
+    with get_db() as conn:
+        conv = conn.execute(
+            "SELECT id FROM conversations WHERE id = ? AND user_id = ?",
+            (conversation_id, current_user.id),
+        ).fetchone()
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    updated_at = upsert_conversation_notes(conversation_id, current_user.id, body.content)
+    return success({"updated_at": updated_at})
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
