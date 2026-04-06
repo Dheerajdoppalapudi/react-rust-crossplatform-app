@@ -13,7 +13,11 @@ from fastapi.responses import FileResponse, JSONResponse
 from core.config import OUTPUTS_DIR
 from pydantic import BaseModel
 
-from core.database import get_db, update_session, get_conversation_notes, upsert_conversation_notes
+from core.database import (
+    get_db, update_session,
+    get_conversation_notes, upsert_conversation_notes,
+    rename_conversation, toggle_star_conversation, soft_delete_conversation,
+)
 from core.db_models import User
 from core.responses import success
 from dependencies.auth import get_current_user
@@ -34,11 +38,12 @@ def list_conversations(current_user: User = Depends(get_current_user)):
     with get_db() as conn:
         rows = conn.execute("""
             SELECT c.id, c.title, c.created_at, c.updated_at,
+                   COALESCE(c.starred, 0) AS starred,
                    COUNT(s.id) AS turn_count,
                    MIN(s.intent_type) AS intent_type
             FROM conversations c
             LEFT JOIN sessions s ON s.conversation_id = c.id AND s.status = 'done'
-            WHERE c.user_id = ?
+            WHERE c.user_id = ? AND c.deleted_at IS NULL
             GROUP BY c.id
             ORDER BY c.updated_at DESC
         """, (current_user.id,)).fetchall()
@@ -180,6 +185,43 @@ def get_merged_video(conversation_id: str, current_user: User = Depends(get_curr
                             filename=f"merged_{conversation_id[:8]}.mp4")
 
     raise HTTPException(status_code=404, detail="Merged video not found")
+
+
+# ── Rename / Star / Delete ────────────────────────────────────────────────────
+
+class RenameBody(BaseModel):
+    title: str
+
+
+@router.patch("/api/conversations/{conversation_id}")
+def rename_conv(
+    conversation_id: str,
+    body: RenameBody,
+    current_user: User = Depends(get_current_user),
+):
+    title = body.title.strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="Title cannot be empty")
+    updated = rename_conversation(conversation_id, current_user.id, title)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return success({"title": title})
+
+
+@router.post("/api/conversations/{conversation_id}/star")
+def star_conv(conversation_id: str, current_user: User = Depends(get_current_user)):
+    new_starred = toggle_star_conversation(conversation_id, current_user.id)
+    if new_starred is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return success({"starred": new_starred})
+
+
+@router.delete("/api/conversations/{conversation_id}")
+def delete_conv(conversation_id: str, current_user: User = Depends(get_current_user)):
+    deleted = soft_delete_conversation(conversation_id, current_user.id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return success({"deleted": True})
 
 
 # ── User notes ────────────────────────────────────────────────────────────────

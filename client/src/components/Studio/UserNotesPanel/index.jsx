@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Box, Typography, IconButton, Skeleton, Tooltip, Divider, useTheme, useMediaQuery, Drawer } from '@mui/material'
-import CloseIcon       from '@mui/icons-material/Close'
-import EditNoteIcon    from '@mui/icons-material/EditNote'
+import {
+  Box, Typography, Skeleton, Divider,
+  useTheme, useMediaQuery, Drawer,
+} from '@mui/material'
+import EditNoteIcon from '@mui/icons-material/EditNote'
 
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit    from '@tiptap/starter-kit'
@@ -15,6 +17,7 @@ import TableHeader   from '@tiptap/extension-table-header'
 import TableCell     from '@tiptap/extension-table-cell'
 import Placeholder   from '@tiptap/extension-placeholder'
 
+import ErrorBoundary     from '../../error/ErrorBoundary'
 import { api }           from '../../../services/api'
 import { useToast }      from '../../../contexts/ToastContext'
 import { getEditorSx }   from './editorStyles'
@@ -22,14 +25,14 @@ import BubbleToolbar     from './BubbleToolbar'
 import SlashMenu         from './SlashMenu'
 import SaveIndicator     from './SaveIndicator'
 
-const PANEL_WIDTH   = 440
-const DEBOUNCE_MS   = 1500
+const PANEL_WIDTH = 440
+const DEBOUNCE_MS = 1500
 const SAVED_RESET   = 3000  // ms before 'saved' reverts to 'idle'
 
 // ─── UserNotesPanel ───────────────────────────────────────────────────────────
 export default function UserNotesPanel({ conversationId, isOpen }) {
-  const theme     = useTheme()
-  const isMobile  = useMediaQuery(theme.breakpoints.down('sm'))
+  const theme    = useTheme()
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
   const toast     = useToast()
 
   const [saveStatus,  setSaveStatus]  = useState('idle')    // 'idle'|'unsaved'|'saving'|'saved'|'error'
@@ -151,22 +154,15 @@ export default function UserNotesPanel({ conversationId, isOpen }) {
 
       {/* Header */}
       <Box sx={{
-        display: 'flex', alignItems: 'center',
-        px: 2, py: 1.25,
+        display: 'flex', alignItems: 'center', gap: 0.75,
+        px: 2, py: 1,
         borderBottom: `1px solid ${theme.palette.divider}`,
-        flexShrink: 0,
+        flexShrink: 0, minHeight: 48,
       }}>
-        <EditNoteIcon sx={{ fontSize: 17, color: 'text.secondary', mr: 0.75 }} />
-        <Typography sx={{ fontSize: 13, fontWeight: 700, color: 'text.primary', flex: 1 }}>
+        <EditNoteIcon sx={{ fontSize: 16, color: 'text.disabled' }} />
+        <Typography sx={{ fontSize: 13, fontWeight: 700, color: 'text.primary' }}>
           My Notes
         </Typography>
-        {isMobile && (
-          <Tooltip title="Close">
-            <IconButton size="small" onClick={() => {}} sx={{ p: 0.4 }}>
-              <CloseIcon sx={{ fontSize: 16 }} />
-            </IconButton>
-          </Tooltip>
-        )}
       </Box>
 
       {/* Empty / no conversation state */}
@@ -194,13 +190,13 @@ export default function UserNotesPanel({ conversationId, isOpen }) {
 
       {/* Editor */}
       {conversationId && !isLoading && editor && (
-        <>
-          <BubbleToolbar editor={editor} />
-          <SlashMenu editor={editor} />
+        <ErrorBoundary level="component">
+          {isOpen && <BubbleToolbar editor={editor} />}
+          {isOpen && <SlashMenu editor={editor} />}
           <Box sx={getEditorSx(theme)}>
             <EditorContent editor={editor} />
           </Box>
-        </>
+        </ErrorBoundary>
       )}
 
       {/* Footer */}
@@ -225,11 +221,13 @@ export default function UserNotesPanel({ conversationId, isOpen }) {
         anchor="bottom"
         open={isOpen}
         onClose={() => {}}
-        PaperProps={{
-          sx: {
-            height: '65vh',
-            borderRadius: '16px 16px 0 0',
-            overflow: 'hidden',
+        slotProps={{
+          paper: {
+            sx: {
+              height: '65vh',
+              borderRadius: '16px 16px 0 0',
+              overflow: 'hidden',
+            },
           },
         }}
       >

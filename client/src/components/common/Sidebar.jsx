@@ -1,7 +1,9 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import {
   Drawer, List, ListItem, ListItemButton, ListItemIcon, ListItemText,
-  Tooltip, Typography, Box, Divider, useTheme, InputBase, IconButton, Skeleton, Avatar,
+  Tooltip, Typography, Box, Divider, useTheme, InputBase, IconButton,
+  Skeleton, Avatar, Menu, MenuItem, Dialog, DialogTitle, DialogContent,
+  DialogActions, Button, TextField,
 } from '@mui/material'
 import HomeOutlinedIcon        from '@mui/icons-material/HomeOutlined'
 import SettingsOutlinedIcon    from '@mui/icons-material/SettingsOutlined'
@@ -13,6 +15,11 @@ import LightModeOutlinedIcon   from '@mui/icons-material/LightModeOutlined'
 import AutoAwesomeIcon         from '@mui/icons-material/AutoAwesome'
 import ChevronLeftIcon         from '@mui/icons-material/ChevronLeft'
 import LogoutOutlinedIcon      from '@mui/icons-material/LogoutOutlined'
+import MoreHorizIcon           from '@mui/icons-material/MoreHoriz'
+import StarOutlineIcon         from '@mui/icons-material/StarOutline'
+import StarIcon                from '@mui/icons-material/Star'
+import DriveFileRenameOutlineIcon from '@mui/icons-material/DriveFileRenameOutline'
+import DeleteOutlineIcon       from '@mui/icons-material/DeleteOutline'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { relativeTime } from '../Studio/constants'
 import { useAuth } from '../../contexts/AuthContext'
@@ -134,54 +141,138 @@ const NavItem = ({ item, open, isActive, onClick }) => {
 }
 
 // ─── Single conversation row ───────────────────────────────────────────────────
-const ConvItem = ({ conv, isActive, isLoading, onClick }) => {
+const ConvItem = ({ conv, isActive, onClick, onRename, onStar, onDelete }) => {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
   const accent = theme.palette.primary.main
+  const [hovered, setHovered]       = useState(false)
+  const [menuAnchor, setMenuAnchor] = useState(null)
+
+  const openMenu  = (e) => { e.stopPropagation(); setMenuAnchor(e.currentTarget) }
+  const closeMenu = ()  => setMenuAnchor(null)
+
+  const handleStar = (e) => {
+    e.stopPropagation()
+    closeMenu()
+    onStar(conv.id)
+  }
+  const handleRename = (e) => {
+    e.stopPropagation()
+    closeMenu()
+    onRename(conv)
+  }
+  const handleDelete = (e) => {
+    e.stopPropagation()
+    closeMenu()
+    onDelete(conv.id)
+  }
 
   return (
-    <Box
-      onClick={onClick}
-      sx={{
-        px: 1.5, py: 0.6, mx: 0.75, mb: 0.15,
-        borderRadius: '8px', cursor: 'pointer',
-        bgcolor: isActive
-          ? (isDark ? 'rgba(79,110,255,0.12)' : 'rgba(0,26,255,0.07)')
-          : 'transparent',
-        '&:hover': {
+    <>
+      <Box
+        onClick={onClick}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        sx={{
+          px: 1.5, py: 0.6, mx: 0.75, mb: 0.15,
+          borderRadius: '8px', cursor: 'pointer',
           bgcolor: isActive
-            ? (isDark ? 'rgba(79,110,255,0.15)' : 'rgba(0,26,255,0.09)')
-            : (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)'),
-        },
-        transition: 'background 0.15s',
-        display: 'flex', alignItems: 'center', gap: 1,
-      }}
-    >
-      <Box sx={{ flex: 1, minWidth: 0 }}>
-        <Typography noWrap sx={{
-          fontSize: 13, fontWeight: isActive ? 600 : 400,
-          color: isActive ? accent : theme.palette.text.primary, lineHeight: 1.4,
-        }}>
-          {conv.title || 'Untitled'}
-        </Typography>
-        <Typography sx={{ fontSize: 10.5, color: theme.palette.text.disabled, mt: 0.1 }}>
-          {relativeTime(conv.updated_at)}
-        </Typography>
-      </Box>
-      {/* Loading indicator when this conversation is being fetched */}
-      {isActive && isLoading && (
-        <Box sx={{
-          width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
-          bgcolor: accent, opacity: 0.6,
-          animation: 'pulse 1.2s ease-in-out infinite',
-          '@keyframes pulse': {
-            '0%, 100%': { opacity: 0.6 },
-            '50%': { opacity: 0.15 },
+            ? (isDark ? 'rgba(79,110,255,0.12)' : 'rgba(0,26,255,0.07)')
+            : 'transparent',
+          '&:hover': {
+            bgcolor: isActive
+              ? (isDark ? 'rgba(79,110,255,0.15)' : 'rgba(0,26,255,0.09)')
+              : (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)'),
           },
-        }} />
-      )}
-    </Box>
+          transition: 'background 0.15s',
+          display: 'flex', alignItems: 'center', gap: 1,
+        }}
+      >
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography noWrap sx={{
+            fontSize: 13, fontWeight: isActive ? 600 : 400,
+            color: isActive ? accent : theme.palette.text.primary, lineHeight: 1.4,
+          }}>
+            {conv.title || 'Untitled'}
+          </Typography>
+          <Typography sx={{ fontSize: 10.5, color: theme.palette.text.disabled, mt: 0.1 }}>
+            {relativeTime(conv.updated_at)}
+          </Typography>
+        </Box>
+
+        {/* Three-dot menu button — visible on hover */}
+        {(hovered || menuAnchor) && (
+          <IconButton
+            size="small"
+            onClick={openMenu}
+            sx={{
+              p: 0.3, flexShrink: 0,
+              color: theme.palette.text.disabled,
+              borderRadius: '5px',
+              '&:hover': {
+                bgcolor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
+                color: theme.palette.text.secondary,
+              },
+            }}
+          >
+            <MoreHorizIcon sx={{ fontSize: 15 }} />
+          </IconButton>
+        )}
+      </Box>
+
+      {/* Context menu */}
+      <Menu
+        anchorEl={menuAnchor}
+        open={Boolean(menuAnchor)}
+        onClose={closeMenu}
+        onClick={(e) => e.stopPropagation()}
+        transformOrigin={{ horizontal: 'left', vertical: 'top' }}
+        anchorOrigin={{ horizontal: 'right', vertical: 'top' }}
+        elevation={0}
+        slotProps={{
+          paper: {
+            sx: {
+              minWidth: 160,
+              bgcolor: isDark ? '#161616' : '#fafafa',
+              backgroundImage: 'none',
+              border: `1px solid ${theme.palette.divider}`,
+              boxShadow: isDark
+                ? '0 8px 24px rgba(0,0,0,0.6)'
+                : '0 8px 24px rgba(0,0,0,0.1)',
+              borderRadius: '10px',
+              py: 0.5,
+            },
+          },
+        }}
+      >
+        <MenuItem onClick={handleStar} sx={menuItemSx(isDark, false)}>
+          {!!conv.starred
+            ? <><StarIcon sx={{ fontSize: 15, color: '#f59e0b' }} /> Unstar</>
+            : <><StarOutlineIcon sx={{ fontSize: 15 }} /> Star</>
+          }
+        </MenuItem>
+        <MenuItem onClick={handleRename} sx={menuItemSx(isDark, false)}>
+          <DriveFileRenameOutlineIcon sx={{ fontSize: 15 }} /> Rename
+        </MenuItem>
+        <Divider sx={{ my: 0.4, borderColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)' }} />
+        <MenuItem onClick={handleDelete} sx={menuItemSx(isDark, true)}>
+          <DeleteOutlineIcon sx={{ fontSize: 15 }} /> Delete
+        </MenuItem>
+      </Menu>
+    </>
   )
+}
+
+function menuItemSx(isDark, danger) {
+  return {
+    fontSize: 13, gap: 1.25, px: 1.5, py: 0.75, borderRadius: '6px', mx: 0.5,
+    color: danger ? '#ef4444' : (isDark ? '#e2e8f0' : '#1e293b'),
+    '&:hover': {
+      bgcolor: danger
+        ? (isDark ? 'rgba(239,68,68,0.1)' : 'rgba(239,68,68,0.07)')
+        : (isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)'),
+    },
+  }
 }
 
 // ─── Conversation list skeleton ───────────────────────────────────────────────
@@ -198,12 +289,96 @@ function ConvSkeletons() {
   )
 }
 
+// ─── Rename dialog ────────────────────────────────────────────────────────────
+function RenameDialog({ conv, onClose, onConfirm }) {
+  const theme  = useTheme()
+  const isDark = theme.palette.mode === 'dark'
+  const [value, setValue] = useState(conv?.title ?? '')
+
+  useEffect(() => { setValue(conv?.title ?? '') }, [conv])
+
+  const submit = () => {
+    if (value.trim()) { onConfirm(conv.id, value.trim()); onClose() }
+  }
+
+  return (
+    <Dialog
+      open={Boolean(conv)}
+      onClose={onClose}
+      maxWidth="xs"
+      fullWidth
+      PaperProps={{
+        sx: {
+          bgcolor: isDark ? '#1a1a1a' : '#fff',
+          border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)'}`,
+          borderRadius: '14px',
+          boxShadow: isDark ? '0 24px 60px rgba(0,0,0,0.6)' : '0 24px 60px rgba(0,0,0,0.15)',
+        },
+      }}
+    >
+      <DialogTitle sx={{ pb: 1.5, fontWeight: 700, fontSize: 16 }}>Rename chat</DialogTitle>
+      <DialogContent sx={{ pb: 1 }}>
+        <TextField
+          autoFocus
+          fullWidth
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') submit() }}
+          variant="outlined"
+          size="small"
+          sx={{
+            '& .MuiOutlinedInput-root': {
+              borderRadius: '8px',
+              fontSize: 14,
+            },
+          }}
+        />
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
+        <Button
+          onClick={onClose}
+          variant="outlined"
+          size="small"
+          sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 500 }}
+        >
+          Cancel
+        </Button>
+        <Button
+          onClick={submit}
+          variant="contained"
+          size="small"
+          disabled={!value.trim()}
+          sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600 }}
+        >
+          Save
+        </Button>
+      </DialogActions>
+    </Dialog>
+  )
+}
+
+// ─── Section label ────────────────────────────────────────────────────────────
+function SectionLabel({ children }) {
+  return (
+    <Typography sx={{
+      fontSize: 10, fontWeight: 600, letterSpacing: '0.06em',
+      color: 'text.disabled',
+      px: 2.25, pt: 1.5, pb: 0.5, textTransform: 'uppercase',
+    }}>
+      {children}
+    </Typography>
+  )
+}
+
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
 const Sidebar = ({
   conversations = [],
   activeConvId,
   onSelectConv,
   onNewConversation,
+  onRenameConv,
+  onStarConv,
+  onDeleteConv,
   themeMode,
   onThemeToggle,
   isLoading = false,
@@ -215,9 +390,10 @@ const Sidebar = ({
   const accent   = theme.palette.primary.main
   const { user, logout } = useAuth()
 
-  const [open, setOpen]   = useState(false)
-  const [search, setSearch] = useState('')
+  const [open, setOpen]           = useState(false)
+  const [search, setSearch]       = useState('')
   const [isFetchingConv, setIsFetchingConv] = useState(false)
+  const [renamingConv, setRenamingConv]     = useState(null)  // conv object being renamed
   const searchRef = useRef(null)
 
   const isMac           = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/i.test(navigator.userAgent)
@@ -244,7 +420,6 @@ const Sidebar = ({
     return () => window.removeEventListener('keydown', handler)
   }, [isMac, onNewConversation])
 
-  // Show loading indicator briefly when switching conversations
   useEffect(() => {
     if (!activeConvId) return
     setIsFetchingConv(true)
@@ -258,9 +433,20 @@ const Sidebar = ({
     return conversations.filter((c) => (c.title || '').toLowerCase().includes(q))
   }, [conversations, search])
 
-  const grouped      = useMemo(() => groupConversations(filtered), [filtered])
+  const starred    = useMemo(() => filtered.filter((c) => c.starred), [filtered])
+  const unstarred  = useMemo(() => filtered.filter((c) => !c.starred), [filtered])
+  const grouped    = useMemo(() => groupConversations(unstarred), [unstarred])
   const resultCount  = filtered.length
   const isSearching  = search.trim().length > 0
+
+  const convItemProps = (conv) => ({
+    conv,
+    isActive: activeConvId === conv.id,
+    onClick: () => onSelectConv(conv),
+    onStar: onStarConv,
+    onRename: (c) => setRenamingConv(c),
+    onDelete: onDeleteConv,
+  })
 
   return (
     <Box sx={{ position: 'relative', flexShrink: 0 }}>
@@ -285,7 +471,7 @@ const Sidebar = ({
         }}
       >
 
-        {/* ── Header: logo + wordmark + collapse ──────────────────────────── */}
+        {/* ── Header ──────────────────────────────────────────────────────── */}
         <Box sx={{
           flexShrink: 0, display: 'flex', alignItems: 'center',
           px: 0.75, height: 52,
@@ -364,7 +550,7 @@ const Sidebar = ({
 
         <Divider sx={{ mx: 1, mt: 1, mb: 0, borderColor: theme.palette.divider }} />
 
-        {/* ── New Chat row ─────────────────────────────────────────────────── */}
+        {/* ── New Chat ─────────────────────────────────────────────────────── */}
         {open ? (
           <ListItem disablePadding sx={{ px: 0.75, py: 0.5 }}>
             <ListItemButton
@@ -403,7 +589,6 @@ const Sidebar = ({
         {/* ── Conversations section ────────────────────────────────────────── */}
         <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
 
-          {/* Expanded: search + result count */}
           {open && (
             <Box sx={{ px: 0.75, mb: 0.5, flexShrink: 0 }}>
               <Box sx={{ px: 0.75, mb: 0.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -413,7 +598,6 @@ const Sidebar = ({
                 }}>
                   Your Chats
                 </Typography>
-                {/* Result count shown while searching */}
                 {isSearching && (
                   <Typography sx={{ fontSize: 10, color: theme.palette.text.disabled }}>
                     {resultCount} result{resultCount !== 1 ? 's' : ''}
@@ -444,7 +628,6 @@ const Sidebar = ({
                     },
                   }}
                 />
-                {/* Shortcut hint — hidden while typing */}
                 {!search && (
                   <Typography sx={{ fontSize: 10, color: theme.palette.text.disabled, opacity: 0.55, flexShrink: 0, letterSpacing: '0.02em' }}>
                     {searchShortcut}
@@ -454,7 +637,6 @@ const Sidebar = ({
             </Box>
           )}
 
-          {/* Collapsed: search icon */}
           {!open && (
             <List disablePadding>
               <CollapsedBtn
@@ -466,16 +648,14 @@ const Sidebar = ({
             </List>
           )}
 
-          {/* Scrollable conversation list */}
+          {/* Scrollable list */}
           <Box sx={{
             flex: 1, overflowY: 'auto', overflowX: 'hidden', pb: 1,
             '&::-webkit-scrollbar': { width: 3 },
             '&::-webkit-scrollbar-thumb': { backgroundColor: theme.palette.divider, borderRadius: 2 },
           }}>
-            {/* Loading skeleton */}
             {open && isLoading && <ConvSkeletons />}
 
-            {/* Empty state */}
             {open && !isLoading && conversations.length === 0 && (
               <Typography sx={{
                 fontSize: 12, color: theme.palette.text.secondary,
@@ -485,7 +665,6 @@ const Sidebar = ({
               </Typography>
             )}
 
-            {/* No search results */}
             {open && !isLoading && isSearching && resultCount === 0 && (
               <Typography sx={{
                 fontSize: 12, color: theme.palette.text.secondary,
@@ -495,45 +674,42 @@ const Sidebar = ({
               </Typography>
             )}
 
+            {/* ── Starred section ─────────────────────────────────────────── */}
+            {open && !isLoading && starred.length > 0 && (
+              <Box>
+                <SectionLabel>Starred</SectionLabel>
+                {starred.map((conv) => (
+                  <ConvItem key={conv.id} {...convItemProps(conv)} />
+                ))}
+                {unstarred.length > 0 && (
+                  <Divider sx={{ mx: 1.5, my: 0.75, borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }} />
+                )}
+              </Box>
+            )}
+
+            {/* ── Time-grouped chats ──────────────────────────────────────── */}
             {open && !isLoading && grouped.map(([label, items]) => (
               <Box key={label}>
-                <Typography sx={{
-                  fontSize: 10, fontWeight: 600, letterSpacing: '0.06em',
-                  color: theme.palette.text.disabled,
-                  px: 2.25, pt: 1.5, pb: 0.5, textTransform: 'uppercase',
-                }}>
-                  {label}
-                </Typography>
+                <SectionLabel>{label}</SectionLabel>
                 {items.map((conv) => (
-                  <ConvItem
-                    key={conv.id}
-                    conv={conv}
-                    isActive={activeConvId === conv.id}
-                    isLoading={isFetchingConv}
-                    onClick={() => onSelectConv(conv)}
-                  />
+                  <ConvItem key={conv.id} {...convItemProps(conv)} />
                 ))}
               </Box>
             ))}
           </Box>
         </Box>
 
-        {/* ── Bottom: user profile + theme + settings ──────────────────────── */}
+        {/* ── Bottom: profile + theme + settings ──────────────────────────── */}
         <Box sx={{ flexShrink: 0 }}>
           <Divider sx={{ mx: 1, mb: 1, borderColor: theme.palette.divider }} />
 
-          {/* User profile */}
           {user && (
             open ? (
               <Box sx={{
                 display: 'flex', alignItems: 'center', gap: 1.25,
                 px: 1.75, py: 1, mb: 0.5,
               }}>
-                <Avatar
-                  src={user.avatar}
-                  alt={user.name}
-                  sx={{ width: 28, height: 28, flexShrink: 0 }}
-                />
+                <Avatar src={user.avatar} alt={user.name} sx={{ width: 28, height: 28, flexShrink: 0 }} />
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Typography noWrap sx={{ fontSize: 12.5, fontWeight: 600, color: 'text.primary', lineHeight: 1.3 }}>
                     {user.name}
@@ -619,6 +795,13 @@ const Sidebar = ({
         </Box>
 
       </Drawer>
+
+      {/* Rename dialog — rendered outside the Drawer so it's not clipped */}
+      <RenameDialog
+        conv={renamingConv}
+        onClose={() => setRenamingConv(null)}
+        onConfirm={onRenameConv}
+      />
     </Box>
   )
 }

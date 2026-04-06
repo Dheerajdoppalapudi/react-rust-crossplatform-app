@@ -15,7 +15,7 @@ import { useToast } from '../contexts/ToastContext'
 import { DEFAULT_MODEL, FOLLOWUP_SUGGESTIONS } from '../components/Studio/constants'
 
 // ─── Studio ────────────────────────────────────────────────────────────────────
-export default function Studio({ activeConvId, onActiveConvIdChange, onConversationsRefresh }) {
+export default function Studio({ activeConvId, activeConvTitle, activeConvStarred, onActiveConvIdChange, onConversationsRefresh, onRenameConv, onStarConv, onDeleteConv }) {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
   const toast  = useToast()

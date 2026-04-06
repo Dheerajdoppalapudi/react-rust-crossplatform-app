@@ -116,6 +116,8 @@ def init_db() -> None:
         for col, typedef in [
             ("merged_video_path", "TEXT"),
             ("user_id",           "TEXT"),
+            ("starred",           "INTEGER DEFAULT 0"),
+            ("deleted_at",        "TEXT"),
         ]:
             try:
                 conn.execute(f"ALTER TABLE conversations ADD COLUMN {col} {typedef}")
@@ -167,6 +169,48 @@ def touch_conversation(conv_id: str) -> None:
             (now_iso(), conv_id),
         )
         conn.commit()
+
+
+# ── Conversation mutation helpers ─────────────────────────────────────────────
+
+def rename_conversation(conv_id: str, user_id: str, new_title: str) -> bool:
+    """Rename a conversation. Returns True if a row was updated."""
+    with get_db() as conn:
+        cur = conn.execute(
+            "UPDATE conversations SET title = ?, updated_at = ? WHERE id = ? AND user_id = ? AND deleted_at IS NULL",
+            (new_title, now_iso(), conv_id, user_id),
+        )
+        conn.commit()
+    return cur.rowcount > 0
+
+
+def toggle_star_conversation(conv_id: str, user_id: str) -> Optional[bool]:
+    """Toggle starred state. Returns the new starred bool, or None if not found."""
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT starred FROM conversations WHERE id = ? AND user_id = ? AND deleted_at IS NULL",
+            (conv_id, user_id),
+        ).fetchone()
+        if not row:
+            return None
+        new_val = 0 if row["starred"] else 1
+        conn.execute(
+            "UPDATE conversations SET starred = ? WHERE id = ? AND user_id = ?",
+            (new_val, conv_id, user_id),
+        )
+        conn.commit()
+    return bool(new_val)
+
+
+def soft_delete_conversation(conv_id: str, user_id: str) -> bool:
+    """Soft-delete a conversation. Returns True if a row was updated."""
+    with get_db() as conn:
+        cur = conn.execute(
+            "UPDATE conversations SET deleted_at = ? WHERE id = ? AND user_id = ? AND deleted_at IS NULL",
+            (now_iso(), conv_id, user_id),
+        )
+        conn.commit()
+    return cur.rowcount > 0
 
 
 # ── User notes helpers ────────────────────────────────────────────────────────

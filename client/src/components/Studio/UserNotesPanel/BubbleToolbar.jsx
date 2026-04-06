@@ -49,9 +49,10 @@ export default function BubbleToolbar({ editor }) {
   })
 
   return (
+    <div>
     <BubbleMenu
       editor={editor}
-      tippyOptions={{ duration: 120, placement: 'top' }}
+      tippyOptions={{ duration: 120, placement: 'top', appendTo: 'parent' }}
     >
       <Box sx={{
         display: 'flex', alignItems: 'center', gap: 0.15,
@@ -108,5 +109,6 @@ export default function BubbleToolbar({ editor }) {
         </Tooltip>
       </Box>
     </BubbleMenu>
+    </div>
   )
 }

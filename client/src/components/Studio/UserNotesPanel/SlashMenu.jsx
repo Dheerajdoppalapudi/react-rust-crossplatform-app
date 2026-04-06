@@ -132,9 +132,10 @@ export default function SlashMenu({ editor }) {
     : '0 12px 40px rgba(0,0,0,0.12), 0 4px 12px rgba(0,0,0,0.06)'
 
   return (
+    <div>
     <FloatingMenu
       editor={editor}
-      tippyOptions={{ duration: 100, placement: 'bottom-start', offset: [0, 4] }}
+      tippyOptions={{ duration: 100, placement: 'bottom-start', offset: [0, 4], appendTo: 'parent' }}
       shouldShow={({ state }) => {
         const { $from } = state.selection
         const text = $from.parent.textContent
@@ -205,5 +206,6 @@ export default function SlashMenu({ editor }) {
         })}
       </Box>
     </FloatingMenu>
+    </div>
   )
 }

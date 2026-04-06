@@ -153,6 +153,22 @@ export const api = {
     return _request(`${API_BASE}/api/conversations/${convId}/merge`, { method: 'POST' })
   },
 
+  renameConversation: async (convId, title) => {
+    return _request(`${API_BASE}/api/conversations/${convId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title }),
+    })
+  },
+
+  starConversation: async (convId) => {
+    return _request(`${API_BASE}/api/conversations/${convId}/star`, { method: 'POST' })
+  },
+
+  deleteConversation: async (convId) => {
+    return _request(`${API_BASE}/api/conversations/${convId}`, { method: 'DELETE' })
+  },
+
   // Returns { content, updated_at } or null on error.
   getConversationNotes: async (convId) => {
     try {

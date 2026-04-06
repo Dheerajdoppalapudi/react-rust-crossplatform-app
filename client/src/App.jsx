@@ -101,6 +101,29 @@ function AppInner() {
     navigate('/studio')
   }, [navigate])
 
+  const handleRenameConv = useCallback(async (convId, newTitle) => {
+    await api.renameConversation(convId, newTitle)
+    setConversations((prev) =>
+      prev.map((c) => c.id === convId ? { ...c, title: newTitle } : c)
+    )
+  }, [])
+
+  const handleStarConv = useCallback(async (convId) => {
+    const result = await api.starConversation(convId)
+    setConversations((prev) =>
+      prev.map((c) => c.id === convId ? { ...c, starred: result.starred ? 1 : 0 } : c)
+    )
+  }, [])
+
+  const handleDeleteConv = useCallback(async (convId) => {
+    await api.deleteConversation(convId)
+    setConversations((prev) => prev.filter((c) => c.id !== convId))
+    if (activeConvId === convId) {
+      setActiveConvId(null)
+      navigate('/studio')
+    }
+  }, [activeConvId, navigate])
+
   return (
     <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden', bgcolor: 'background.default' }}>
 
@@ -111,6 +134,9 @@ function AppInner() {
           activeConvId={activeConvId}
           onSelectConv={handleSelectConv}
           onNewConversation={handleNewConversation}
+          onRenameConv={handleRenameConv}
+          onStarConv={handleStarConv}
+          onDeleteConv={handleDeleteConv}
           themeMode={themeMode}
           onThemeToggle={onThemeToggle}
           isLoading={isLoadingConversations}
@@ -147,8 +173,13 @@ function AppInner() {
                 <ProtectedRoute>
                   <Studio
                     activeConvId={activeConvId}
+                    activeConvTitle={conversations.find((c) => c.id === activeConvId)?.title ?? null}
+                    activeConvStarred={!!(conversations.find((c) => c.id === activeConvId)?.starred)}
                     onActiveConvIdChange={setActiveConvId}
                     onConversationsRefresh={fetchConversations}
+                    onRenameConv={handleRenameConv}
+                    onStarConv={handleStarConv}
+                    onDeleteConv={handleDeleteConv}
                   />
                 </ProtectedRoute>
               } />
