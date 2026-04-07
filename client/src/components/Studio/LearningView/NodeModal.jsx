@@ -8,7 +8,7 @@ import SendIcon                   from '@mui/icons-material/Send'
 import NotesOutlinedIcon          from '@mui/icons-material/NotesOutlined'
 import QuestionAnswerOutlinedIcon from '@mui/icons-material/QuestionAnswerOutlined'
 import MovieCreationOutlinedIcon  from '@mui/icons-material/MovieCreationOutlined'
-import { api } from '../../../services/api'
+import { useMediaUrl } from '../../../hooks/useMediaUrl'
 import VideoPanel from '../VideoPanel'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -21,6 +21,7 @@ function parseNotes(raw) {
 
 // ── Frame thumbnail strip ──────────────────────────────────────────────────────
 function FrameStrip({ sessionId, captions, activeFrame, onSelect, isDark, theme }) {
+  const { getFrameUrl } = useMediaUrl(sessionId)
   return (
     <Box sx={{ mt: 2 }}>
       <Typography sx={{
@@ -51,7 +52,7 @@ function FrameStrip({ sessionId, captions, activeFrame, onSelect, isDark, theme 
             }}
           >
             <img
-              src={api.getFrameUrl(sessionId, fi)}
+              src={getFrameUrl(fi) || undefined}
               alt={`slide ${fi + 1}`}
               draggable={false}
               style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}

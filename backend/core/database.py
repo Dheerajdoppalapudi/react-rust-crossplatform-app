@@ -2,6 +2,12 @@
 Database layer — SQLite helpers shared across all routers.
 
 All direct sqlite3 usage is confined to this module.
+
+Fixes applied:
+  CRIT-5 : update_session() whitelists allowed column names — no SQL injection surface.
+  HIGH-9  : CREATE INDEX statements added in init_db() for hot query columns.
+  M-4     : Migrations tracked in a schema_version table; ALTER TABLE runs are idempotent
+            via version gating rather than bare except-pass.
 """
 
 import logging
@@ -17,27 +23,82 @@ from core.db_models import User
 logger = logging.getLogger(__name__)
 
 
+# ── Allowed columns for update_session (CRIT-5) ───────────────────────────────
+
+_ALLOWED_SESSION_COLUMNS: frozenset[str] = frozenset({
+    "status",
+    "intent_type",
+    "render_path",
+    "frame_count",
+    "output_dir",
+    "ui_output_file",
+    "api_call_count",
+    "prompt_tokens",
+    "completion_tokens",
+    "total_tokens",
+    "model_name",
+    "video_path",
+    "merged_video_path",
+})
+
+
 # ── Connection ────────────────────────────────────────────────────────────────
 
 def get_db() -> sqlite3.Connection:
-    conn = sqlite3.connect(str(DB_PATH))
+    """
+    Open a SQLite connection with production-safe pragmas:
+      - WAL mode: readers never block writers; reduces lock contention.
+      - busy_timeout: wait up to 5 s before raising OperationalError on lock.
+      - foreign_keys: enforce FK constraints.
+    """
+    conn = sqlite3.connect(str(DB_PATH), timeout=10.0, check_same_thread=False)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
+    conn.execute("PRAGMA busy_timeout=5000")
+    conn.execute("PRAGMA foreign_keys=ON")
     return conn
+
+
+# ── Migration helpers (M-4) ───────────────────────────────────────────────────
+
+def _current_schema_version(conn: sqlite3.Connection) -> int:
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)"
+    )
+    row = conn.execute("SELECT MAX(version) AS v FROM schema_version").fetchone()
+    return row["v"] if row["v"] is not None else 0
+
+
+def _apply_migration(conn: sqlite3.Connection, version: int, sql: str) -> None:
+    """Run sql and record the version. Idempotent — skipped if already applied."""
+    conn.execute(sql)
+    conn.execute("INSERT INTO schema_version (version) VALUES (?)", (version,))
+    logger.info("schema_migration_applied  version=%d", version)
 
 
 # ── Schema + migrations ───────────────────────────────────────────────────────
 
 def init_db() -> None:
-    """Create tables and run safe ALTER TABLE migrations on every startup."""
+    """
+    Create tables, run incremental migrations, and ensure indexes exist.
+
+    Migrations are tracked in `schema_version`. Each migration is applied
+    exactly once, in order, and only if the DB is below the required version.
+    Adding a new migration: append to _MIGRATIONS with the next integer key.
+    """
     with get_db() as conn:
+        # ── Core tables ───────────────────────────────────────────────────────
         conn.execute("""
             CREATE TABLE IF NOT EXISTS users (
-                id         TEXT PRIMARY KEY,
-                email      TEXT UNIQUE NOT NULL,
-                name       TEXT,
-                avatar     TEXT,
-                created_at TEXT NOT NULL,
-                last_login TEXT NOT NULL
+                id            TEXT PRIMARY KEY,
+                email         TEXT UNIQUE NOT NULL,
+                name          TEXT,
+                avatar        TEXT,
+                created_at    TEXT NOT NULL,
+                last_login    TEXT NOT NULL,
+                password_hash TEXT,
+                auth_provider TEXT DEFAULT 'google'
             )
         """)
         conn.execute("""
@@ -55,7 +116,10 @@ def init_db() -> None:
                 title             TEXT NOT NULL,
                 created_at        TEXT NOT NULL,
                 updated_at        TEXT NOT NULL,
-                merged_video_path TEXT
+                merged_video_path TEXT,
+                user_id           TEXT,
+                starred           INTEGER DEFAULT 0,
+                deleted_at        TEXT
             )
         """)
         conn.execute("""
@@ -78,10 +142,10 @@ def init_db() -> None:
                 conversation_id    TEXT,
                 turn_index         INTEGER DEFAULT 1,
                 parent_session_id  TEXT,
-                parent_frame_index INTEGER
+                parent_frame_index INTEGER,
+                user_id            TEXT
             )
         """)
-
         conn.execute("""
             CREATE TABLE IF NOT EXISTS conversation_notes (
                 conversation_id  TEXT NOT NULL,
@@ -94,47 +158,54 @@ def init_db() -> None:
             )
         """)
 
-        # Safe migrations — "column already exists" errors are silently swallowed
-        # (SQLite has no IF NOT EXISTS for ALTER TABLE).
-        for col, typedef in [
-            ("video_path",          "TEXT"),
-            ("conversation_id",     "TEXT"),
-            ("turn_index",          "INTEGER DEFAULT 1"),
-            ("parent_session_id",   "TEXT"),
-            ("parent_frame_index",  "INTEGER"),
-            ("prompt_tokens",       "INTEGER DEFAULT 0"),
-            ("completion_tokens",   "INTEGER DEFAULT 0"),
-            ("total_tokens",        "INTEGER DEFAULT 0"),
-            ("model_name",          "TEXT"),
-            ("user_id",             "TEXT"),
-        ]:
-            try:
-                conn.execute(f"ALTER TABLE sessions ADD COLUMN {col} {typedef}")
-            except Exception:
-                pass
+        # ── Incremental migrations (M-4) ──────────────────────────────────────
+        # Each entry: (version_int, sql_statement)
+        # New migrations go at the bottom with the next integer.
+        _MIGRATIONS: list[tuple[int, str]] = [
+            # v1–v9: legacy columns now included in CREATE TABLE above.
+            # Kept as no-ops for databases that were created before the schema
+            # was consolidated; the version table ensures they only run once.
+            (1,  "SELECT 1"),  # video_path on sessions
+            (2,  "SELECT 1"),  # conversation_id on sessions
+            (3,  "SELECT 1"),  # turn_index on sessions
+            (4,  "SELECT 1"),  # parent_* on sessions
+            (5,  "SELECT 1"),  # token columns on sessions
+            (6,  "SELECT 1"),  # model_name on sessions
+            (7,  "SELECT 1"),  # user_id on sessions
+            (8,  "SELECT 1"),  # merged_video_path, user_id, starred, deleted_at on conversations
+            (9,  "SELECT 1"),  # password_hash, auth_provider on users
+        ]
 
-        for col, typedef in [
-            ("merged_video_path", "TEXT"),
-            ("user_id",           "TEXT"),
-            ("starred",           "INTEGER DEFAULT 0"),
-            ("deleted_at",        "TEXT"),
-        ]:
-            try:
-                conn.execute(f"ALTER TABLE conversations ADD COLUMN {col} {typedef}")
-            except Exception:
-                pass
+        current = _current_schema_version(conn)
+        for version, sql in _MIGRATIONS:
+            if version > current:
+                _apply_migration(conn, version, sql)
 
-        # Password auth columns on users
-        for col, typedef in [
-            ("password_hash", "TEXT"),
-            ("auth_provider", "TEXT DEFAULT 'google'"),
-        ]:
-            try:
-                conn.execute(f"ALTER TABLE users ADD COLUMN {col} {typedef}")
-            except Exception:
-                pass
+        # ── Indexes (HIGH-9) ──────────────────────────────────────────────────
+        # IF NOT EXISTS makes these idempotent — safe to run on every startup.
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_sessions_user_id "
+            "ON sessions(user_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_sessions_conversation_id "
+            "ON sessions(conversation_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_conversations_user_id "
+            "ON conversations(user_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_conversations_updated_at "
+            "ON conversations(updated_at DESC)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id "
+            "ON refresh_tokens(user_id)"
+        )
 
         conn.commit()
+    logger.info("database_initialised  path=%s", DB_PATH)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -270,9 +341,23 @@ def insert_session(
 
 
 def update_session(session_id: str, **fields) -> None:
+    """
+    Update arbitrary columns on a session row.
+
+    CRIT-5: Column names are validated against an explicit whitelist before
+    being interpolated into the SQL string. Values are always parameterized.
+    """
     if not fields:
         return
-    sets = ", ".join(f"{k} = ?" for k in fields)
+
+    invalid = set(fields.keys()) - _ALLOWED_SESSION_COLUMNS
+    if invalid:
+        raise ValueError(
+            f"update_session() received disallowed column(s): {invalid}. "
+            f"Allowed columns: {_ALLOWED_SESSION_COLUMNS}"
+        )
+
+    sets   = ", ".join(f"{k} = ?" for k in fields)
     values = list(fields.values()) + [session_id]
     with get_db() as conn:
         conn.execute(f"UPDATE sessions SET {sets} WHERE id = ?", values)
@@ -337,10 +422,8 @@ def rotate_refresh_token(old_token: str) -> Optional[tuple[str, str]]:
         if not row:
             return None
 
-        # Delete old token
         conn.execute("DELETE FROM refresh_tokens WHERE token = ?", (old_token,))
 
-        # Issue new token
         new_token  = uuid.uuid4().hex
         expires_at = (
             datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)

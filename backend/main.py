@@ -8,6 +8,11 @@ Responsibilities of this file (and only this file):
   4. Include routers
   5. Register startup/shutdown hooks
   6. Run uvicorn when executed directly
+
+Fixes applied:
+  M-3 : slowapi rate limiting on the generation endpoint (10 req/min per IP).
+  M-10: Request ID middleware — every request gets a unique X-Request-ID header
+        that propagates through logs for distributed tracing.
 """
 
 from core.logging_config import setup_logging
@@ -15,6 +20,7 @@ from core.logging_config import setup_logging
 setup_logging()
 
 import logging
+import uuid
 
 from contextlib import asynccontextmanager
 
@@ -22,13 +28,21 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 from core.config import CORS_ORIGINS
-from core.database import init_db
+from core.database import init_db, get_db
 from core.responses import success
 from routers import auth, conversations, generation, sessions, upload, video
 
 logger = logging.getLogger(__name__)
+
+
+# ── Rate limiter (M-3) ────────────────────────────────────────────────────────
+
+limiter = Limiter(key_func=get_remote_address)
 
 
 # ── Lifespan ──────────────────────────────────────────────────────────────────
@@ -36,13 +50,18 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
-    logger.info("Zenith API started")
+    logger.info("zenith_api_started")
     yield
+    logger.info("zenith_api_stopped")
 
 
 # ── App ───────────────────────────────────────────────────────────────────────
 
 app = FastAPI(title="Zenith API", lifespan=lifespan)
+
+# M-3: Attach limiter to app state so slowapi middleware can read it.
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,
@@ -51,6 +70,25 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ── Request ID middleware (M-10) ──────────────────────────────────────────────
+
+@app.middleware("http")
+async def request_id_middleware(request: Request, call_next):
+    """
+    M-10: Attach a unique request ID to every request.
+    If the caller supplies X-Request-ID we echo it back; otherwise we generate one.
+    The ID is added to the response header so it can be correlated in client logs.
+    """
+    request_id = request.headers.get("X-Request-ID") or uuid.uuid4().hex
+    # Store on request state so route handlers / dependencies can read it.
+    request.state.request_id = request_id
+
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = request_id
+    return response
+
 
 # ── Routers ───────────────────────────────────────────────────────────────────
 
@@ -87,13 +125,38 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    logger.error("Unhandled exception  path=%s", request.url.path, exc_info=True)
+    logger.error(
+        "unhandled_exception  path=%s  request_id=%s",
+        request.url.path,
+        getattr(request.state, "request_id", "unknown"),
+        exc_info=True,
+    )
     return JSONResponse({"status": "error", "error": "Internal server error"}, status_code=500)
 
 
+# ── Health check ──────────────────────────────────────────────────────────────
+
 @app.get("/api/health")
 def health_check():
-    return success({"status": "ok"})
+    """
+    Liveness + readiness probe.
+    Verifies the database is reachable — returns 503 if not.
+    """
+    try:
+        with get_db() as conn:
+            conn.execute("SELECT 1").fetchone()
+        db_ok = True
+    except Exception:
+        logger.error("health_check_db_failed", exc_info=True)
+        db_ok = False
+
+    if not db_ok:
+        return JSONResponse(
+            {"status": "error", "error": "Database unavailable"},
+            status_code=503,
+        )
+
+    return success({"status": "ok", "db": "ok"})
 
 
 # ── Dev server ────────────────────────────────────────────────────────────────

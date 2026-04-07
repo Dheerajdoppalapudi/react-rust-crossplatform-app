@@ -2,14 +2,23 @@ import { useState } from 'react'
 import { Box, Typography, useTheme } from '@mui/material'
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline'
-import { api } from '../../services/api'
+import { useMediaUrl } from '../../hooks/useMediaUrl'
+
+// CRIT-2: FrameThumbnail receives getFrameUrl from useMediaUrl (called in the parent
+// FrameStrip or SessionView) so all thumbnails in a session share one token fetch.
+// If sessionId + frameIndex are known here, we call useMediaUrl locally.
 
 export default function FrameThumbnail({ sessionId, frameIndex, caption, type, isActive, onClick }) {
   const theme      = useTheme()
   const isDark     = theme.palette.mode === 'dark'
   const [imgError, setImgError] = useState(false)
 
-  const showPlaceholder = type !== 'image' || imgError
+  // CRIT-2: use media token URL instead of embedding the main access JWT.
+  const { getFrameUrl } = useMediaUrl(sessionId)
+
+  const frameUrl = getFrameUrl(frameIndex)
+  // Show placeholder when: not an image type, token not loaded yet (empty URL), or img load failed.
+  const showPlaceholder = type !== 'image' || !frameUrl || imgError
 
   return (
     <Box
@@ -30,7 +39,7 @@ export default function FrameThumbnail({ sessionId, frameIndex, caption, type, i
     >
       {!showPlaceholder ? (
         <img
-          src={api.getFrameUrl(sessionId, frameIndex)}
+          src={frameUrl}
           alt={caption}
           onError={() => setImgError(true)}
           style={{ width: '100%', height: '100%', objectFit: 'cover' }}

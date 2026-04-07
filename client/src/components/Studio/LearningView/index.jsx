@@ -7,6 +7,9 @@ import NodeModal from './NodeModal'
 import MergedVideoModal   from './MergedVideoModal'
 import MergeLoadingModal  from './MergeLoadingModal'
 import { api } from '../../../services/api'
+import { getConversationMediaToken } from '../../../services/mediaToken'
+
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 /**
  * LearningView — full-screen focus canvas (position: fixed overlay).
@@ -21,10 +24,11 @@ export default function LearningView({ turns, conversationId, onExit, onAskFromL
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
 
-  const [selectedNode, setSelectedNode] = useState(null)
-  const [merging, setMerging]           = useState(false)
-  const [mergeResult, setMergeResult]   = useState(null)
-  const [mergeError, setMergeError]     = useState(null)
+  const [selectedNode,  setSelectedNode]  = useState(null)
+  const [merging,       setMerging]       = useState(false)
+  const [mergeResult,   setMergeResult]   = useState(null)
+  const [mergeError,    setMergeError]    = useState(null)
+  const [mergedVideoUrl, setMergedVideoUrl] = useState(null)
 
   const handleNodeClick = (node) => {
     // Always use the freshest turn data from the turns array
@@ -43,6 +47,9 @@ export default function LearningView({ turns, conversationId, onExit, onAskFromL
     try {
       const result = await api.mergeConversation(conversationId)
       setMergeResult(result)
+      // Fetch a short-lived media token so the merged video URL never carries the main JWT.
+      const token = await getConversationMediaToken(conversationId)
+      setMergedVideoUrl(`${API_BASE}/api/conversations/${conversationId}/merged_video?token=${token}`)
     } catch (e) {
       setMergeError(e.message || 'Merge failed')
     } finally {
@@ -157,7 +164,7 @@ export default function LearningView({ turns, conversationId, onExit, onAskFromL
         <MergedVideoModal
           open={true}
           onClose={() => setMergeResult(null)}
-          mergedVideoUrl={api.getMergedVideoUrl(conversationId)}
+          mergedVideoUrl={mergedVideoUrl}
           sessions={mergeResult.sessions}
         />
       )}

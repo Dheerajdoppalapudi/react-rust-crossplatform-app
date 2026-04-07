@@ -1,15 +1,23 @@
 """
 Generation router — handles the main image/frame generation pipeline.
+
+Fixes applied:
+  CRIT-6: Exception detail is never forwarded to the client; only a generic
+          message is returned. Full traceback is logged server-side.
+  HIGH-2: activity_log.json writes are run in asyncio.to_thread() so they
+          don't block the event loop during the I/O-bound persist step.
 """
 
+import asyncio
 import json
 import logging
 import time
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Form, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from core.db_models import User
 from core.responses import success
@@ -35,9 +43,21 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+# M-3: Rate limiter — 10 generation requests per minute per IP.
+# Protects against LLM cost abuse without affecting normal usage patterns.
+_limiter = Limiter(key_func=get_remote_address)
+
+
+def _write_activity_log(output_dir: str, lifecycle_log: list) -> None:
+    """Synchronous helper — called via asyncio.to_thread() (HIGH-2)."""
+    with open(f"{output_dir}/activity_log.json", "w") as f:
+        json.dump(lifecycle_log, f, indent=2)
+
 
 @router.post("/api/image_generation")
+@_limiter.limit("10/minute")
 async def image_generation(
+    request:             Request,
     message:             str  = Form(""),
     conversation_id:     Optional[str] = Form(None),
     pause_session_id:    Optional[str] = Form(None),
@@ -128,8 +148,8 @@ async def image_generation(
             session_id, result_payload.get("render_path"), duration_ms, api_call_count,
         )
 
-        with open(f"{output_dir}/activity_log.json", "w") as f:
-            json.dump(lifecycle_log, f, indent=2)
+        # HIGH-2: write to disk in thread pool — don't block the event loop
+        await asyncio.to_thread(_write_activity_log, output_dir, lifecycle_log)
 
         update_session(
             session_id,
@@ -153,16 +173,21 @@ async def image_generation(
         return success(result_payload)
 
     except Exception as exc:
-        logger.error("Request failed  session=%s  error=%s", session_id, exc, exc_info=True)
+        # CRIT-6: Log full details server-side; never forward exception text to client.
+        logger.error(
+            "generation_failed  session=%s  error=%s",
+            session_id, exc, exc_info=True,
+        )
         _log({"event": "error", "error": str(exc)})
-        with open(f"{output_dir}/activity_log.json", "w") as f:
-            json.dump(lifecycle_log, f, indent=2)
+        # HIGH-2: persist error log in thread pool as well
+        await asyncio.to_thread(_write_activity_log, output_dir, lifecycle_log)
         update_session(session_id, status="error")
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(
+            status_code=500,
+            detail="Generation failed. Please try again.",
+        )
 
     finally:
         request_log.reset(log_token)
         token_usage.reset(usage_token)
         request_llm_service.reset(svc_token)
-
-

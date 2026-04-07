@@ -38,6 +38,7 @@ class ConversationSummary(BaseModel):
     title:       str
     created_at:  str
     updated_at:  str
+    starred:     bool          = False
     turn_count:  int
     intent_type: Optional[str] = None
 

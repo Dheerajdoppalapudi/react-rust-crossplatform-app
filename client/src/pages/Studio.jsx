@@ -72,6 +72,23 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
   // Track which convId we've already loaded to avoid duplicate loads
   const loadedConvIdRef = useRef(null)
 
+  // CRIT-8: Monotonically-increasing ID stamped at the start of each handleGenerate call.
+  // Before applying any async result we check the current ID still matches, preventing
+  // stale mutations after the user navigates to a different conversation mid-generation.
+  const generationIdRef = useRef(0)
+
+  // CRIT-7: AbortController for the active imageGeneration HTTP request.
+  // Cancelled when the user navigates away or starts a new generation.
+  const generationAbortRef = useRef(null)
+
+  // CRIT-7: AbortControllers for active video SSE streams, keyed by tempId.
+  // Cancelled on conversation change and on unmount.
+  const videoAbortControllersRef = useRef(new Map())
+
+  // CRIT-7: AbortController for the active loadConversationById request set.
+  // Cancelled when a new conversation is selected before loading completes.
+  const loadAbortRef = useRef(null)
+
   // ── Helpers ───────────────────────────────────────────────────────────────────
 
   const scrollToTop = useCallback(() => {
@@ -89,6 +106,11 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
   }, [])
 
   const runVideoGenerationForTurn = useCallback(async (tempId, sessionId, onDone) => {
+    // CRIT-7: Create an AbortController so this stream can be cancelled on
+    // conversation change or component unmount.
+    const controller = new AbortController()
+    videoAbortControllersRef.current.set(tempId, controller)
+
     try {
       await api.generateVideoStream(sessionId, (event) => {
         if (event.type === 'done') {
@@ -96,10 +118,14 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
         } else if (event.type === 'error') {
           setTurnVideoPhase(tempId, sessionId, 'error')
         }
-      })
-    } catch {
-      setTurnVideoPhase(tempId, sessionId, 'error')
+      }, controller.signal)
+    } catch (err) {
+      // AbortError = intentional cancel (conv switch / unmount), not an error to surface.
+      if (err?.name !== 'AbortError') {
+        setTurnVideoPhase(tempId, sessionId, 'error')
+      }
     } finally {
+      videoAbortControllersRef.current.delete(tempId)
       onDone?.()
     }
   }, [setTurnVideoPhase])
@@ -130,8 +156,21 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
     setTurns([])
     scrollToTop()
 
+    // CRIT-7: Cancel any previous in-progress load (HTTP requests + state guards).
+    loadAbortRef.current?.abort()
+    const loadController = new AbortController()
+    loadAbortRef.current = loadController
+    const { signal: loadSignal } = loadController
+
+    // Cancel any in-progress video streams before loading a new conversation.
+    for (const controller of videoAbortControllersRef.current.values()) {
+      controller.abort()
+    }
+    videoAbortControllersRef.current.clear()
+
     try {
-      const data = await api.getConversation(convId)
+      const data = await api.getConversation(convId, loadSignal)
+      if (loadSignal.aborted) return
       if (!data) {
         toast.error('Could not load this conversation. It may have been deleted.')
         return
@@ -153,9 +192,13 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
 
       setTurns(loadedTurns)
 
-      loadedTurns.forEach(async (turn) => {
-        try {
-          const raw = await api.getFramesMeta(turn.id)
+      // HIGH-8: use Promise.allSettled so all frame meta fetches run concurrently
+      // and individual failures don't short-circuit the rest.
+      // CRIT-7: pass loadSignal so these requests are aborted on conv switch.
+      await Promise.allSettled(
+        loadedTurns.map(async (turn) => {
+          const raw = await api.getFramesMeta(turn.id, loadSignal)
+          if (loadSignal.aborted) return
           if (raw) {
             const framesData = {
               render_path:         raw.render_path,
@@ -166,14 +209,22 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
             }
             setTurns((prev) => prev.map((t) => t.id === turn.id ? { ...t, framesData } : t))
           }
-        } catch { /* frame meta is non-critical */ }
+        })
+      )
 
-        if (turn.videoPhase === 'generating') {
+      if (loadSignal.aborted) return
+
+      // Kick off video generation for any turns still in the generating state.
+      for (const turn of loadedTurns) {
+        if (!loadSignal.aborted && turn.videoPhase === 'generating') {
           runVideoGenerationForTurn(turn.tempId, turn.id)
         }
-      })
-    } catch {
-      toast.error('Failed to load the conversation. Please try again.')
+      }
+    } catch (err) {
+      // AbortError = intentional cancel from conv switch — not a user-facing error.
+      if (err?.name !== 'AbortError' && !loadSignal.aborted) {
+        toast.error('Failed to load the conversation. Please try again.')
+      }
     }
   }, [runVideoGenerationForTurn, scrollToTop, toast])
 
@@ -183,10 +234,29 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
   const loadConversationByIdRef = useRef(loadConversationById)
   loadConversationByIdRef.current = loadConversationById
 
+  // CRIT-7: Cancel all in-flight requests when unmounting.
+  useEffect(() => {
+    return () => {
+      generationAbortRef.current?.abort()
+      loadAbortRef.current?.abort()
+      for (const controller of videoAbortControllersRef.current.values()) {
+        controller.abort()
+      }
+    }
+  }, [])
+
   // ── React to activeConvId prop changes ────────────────────────────────────────
   useEffect(() => {
     // Always clear stale pause context when switching conversations
     setPauseContext(null)
+
+    // CRIT-7: Abort in-flight generation and conversation load on conv switch.
+    generationAbortRef.current?.abort()
+    loadAbortRef.current?.abort()
+    for (const controller of videoAbortControllersRef.current.values()) {
+      controller.abort()
+    }
+    videoAbortControllersRef.current.clear()
 
     if (activeConvId && activeConvId !== loadedConvIdRef.current) {
       loadedConvIdRef.current = activeConvId
@@ -206,6 +276,17 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
 
     const submittedPrompt = prompt.trim()
     setPrompt('')
+
+    // CRIT-8: Stamp a unique generation ID so we can detect if the user has
+    // navigated away before this async operation completes. Any state mutation
+    // that runs after an await must check this ID still matches.
+    const thisGenId = ++generationIdRef.current
+    const isStale   = () => generationIdRef.current !== thisGenId
+
+    // CRIT-7: Cancel any previous in-flight generation, then create a new controller.
+    generationAbortRef.current?.abort()
+    const genController = new AbortController()
+    generationAbortRef.current = genController
 
     const tempId      = `temp_${Date.now()}`
     const isFirstTurn = !activeConvId
@@ -247,7 +328,12 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
       const data = await api.imageGeneration(
         submittedPrompt, activeConvId, capturedPauseContext,
         notesEnabled, selectedModel.provider, selectedModel.model,
+        genController.signal,
       )
+
+      // CRIT-8: If the user navigated away while we were awaiting the response,
+      // discard the result entirely — do not mutate state for a stale generation.
+      if (isStale()) return
 
       const framesData = {
         render_path:         data.render_path,

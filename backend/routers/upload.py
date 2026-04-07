@@ -1,15 +1,22 @@
 """
 Upload router — file uploads and multimodal chat.
+
+Fixes applied:
+  CRIT-4: Both endpoints now require authentication via Depends(get_current_user).
+          Uploaded files are scoped to a user-specific subdirectory so users
+          cannot enumerate or access each other's uploads.
 """
 
 import logging
 import os
 import uuid
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
 from core.config import UPLOAD_DIR
+from core.db_models import User
 from core.responses import success
+from dependencies.auth import get_current_user
 from schemas.sessions import UploadResponse, ChatWithFilesResponse
 
 logger = logging.getLogger(__name__)
@@ -19,9 +26,22 @@ router = APIRouter()
 _MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50 MB per file
 
 
+def _user_upload_dir(user_id: str):
+    """
+    CRIT-4: Scope uploads to a per-user directory.
+    Prevents users from guessing each other's file names and reading them.
+    """
+    d = UPLOAD_DIR / user_id
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
 @router.post("/api/upload")
-async def upload_files(files: list[UploadFile] = File(...)):
-    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+async def upload_files(
+    files: list[UploadFile] = File(...),
+    current_user: User = Depends(get_current_user),
+):
+    upload_dir = _user_upload_dir(current_user.id)
     saved = []
     for file in files:
         content = await file.read()
@@ -32,8 +52,12 @@ async def upload_files(files: list[UploadFile] = File(...)):
             )
         ext      = os.path.splitext(file.filename or "")[1]
         filename = f"{uuid.uuid4().hex}{ext}"
-        filepath = UPLOAD_DIR / filename
+        filepath = upload_dir / filename
         filepath.write_bytes(content)
+        logger.info(
+            "file_uploaded  user=%s  filename=%r  size=%d",
+            current_user.id, file.filename, len(content),
+        )
         saved.append({
             "original_name": file.filename,
             "saved_as":      filename,
@@ -47,8 +71,9 @@ async def upload_files(files: list[UploadFile] = File(...)):
 async def chat_with_files(
     message: str = Form(""),
     files: list[UploadFile] = File(default=[]),
+    current_user: User = Depends(get_current_user),
 ):
-    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    upload_dir = _user_upload_dir(current_user.id)
     saved = []
     for file in files:
         content = await file.read()
@@ -59,7 +84,11 @@ async def chat_with_files(
             )
         ext      = os.path.splitext(file.filename or "")[1]
         filename = f"{uuid.uuid4().hex}{ext}"
-        (UPLOAD_DIR / filename).write_bytes(content)
+        (upload_dir / filename).write_bytes(content)
+        logger.info(
+            "file_uploaded  user=%s  filename=%r  size=%d",
+            current_user.id, file.filename, len(content),
+        )
         saved.append({
             "original_name": file.filename,
             "saved_as":      filename,

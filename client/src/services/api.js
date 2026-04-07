@@ -22,23 +22,64 @@ const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 import { getAccessToken, getRefreshCallback, getLogoutCallback } from './authBridge'
 export { setAuthCallbacks } from './authBridge'
 
+// CRIT-7 / HIGH-3: Default timeout for short-lived JSON API requests (30 seconds).
+// Pass timeout: null to disable (for long-running requests like imageGeneration).
+// Pass timeout: N to override with a custom millisecond value.
+const _DEFAULT_TIMEOUT_MS = 30_000
+
+/**
+ * Merge a caller-supplied AbortSignal with an optional timeout signal.
+ * Returns { signal, cleanup } — call cleanup() in a finally block.
+ */
+function _buildSignal(callerSignal, timeoutMs) {
+  if (!timeoutMs) {
+    // No timeout — pass caller signal through as-is.
+    return { signal: callerSignal ?? null, cleanup: () => {} }
+  }
+
+  const controller = new AbortController()
+  const timeoutId  = setTimeout(() => controller.abort(), timeoutMs)
+  callerSignal?.addEventListener('abort', () => controller.abort(), { once: true })
+
+  return {
+    signal:  controller.signal,
+    cleanup: () => clearTimeout(timeoutId),
+  }
+}
+
 async function _request(url, options = {}) {
+  // Pull out non-fetch options before spreading into fetch.
+  const { timeout = _DEFAULT_TIMEOUT_MS, signal: callerSignal, ...fetchOptions } = options
+
   const token = getAccessToken()
 
   const headers = {
-    ...(options.headers || {}),
+    ...(fetchOptions.headers || {}),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   }
+
+  // CRIT-7: Build a combined signal from caller abort + our timeout.
+  const { signal, cleanup } = _buildSignal(callerSignal, timeout)
 
   let res
   try {
     res = await fetch(url, {
-      ...options,
+      ...fetchOptions,
       headers,
       credentials: 'include',   // send refresh cookie on /auth/refresh calls
+      signal,
     })
   } catch (networkErr) {
+    if (networkErr.name === 'AbortError') {
+      // Distinguish timeout (our controller) from caller-initiated cancel.
+      const isTimeout = timeout && !callerSignal?.aborted
+      throw new Error(isTimeout
+        ? 'Request timed out — please try again.'
+        : 'Request cancelled.')
+    }
     throw new Error('Network error — check your connection and try again.')
+  } finally {
+    cleanup()
   }
 
   // On 401 — attempt silent token refresh then retry once
@@ -46,18 +87,23 @@ async function _request(url, options = {}) {
   if (res.status === 401 && _refreshCallback) {
     const newToken = await _refreshCallback()
     if (newToken) {
-      // Retry with the new token
+      // Retry with the new token — fresh timeout + same caller signal.
+      const { signal: retrySignal, cleanup: retryCleanup } = _buildSignal(callerSignal, timeout)
       try {
         res = await fetch(url, {
-          ...options,
+          ...fetchOptions,
           headers: {
-            ...(options.headers || {}),
+            ...(fetchOptions.headers || {}),
             Authorization: `Bearer ${newToken}`,
           },
           credentials: 'include',
+          signal: retrySignal,
         })
-      } catch {
+      } catch (retryErr) {
+        if (retryErr.name === 'AbortError') throw new Error('Request timed out — please try again.')
         throw new Error('Network error — check your connection and try again.')
+      } finally {
+        retryCleanup()
       }
     } else {
       // Refresh failed — force logout
@@ -99,7 +145,9 @@ export const api = {
 
   // ── Generation ───────────────────────────────────────────────────────────────
 
-  imageGeneration: async (message, conversationId = null, pauseContext = null, notesEnabled = false, provider = 'claude', model = null) => {
+  // signal: optional AbortSignal — pass controller.signal to cancel on navigation.
+  // timeout: null — generation can run for 60-120+ seconds; no client-side timeout.
+  imageGeneration: async (message, conversationId = null, pauseContext = null, notesEnabled = false, provider = 'claude', model = null, signal = null) => {
     const formData = new FormData()
     formData.append('message', message)
     formData.append('notes_enabled', String(notesEnabled))
@@ -115,7 +163,11 @@ export const api = {
         formData.append('parent_frame_index', String(pauseContext.frameIndex))
       }
     }
-    return _request(`${API_BASE}/api/image_generation`, { method: 'POST', body: formData })
+    return _request(`${API_BASE}/api/image_generation`, {
+      method: 'POST', body: formData,
+      timeout: null,  // no client timeout — server controls generation duration
+      signal,
+    })
   },
 
   chatWithFiles: async (message, files = []) => {
@@ -132,10 +184,12 @@ export const api = {
   },
 
   // Returns the conversation object or null if not found / deleted.
-  getConversation: async (convId) => {
+  // signal: optional AbortSignal to cancel the request (e.g. on conversation switch).
+  getConversation: async (convId, signal = null) => {
     try {
-      return await _request(`${API_BASE}/api/conversations/${convId}`)
-    } catch {
+      return await _request(`${API_BASE}/api/conversations/${convId}`, { signal })
+    } catch (err) {
+      if (err?.name === 'AbortError') throw err   // re-throw so caller can detect cancellation
       return null
     }
   },
@@ -189,10 +243,12 @@ export const api = {
   // ── Sessions ──────────────────────────────────────────────────────────────────
 
   // Returns the frames metadata object or null on any error.
-  getFramesMeta: async (sessionId) => {
+  // signal: optional AbortSignal to cancel (e.g. when loading a different conversation).
+  getFramesMeta: async (sessionId, signal = null) => {
     try {
-      return await _request(`${API_BASE}/api/sessions/${sessionId}/frames-meta`)
-    } catch {
+      return await _request(`${API_BASE}/api/sessions/${sessionId}/frames-meta`, { signal })
+    } catch (err) {
+      if (err?.name === 'AbortError') return null   // cancelled — caller checks loadSignal.aborted
       return null
     }
   },
@@ -208,12 +264,15 @@ export const api = {
   //   { type: "done",         session_id: "...", video_path: "...", ... }
   //   { type: "error",        message: "..." }
 
-  generateVideoStream: (sessionId, onEvent) => {
+  // CRIT-7: generateVideoStream returns an AbortController so the caller can
+  // cancel the stream on component unmount. Pass controller.signal to abort.
+  generateVideoStream: (sessionId, onEvent, signal) => {
     const token = getAccessToken()
     return fetch(`${API_BASE}/api/generate_video/${sessionId}?use_openai_tts=true`, {
       method: 'POST',
       credentials: 'include',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
+      signal,
     })
       .then(async (res) => {
         if (!res.ok) {
@@ -231,26 +290,51 @@ export const api = {
         const decoder = new TextDecoder()
         let buffer    = ''
 
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
+        try {
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
 
-          buffer += decoder.decode(value, { stream: true })
-          const lines = buffer.split('\n')
-          buffer = lines.pop() ?? ''
+            buffer += decoder.decode(value, { stream: true })
+            const lines = buffer.split('\n')
+            buffer = lines.pop() ?? ''
 
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              try { onEvent(JSON.parse(line.slice(6))) } catch {}
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                try { onEvent(JSON.parse(line.slice(6))) } catch {}
+              }
             }
           }
+        } catch (err) {
+          // AbortError means the caller cancelled — not an error to surface.
+          if (err.name !== 'AbortError') {
+            onEvent({ type: 'error', message: 'Stream interrupted. Please try again.' })
+          }
+        } finally {
+          reader.releaseLock()
+        }
+      })
+      .catch((err) => {
+        if (err.name !== 'AbortError') {
+          onEvent({ type: 'error', message: 'Connection failed. Please try again.' })
         }
       })
   },
 
-  // ── URL builders (synchronous — return strings, not Promises) ─────────────────
+  // ── Media token endpoints (CRIT-2) ────────────────────────────────────────────
+  //
+  // Fetches a short-lived, session-scoped media token so that <video src> and
+  // <img src> elements can authenticate without embedding the main access JWT
+  // in a URL. Tokens expire in 5 minutes; use useMediaUrl() hook in components
+  // to handle caching and auto-refresh automatically.
 
-  getVideoUrl:       (sessionId)             => { const t = getAccessToken(); return `${API_BASE}/api/sessions/${sessionId}/video${t ? `?token=${t}` : ''}` },
-  getFrameUrl:       (sessionId, frameIndex) => { const t = getAccessToken(); return `${API_BASE}/api/sessions/${sessionId}/frame/${frameIndex}${t ? `?token=${t}` : ''}` },
-  getMergedVideoUrl: (convId)               => `${API_BASE}/api/conversations/${convId}/merged_video`,
+  getSessionMediaToken: (sessionId) => {
+    return _request(`${API_BASE}/api/sessions/${sessionId}/media-token`, { method: 'POST' })
+      .then((data) => data.media_token)
+  },
+
+  getConversationMediaToken: (conversationId) => {
+    return _request(`${API_BASE}/api/conversations/${conversationId}/media-token`, { method: 'POST' })
+      .then((data) => data.media_token)
+  },
 }

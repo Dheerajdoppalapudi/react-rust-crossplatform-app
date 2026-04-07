@@ -3,6 +3,9 @@ Centralised application configuration.
 
 All os.getenv() calls and hard-coded paths live here.
 Every other module imports from this file — nothing reads os.environ directly.
+
+HIGH-10: Required secrets are validated at import time. The process will refuse
+to start if JWT_SECRET_KEY is missing, rather than failing silently later.
 """
 
 import os
@@ -21,8 +24,8 @@ CORS_ORIGINS: list[str] = [
 ]
 
 # ── Storage paths ─────────────────────────────────────────────────────────────
-DB_PATH: Path    = BASE_DIR / "database.sqlite"
-UPLOAD_DIR: Path = BASE_DIR / "uploads"
+DB_PATH: Path     = BASE_DIR / "database.sqlite"
+UPLOAD_DIR: Path  = BASE_DIR / "uploads"
 OUTPUTS_DIR: Path = BASE_DIR / "outputs"
 
 # ── LLM models ────────────────────────────────────────────────────────────────
@@ -40,10 +43,22 @@ TTS_WORDS_PER_SECOND: float = 2.3
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
 GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "")
-JWT_SECRET_KEY:   str = os.getenv("JWT_SECRET_KEY", "af56052647ec69ba5e14f01aba0d234d8f308e3afffce788cb97311ef9aea741")
+
+# HIGH-10: Fail fast if JWT_SECRET_KEY is missing — no silent default.
+JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "")
+if not JWT_SECRET_KEY:
+    raise RuntimeError(
+        "JWT_SECRET_KEY environment variable is not set. "
+        "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\""
+    )
+
 JWT_ALGORITHM:    str = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
-REFRESH_TOKEN_EXPIRE_DAYS:   int = 30
+ACCESS_TOKEN_EXPIRE_MINUTES:  int = 15
+REFRESH_TOKEN_EXPIRE_DAYS:    int = 30
+# Short-lived tokens for media endpoints (video / frame images).
+# Scoped to a session — even if intercepted, they expire in 5 minutes.
+MEDIA_TOKEN_EXPIRE_MINUTES: int = 5
+
 # COOKIE_SECURE=True forces HTTPS-only cookies — set ENV=production on the server
 COOKIE_SECURE:   bool = os.getenv("ENV", "development") == "production"
 COOKIE_SAMESITE: str  = "lax"

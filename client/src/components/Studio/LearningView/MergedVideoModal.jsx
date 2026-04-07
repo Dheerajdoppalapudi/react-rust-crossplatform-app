@@ -3,7 +3,9 @@ import { Dialog, Box, Typography, IconButton, Divider, useTheme, LinearProgress 
 import CloseIcon    from '@mui/icons-material/Close'
 import MergeTypeIcon from '@mui/icons-material/MergeType'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
-import { api } from '../../../services/api'
+import { getSessionMediaToken } from '../../../services/mediaToken'
+
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 function fmtTime(s) {
   if (!s || isNaN(s)) return '0:00'
@@ -32,28 +34,35 @@ export default function MergedVideoModal({ open, onClose, mergedVideoUrl, sessio
     setCurrentTime(0)
     setActiveIndex(0)
 
-    let results = new Array(sessions.length).fill(null)
-    let loaded  = 0
+    let results  = new Array(sessions.length).fill(null)
+    let loaded   = 0
+    let cancelled = false
 
-    sessions.forEach((s, i) => {
-      const v = document.createElement('video')
-      v.src     = api.getVideoUrl(s.id)
-      v.preload = 'metadata'
-      v.onloadedmetadata = () => {
-        results[i] = v.duration || 0
-        loaded++
-        if (loaded === sessions.length) {
-          setDurations([...results])
-        }
-      }
-      v.onerror = () => {
-        results[i] = 0
-        loaded++
-        if (loaded === sessions.length) {
-          setDurations([...results])
-        }
+    const finish = (i, dur) => {
+      results[i] = dur
+      loaded++
+      if (!cancelled && loaded === sessions.length) setDurations([...results])
+    }
+
+    sessions.forEach(async (s, i) => {
+      try {
+        const token = await getSessionMediaToken(s.id)
+        if (cancelled) return
+        const url = token
+          ? `${API_BASE}/api/sessions/${s.id}/video?token=${token}`
+          : ''
+        if (!url) { finish(i, 0); return }
+        const v   = document.createElement('video')
+        v.preload = 'metadata'
+        v.onloadedmetadata = () => { if (!cancelled) finish(i, v.duration || 0) }
+        v.onerror          = () => { if (!cancelled) finish(i, 0) }
+        v.src = url
+      } catch {
+        finish(i, 0)
       }
     })
+
+    return () => { cancelled = true }
   }, [sessions])
 
   // Compute cumulative start times  e.g. [0, 42, 90, ...]

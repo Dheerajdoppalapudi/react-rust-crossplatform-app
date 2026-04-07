@@ -6,7 +6,16 @@ import App from './App.jsx'
 import ErrorBoundary from './components/error/ErrorBoundary.jsx'
 import './index.css'
 
-const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || ''
+// M-8: Fail fast if VITE_GOOGLE_CLIENT_ID is missing — a blank string causes
+// @react-oauth/google to silently fail and the user sees no Google button.
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID
+if (!GOOGLE_CLIENT_ID) {
+  throw new Error(
+    'VITE_GOOGLE_CLIENT_ID is not set. ' +
+    'Add it to client/.env (dev) or GitHub secrets (CI). ' +
+    'Obtain it from Google Cloud Console → Credentials → OAuth 2.0 Client IDs.'
+  )
+}
 
 // Theme is managed inside App.jsx so it can be toggled at runtime.
 createRoot(document.getElementById('root')).render(

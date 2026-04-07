@@ -3,7 +3,7 @@ import { Handle, Position } from 'reactflow'
 import { Box, Typography, Tooltip, useTheme } from '@mui/material'
 import MovieOutlinedIcon    from '@mui/icons-material/MovieOutlined'
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline'
-import { api } from '../../../services/api'
+import { useMediaUrl } from '../../../hooks/useMediaUrl'
 import { NODE_W, NODE_H } from './useFlowData'
 
 const THUMB_H = Math.round(NODE_W * 9 / 16)  // 146
@@ -20,16 +20,19 @@ export default function SessionNode({ data }) {
   const isReady     = turn.videoPhase === 'ready'
   const [duration, setDuration] = useState(null)
 
+  const { videoUrl, getFrameUrl } = useMediaUrl(turn.id)
+  const frameUrl = getFrameUrl(0)
+
   useEffect(() => {
-    if (!turn.id || !isReady) return
+    if (!turn.id || !isReady || !videoUrl) return
     const v = document.createElement('video')
-    v.src = api.getVideoUrl(turn.id)
+    v.src = videoUrl
     v.preload = 'metadata'
     v.onloadedmetadata = () => {
       const s = Math.round(v.duration)
       setDuration(s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`)
     }
-  }, [turn.id, isReady])
+  }, [turn.id, isReady, videoUrl])
 
   const tooltipTitle = (
     <Box>
@@ -74,9 +77,9 @@ export default function SessionNode({ data }) {
             overflow: 'hidden', position: 'relative',
           }}
         >
-          {turn.id && !imgError ? (
+          {turn.id && !imgError && frameUrl ? (
             <img
-              src={api.getFrameUrl(turn.id, 0)}
+              src={frameUrl}
               alt="thumbnail"
               onError={() => setImgError(true)}
               draggable={false}
@@ -101,7 +104,7 @@ export default function SessionNode({ data }) {
           )}
 
           {/* Hover play overlay */}
-          {thumbHover && turn.id && !imgError && (
+          {thumbHover && turn.id && !imgError && frameUrl && (
             <Box sx={{
               position: 'absolute', inset: 0,
               display: 'flex', alignItems: 'center', justifyContent: 'center',

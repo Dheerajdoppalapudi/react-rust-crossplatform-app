@@ -101,28 +101,42 @@ function AppInner() {
     navigate('/studio')
   }, [navigate])
 
+  // HIGH-5: All conversation mutation handlers now catch errors and surface them
+  // via toast so the user gets feedback instead of silent failures.
   const handleRenameConv = useCallback(async (convId, newTitle) => {
-    await api.renameConversation(convId, newTitle)
-    setConversations((prev) =>
-      prev.map((c) => c.id === convId ? { ...c, title: newTitle } : c)
-    )
-  }, [])
+    try {
+      await api.renameConversation(convId, newTitle)
+      setConversations((prev) =>
+        prev.map((c) => c.id === convId ? { ...c, title: newTitle } : c)
+      )
+    } catch {
+      toast.error('Could not rename conversation. Please try again.')
+    }
+  }, [toast])
 
   const handleStarConv = useCallback(async (convId) => {
-    const result = await api.starConversation(convId)
-    setConversations((prev) =>
-      prev.map((c) => c.id === convId ? { ...c, starred: result.starred ? 1 : 0 } : c)
-    )
-  }, [])
+    try {
+      const result = await api.starConversation(convId)
+      setConversations((prev) =>
+        prev.map((c) => c.id === convId ? { ...c, starred: result.starred ? 1 : 0 } : c)
+      )
+    } catch {
+      toast.error('Could not update conversation. Please try again.')
+    }
+  }, [toast])
 
   const handleDeleteConv = useCallback(async (convId) => {
-    await api.deleteConversation(convId)
-    setConversations((prev) => prev.filter((c) => c.id !== convId))
-    if (activeConvId === convId) {
-      setActiveConvId(null)
-      navigate('/studio')
+    try {
+      await api.deleteConversation(convId)
+      setConversations((prev) => prev.filter((c) => c.id !== convId))
+      if (activeConvId === convId) {
+        setActiveConvId(null)
+        navigate('/studio')
+      }
+    } catch {
+      toast.error('Could not delete conversation. Please try again.')
     }
-  }, [activeConvId, navigate])
+  }, [activeConvId, navigate, toast])
 
   return (
     <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden', bgcolor: 'background.default' }}>

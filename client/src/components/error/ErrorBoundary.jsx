@@ -156,7 +156,16 @@ export default class ErrorBoundary extends Component {
   }
 
   componentDidCatch(error, info) {
-    // In production this is where you'd forward to Sentry / Datadog etc.
+    // HIGH-6: Forward to Sentry in production for alerting and root-cause analysis.
+    // Install: npm install @sentry/react
+    // Configure DSN in client/.env: VITE_SENTRY_DSN=https://...
+    // Then: import * as Sentry from '@sentry/react' + Sentry.init({ dsn: ... }) in main.jsx
+    if (import.meta.env.PROD && typeof window.__SENTRY__ !== 'undefined') {
+      window.__SENTRY__.captureException(error, {
+        contexts: { react: { componentStack: info.componentStack } },
+        tags:     { errorBoundaryLevel: this.props.level ?? 'page' },
+      })
+    }
     console.error('[ErrorBoundary]', error, info.componentStack)
   }
 

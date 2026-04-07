@@ -271,14 +271,16 @@ Conversation context is built in `services/generation_service.py → build_conve
 ## Adding a new endpoint — checklist
 
 1. **Add the route** in the appropriate file under `routers/`. If it doesn't fit any existing router, create a new one and `include_router()` in `main.py`.
-2. **Add request/response schemas** in `schemas/`. Keep for documentation/IDE support (do not use `response_model=` on the decorator — it conflicts with the success envelope wrapper).
+2. **Add request/response schemas** in `schemas/`. Schemas serve as documentation and enable IDE autocomplete. Do **not** add `response_model=` to the decorator — it conflicts with the `success()` envelope. **Do** use schemas to serialize return values: `MySchema(**dict(row)).model_dump()` instead of raw `dict(row)`. For lists: `[MySchema(**dict(r)).model_dump() for r in rows]`.
 3. **Put business logic in `services/`**, not in the route handler. Route handlers should: validate input → call service → return response.
 4. **Read config from `core/config.py`** — never hardcode URLs, paths, or model names.
 5. **Use `get_db()` from `core/database.py`** for any DB access.
-6. **Use `logger = logging.getLogger(__name__)`** — never `print()`.
+6. **Use `logger = logging.getLogger(__name__)`** — never `print()`. Log structured key=value pairs: `logger.info("action  key=%s", val)`.
 7. **Use `raise HTTPException(...)`** — never return raw `JSONResponse({"error": ...})` for error cases.
 8. **Add `Depends(get_current_user)`** to any endpoint that should require login. Always filter queries by `user_id = current_user.id`.
 9. **Wrap the return value** with `success(...)` from `core/responses.py`.
+
+Use `/add-endpoint` for the full interactive checklist when adding any new route.
 
 ---
 
@@ -297,6 +299,38 @@ Conversation context is built in `services/generation_service.py → build_conve
 - **Services**: raise plain Python exceptions (`ValueError`, `RuntimeError`, etc.) — let the route handler or global handler catch them.
 - **Global handler** in `main.py` catches any unhandled `Exception` and returns `{"status":"error","error":"Internal server error"}` with a 500. Raw tracebacks never reach the client.
 - **Bare `except Exception: pass`** is intentional ONLY in `core/database.py → init_db()` for ALTER TABLE migrations. Do not copy this pattern anywhere else.
+
+---
+
+## Security invariants — never violate these
+
+### Authentication
+
+Every endpoint that reads or writes user data **must** have `Depends(get_current_user)`. Exceptions (public by design — health checks, auth endpoints) must have an inline comment explaining why no auth is required.
+
+**Known gap:** `POST /api/upload` and `POST /api/chat-with-files` currently lack this. Use `/fix-gap` GAP-1 to resolve.
+
+### File path security
+
+Never open, serve, or stream a file whose path came from a DB row or user input without first verifying it is within the expected directory. Path string prefix matching is insufficient — always use `Path.resolve()`.
+
+```python
+from pathlib import Path
+from core.config import OUTPUTS_DIR
+from fastapi import HTTPException
+
+resolved = Path(db_path).resolve()
+if not str(resolved).startswith(str(Path(OUTPUTS_DIR).resolve())):
+    raise HTTPException(status_code=403, detail="Access denied")
+```
+
+Apply this guard before any `open()`, `FileResponse()`, or `StreamingResponse()` where the path originated from the database.
+
+**Known gap:** `routers/sessions.py` and `routers/video.py` file-serving endpoints are missing this guard. Use `/fix-gap` GAP-2 to resolve.
+
+### Upload authentication
+
+All file upload endpoints must require authentication via `Depends(get_current_user)`. Uploaded files must be associated with `current_user.id` so they can be scoped per user.
 
 ---
 
@@ -334,13 +368,16 @@ Backend `.env` on EC2 must include: `JWT_SECRET_KEY`, `ENV=production`.
 
 ## Known gaps / future work
 
-| Item | Status | Notes |
+| Item | Status | Fix |
 |---|---|---|
-| CORS `allow_methods=["*"]` | Permissive | Restrict to `["GET", "POST"]` for production. |
-| `/api/chat` endpoint | Stub — echoes message back | Confirm with team: implement or delete. |
-| `Frame_generation/` folder name | PascalCase (non-standard) | Rename to `frame_generation/` when ready — touches ~15 import paths. |
-| Video generation blocking | Runs in-process | At scale, push to Celery/RQ task queue so long jobs don't block workers. |
-| Token revocation list | Not implemented | Access tokens are short-lived (15 min); acceptable. Add Redis blocklist if needed. |
+| Upload endpoints unauthenticated | Security gap — `POST /api/upload`, `POST /api/chat-with-files` have no auth | `/fix-gap` GAP-1 |
+| File path traversal in file-serving | Security gap — paths from DB not validated against `OUTPUTS_DIR` | `/fix-gap` GAP-2 |
+| Schemas imported but unused in routers | Raw `dict(row)` returned instead of serialized schemas | `/fix-gap` GAP-5 |
+| CORS `allow_methods=["*"]` | Permissive — restrict to `["GET", "POST"]` for production | Manual |
+| `/api/chat` endpoint | Stub — echoes message back | Implement or delete |
+| `Frame_generation/` folder name | PascalCase (non-standard) — rename to `frame_generation/` when ready, touches ~15 import paths | Manual |
+| Video generation blocking | Runs in-process — push to Celery/RQ at scale | Manual |
+| Token revocation list | Not implemented — access tokens are short-lived (15 min), acceptable | Manual |
 
 ---
 

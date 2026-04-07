@@ -1,7 +1,7 @@
 import { Box, Typography, keyframes, useTheme } from '@mui/material'
 import CheckCircleOutlineIcon   from '@mui/icons-material/CheckCircleOutline'
 import MovieCreationOutlinedIcon from '@mui/icons-material/MovieCreationOutlined'
-import { api } from '../../services/api'
+import { useMediaUrl } from '../../hooks/useMediaUrl'
 
 // ── Keyframes ──────────────────────────────────────────────────────────────────
 const pulse = keyframes`
@@ -68,34 +68,40 @@ function FrameSkeletonCards({ isDark }) {
 
 // ── Actual frame thumbnails (shown once frames exist) ──────────────────────────
 function ActualFrames({ sessionId, count, isDark }) {
+  const { getFrameUrl } = useMediaUrl(sessionId)
   const overlayColor = isDark ? 'rgba(255,255,255,1)' : 'rgba(0,0,0,1)'
   return (
     <Box sx={{ display: 'flex', gap: 1, mt: 1.25, mb: 0.5, flexWrap: 'wrap' }}>
-      {Array.from({ length: Math.min(count, FRAME_COUNT) }).map((_, i) => (
-        <Box
-          key={i}
-          sx={{
-            width: 72, height: 54, borderRadius: '6px', overflow: 'hidden',
-            flexShrink: 0, position: 'relative',
-            animation: `${fadeIn} 0.4s ease both`,
-            animationDelay: `${i * 0.1}s`,
-            border: `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`,
-          }}
-        >
-          <img
-            src={api.getFrameUrl(sessionId, i)}
-            alt={`frame ${i + 1}`}
-            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-          />
-          <Box sx={{
-            position: 'absolute', inset: 0,
-            backgroundColor: overlayColor,
-            animation: `${blink} 1.6s ease-in-out infinite`,
-            animationDelay: `${i * 0.2}s`,
-            borderRadius: '6px',
-          }} />
-        </Box>
-      ))}
+      {Array.from({ length: Math.min(count, FRAME_COUNT) }).map((_, i) => {
+        const src = getFrameUrl(i)
+        return (
+          <Box
+            key={i}
+            sx={{
+              width: 72, height: 54, borderRadius: '6px', overflow: 'hidden',
+              flexShrink: 0, position: 'relative',
+              animation: `${fadeIn} 0.4s ease both`,
+              animationDelay: `${i * 0.1}s`,
+              border: `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`,
+            }}
+          >
+            {src && (
+              <img
+                src={src}
+                alt={`frame ${i + 1}`}
+                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+              />
+            )}
+            <Box sx={{
+              position: 'absolute', inset: 0,
+              backgroundColor: overlayColor,
+              animation: `${blink} 1.6s ease-in-out infinite`,
+              animationDelay: `${i * 0.2}s`,
+              borderRadius: '6px',
+            }} />
+          </Box>
+        )
+      })}
     </Box>
   )
 }

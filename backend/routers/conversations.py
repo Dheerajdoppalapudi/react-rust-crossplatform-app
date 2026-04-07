@@ -1,14 +1,23 @@
 """
 Conversations router — CRUD and video merge for conversation threads.
+
+Fixes applied:
+  M-1  : List and detail endpoints now serialize through schema classes so the
+         response shape is contract-enforced and IDE-discoverable.
+  CRIT-3: merged_video_path from DB is validated against OUTPUTS_DIR before serving.
+  CRIT-6: ffmpeg stderr is logged server-side only; client receives a generic message.
 """
 
 import logging
 import os
 import subprocess
 import tempfile
+from pathlib import Path
+from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import FileResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from core.config import OUTPUTS_DIR
 from pydantic import BaseModel
@@ -20,17 +29,59 @@ from core.database import (
 )
 from core.db_models import User
 from core.responses import success
-from dependencies.auth import get_current_user
+from dependencies.auth import get_current_user, create_media_token, resolve_media_user
 from schemas.sessions import (
     ConversationSummary,
     ConversationDetail,
+    SessionTurn,
     ConversationTree,
+    TreeNode,
     MergeResponse,
 )
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+_OUTPUTS_DIR_RESOLVED = Path(OUTPUTS_DIR).resolve()
+
+# Used by media endpoints that accept ?token= without Authorization header.
+_bearer = HTTPBearer(auto_error=False)
+
+
+def _safe_video_path(raw_path: str) -> Path:
+    """
+    CRIT-3: Validate that a path from the database is inside OUTPUTS_DIR.
+    Raises HTTP 403 if the path escapes the outputs directory.
+    """
+    resolved = Path(raw_path).resolve()
+    if not str(resolved).startswith(str(_OUTPUTS_DIR_RESOLVED)):
+        logger.warning("path_traversal_blocked  raw=%r  resolved=%s", raw_path, resolved)
+        raise HTTPException(status_code=403, detail="Access denied")
+    return resolved
+
+
+@router.post("/api/conversations/{conversation_id}/media-token")
+def get_conversation_media_token(
+    conversation_id: str,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Issue a short-lived media token scoped to this conversation.
+    Used by the browser to authenticate <video src> for the merged video.
+    The token expires in MEDIA_TOKEN_EXPIRE_MINUTES (default 5 min).
+    """
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT id FROM conversations WHERE id = ? AND user_id = ?",
+            (conversation_id, current_user.id),
+        ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    # Reuse the media token mechanism, scoped to conversation_id as the "session".
+    token = create_media_token(current_user.id, conversation_id)
+    return success({"media_token": token})
 
 
 @router.get("/api/conversations")
@@ -47,7 +98,8 @@ def list_conversations(current_user: User = Depends(get_current_user)):
             GROUP BY c.id
             ORDER BY c.updated_at DESC
         """, (current_user.id,)).fetchall()
-    return success([dict(r) for r in rows])
+    # M-1: Serialize through schema — contract-enforced response shape.
+    return success([ConversationSummary(**dict(r)).model_dump() for r in rows])
 
 
 @router.get("/api/conversations/{conversation_id}")
@@ -65,7 +117,14 @@ def get_conversation(conversation_id: str, current_user: User = Depends(get_curr
             "FROM sessions WHERE conversation_id = ? ORDER BY turn_index ASC",
             (conversation_id,),
         ).fetchall()
-    return success({**dict(conv), "turns": [dict(t) for t in turns]})
+
+    # M-1: Serialize through schema.
+    detail = ConversationDetail(
+        **{k: conv[k] for k in ("id", "title", "created_at", "updated_at", "merged_video_path")
+           if k in conv.keys()},
+        turns=[SessionTurn(**dict(t)) for t in turns],
+    )
+    return success(detail.model_dump())
 
 
 @router.get("/api/conversations/{conversation_id}/tree")
@@ -85,14 +144,20 @@ def get_conversation_tree(conversation_id: str, current_user: User = Depends(get
             (conversation_id,),
         ).fetchall()
 
-    return success({
-        "conversation_id": conv["id"],
-        "title":           conv["title"],
-        "nodes": [
-            {**dict(n), "video_ready": bool(n["video_path"] and os.path.exists(n["video_path"]))}
-            for n in nodes
-        ],
-    })
+    # M-1: Serialize through TreeNode schema.
+    tree_nodes = [
+        TreeNode(
+            **dict(n),
+            video_ready=bool(n["video_path"] and os.path.exists(n["video_path"])),
+        )
+        for n in nodes
+    ]
+    tree = ConversationTree(
+        conversation_id=conv["id"],
+        title=conv["title"],
+        nodes=tree_nodes,
+    )
+    return success(tree.model_dump())
 
 
 @router.post("/api/conversations/{conversation_id}/merge")
@@ -143,9 +208,13 @@ def merge_conversation_videos(conversation_id: str, current_user: User = Depends
             detail="ffmpeg not found — please install ffmpeg and ensure it is on PATH",
         )
     except subprocess.CalledProcessError as e:
+        # CRIT-6: log stderr server-side only; never expose it to the client.
         stderr = e.stderr.decode(errors="replace") if e.stderr else str(e)
-        logger.error("ffmpeg merge failed  conversation=%s  stderr=%s", conversation_id, stderr)
-        raise HTTPException(status_code=500, detail=f"ffmpeg failed: {stderr}")
+        logger.error(
+            "ffmpeg_merge_failed  conversation=%s  stderr=%s",
+            conversation_id, stderr,
+        )
+        raise HTTPException(status_code=500, detail="Video merge failed. Please try again.")
     finally:
         if os.path.exists(concat_file):
             os.unlink(concat_file)
@@ -158,18 +227,33 @@ def merge_conversation_videos(conversation_id: str, current_user: User = Depends
         conn.commit()
 
     logger.info(
-        "Merge complete  conversation=%s  sessions=%d  output=%s",
+        "merge_complete  conversation=%s  sessions=%d  output=%s",
         conversation_id, len(video_paths), output_path,
     )
-    return success({
-        "merged_video_url": f"/api/conversations/{conversation_id}/merged_video",
-        "session_count":    len(ordered_sessions),
-        "sessions":         ordered_sessions,
-    })
+    # M-1: Serialize through MergeResponse schema.
+    merge = MergeResponse(
+        merged_video_url=f"/api/conversations/{conversation_id}/merged_video",
+        session_count=len(ordered_sessions),
+        sessions=ordered_sessions,
+    )
+    return success(merge.model_dump())
 
 
 @router.get("/api/conversations/{conversation_id}/merged_video")
-def get_merged_video(conversation_id: str, current_user: User = Depends(get_current_user)):
+def get_merged_video(
+    conversation_id: str,
+    token:           str = Query(default=""),
+    credentials:     Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
+):
+    """
+    Stream the merged conversation video.
+
+    CRIT-2: Accepts ?token=<media_token> (browser <video src>) or
+    Authorization: Bearer <jwt> (programmatic clients).
+    The conversation media token is issued by POST /api/conversations/{id}/media-token.
+    """
+    current_user = resolve_media_user(token, conversation_id, credentials)
+
     with get_db() as conn:
         row = conn.execute(
             "SELECT merged_video_path FROM conversations WHERE id = ? AND user_id = ?",
@@ -179,12 +263,20 @@ def get_merged_video(conversation_id: str, current_user: User = Depends(get_curr
     if not row:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
-    path = row["merged_video_path"]
-    if path and os.path.exists(path):
-        return FileResponse(path, media_type="video/mp4",
-                            filename=f"merged_{conversation_id[:8]}.mp4")
+    raw_path = row["merged_video_path"]
+    if not raw_path:
+        raise HTTPException(status_code=404, detail="Merged video not found")
 
-    raise HTTPException(status_code=404, detail="Merged video not found")
+    # CRIT-3: Validate path before serving.
+    safe_path = _safe_video_path(raw_path)
+    if not safe_path.exists():
+        raise HTTPException(status_code=404, detail="Merged video not found")
+
+    return FileResponse(
+        str(safe_path),
+        media_type="video/mp4",
+        filename=f"merged_{conversation_id[:8]}.mp4",
+    )
 
 
 # ── Rename / Star / Delete ────────────────────────────────────────────────────

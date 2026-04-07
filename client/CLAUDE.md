@@ -107,6 +107,28 @@ api.imageGeneration(prompt, conversationId, pauseContext, notesEnabled, provider
 
 `provider` is `'claude'` or `'openai'`; `model` is the exact model string (e.g. `'claude-sonnet-4-6'`).
 
+#### Error-handling convention — null vs throw
+
+Two patterns exist in `api.js`. Use the correct one for the situation:
+
+| Pattern | When to use | Examples |
+|---|---|---|
+| **Return `null` on failure** | Background or optional data — absence is non-fatal, caller renders gracefully without it | `getConversation`, `getConversationTree`, `getFramesMeta`, `getConversationNotes` |
+| **Throw on failure** | User-initiated actions — failure must be shown via `toast.error()` | `imageGeneration`, `mergeConversation`, `renameConversation`, `deleteConversation` |
+
+**Rule for new `api.js` functions:** default to **throwing**. Only use the null pattern when explicitly documented with a JSDoc comment on the function explaining why null is the right sentinel.
+
+```js
+/**
+ * Fetches the conversation tree for the canvas view.
+ * Returns null on failure — tree is optional; canvas renders empty if unavailable.
+ * @returns {Promise<TreeNode[]|null>}
+ */
+async getConversationTree(convId) { ... }
+```
+
+Use `/fix-gap` GAP-6 to add missing JSDoc comments to existing null-returning methods.
+
 ---
 
 ## Key patterns
@@ -150,6 +172,18 @@ Theme is built in `App.jsx` via `buildTheme(mode)` and toggled at runtime. Store
 - Paper: `#1a1a1a` / `#ffffff`
 
 All component styles use MUI `sx` props against the theme tokens — never hardcoded colours except where intentional (e.g. video player overlay `rgba(0,0,0,0.55)`).
+
+---
+
+## Known inconsistencies — fix before adding new code to these areas
+
+These are identified technical debts. Do not copy patterns from these areas to new code. Use `/fix-gap` to resolve each one.
+
+| Area | Issue | Skill |
+|---|---|---|
+| `components/product/` | Hardcoded colors (`#f4f4f4`, `#888`, etc.), no `useTheme()`, no `useToast()`. **This folder is legacy** — check if any file is imported before editing. Do not add new components here. | `/fix-gap` GAP-4 |
+| `components/error/ErrorBoundary.jsx` — `AppFallback` | Hardcoded `bgcolor:'#111'`, `color:'#f1f5f9'`, `color:'#94a3b8'`. Pending migration to theme tokens. | `/fix-gap` GAP-3 |
+| `services/api.js` — null-returning methods | `getConversation`, `getConversationTree`, `getFramesMeta`, `getConversationNotes` return null on failure but have no JSDoc explaining why. | `/fix-gap` GAP-6 |
 
 ---
 

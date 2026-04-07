@@ -1,4 +1,5 @@
-import { Box, Typography, Button, useTheme } from '@mui/material'
+import { useState } from 'react'
+import { Box, Typography, Button, CircularProgress, useTheme } from '@mui/material'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import ErrorBoundary from '../error/ErrorBoundary'
 import SessionView from './SessionView'
@@ -39,6 +40,19 @@ export function UserBubble({ prompt }) {
 function RetryBanner({ turn, onRetry }) {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
+  // M-9: Track whether a retry is in-flight so the button shows a loading state
+  // and cannot be double-clicked while the video stream is reconnecting.
+  const [isRetrying, setIsRetrying] = useState(false)
+
+  const handleRetryClick = async () => {
+    if (isRetrying) return
+    setIsRetrying(true)
+    try {
+      await onRetry(turn)
+    } finally {
+      setIsRetrying(false)
+    }
+  }
 
   return (
     <Box sx={{
@@ -52,8 +66,12 @@ function RetryBanner({ turn, onRetry }) {
       </Typography>
       <Button
         size="small"
-        startIcon={<RefreshIcon sx={{ fontSize: 14 }} />}
-        onClick={() => onRetry(turn)}
+        disabled={isRetrying}
+        startIcon={isRetrying
+          ? <CircularProgress size={12} color="inherit" />
+          : <RefreshIcon sx={{ fontSize: 14 }} />
+        }
+        onClick={handleRetryClick}
         sx={{
           textTransform: 'none', fontSize: 12.5, fontWeight: 600,
           borderRadius: '8px', flexShrink: 0,
@@ -62,7 +80,7 @@ function RetryBanner({ turn, onRetry }) {
           '&:hover': { bgcolor: isDark ? 'rgba(79,110,255,0.1)' : '#f0f4ff' },
         }}
       >
-        Retry
+        {isRetrying ? 'Retrying…' : 'Retry'}
       </Button>
     </Box>
   )

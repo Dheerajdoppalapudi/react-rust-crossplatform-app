@@ -1,8 +1,8 @@
 import { useState, useRef, useCallback } from 'react'
-import { Box, Typography, Tooltip, IconButton, Chip, useTheme } from '@mui/material'
+import { Box, Typography, Tooltip, IconButton, Chip, CircularProgress, useTheme } from '@mui/material'
 import DownloadOutlinedIcon       from '@mui/icons-material/DownloadOutlined'
 import QuestionAnswerOutlinedIcon from '@mui/icons-material/QuestionAnswerOutlined'
-import { api } from '../../services/api'
+import { useMediaUrl } from '../../hooks/useMediaUrl'
 import { useToast } from '../../contexts/ToastContext'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -23,12 +23,15 @@ function buildFilename(prompt, sessionId) {
 
 // ─── Ready state ──────────────────────────────────────────────────────────────
 function ReadyState({ sessionId, prompt, onPauseAsk }) {
-  const videoUrl = api.getVideoUrl(sessionId)
+  // CRIT-2: useMediaUrl fetches a short-lived session-scoped media token so the
+  // main access JWT never appears in a URL query string.
+  const { videoUrl, loading: tokenLoading } = useMediaUrl(sessionId)
   const videoRef = useRef(null)
   const toast    = useToast()
   const [isPaused, setIsPaused] = useState(false)
 
   const handleDownload = useCallback(() => {
+    if (!videoUrl) return
     try {
       const a    = document.createElement('a')
       a.href     = videoUrl
@@ -46,11 +49,23 @@ function ReadyState({ sessionId, prompt, onPauseAsk }) {
     onPauseAsk?.({ sessionId, currentTime: video.currentTime, duration: video.duration || 1 })
   }, [sessionId, onPauseAsk])
 
+  if (tokenLoading) {
+    return (
+      <Box sx={{
+        aspectRatio: '16/9', width: '100%',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        borderRadius: '12px', backgroundColor: '#000',
+      }}>
+        <CircularProgress size={28} sx={{ color: '#fff' }} />
+      </Box>
+    )
+  }
+
   return (
     <Box sx={{ position: 'relative', borderRadius: '12px', overflow: 'hidden', backgroundColor: '#000' }}>
       <video
         ref={videoRef}
-        src={videoUrl}
+        src={videoUrl || undefined}
         controls
         onPause={() => setIsPaused(true)}
         onPlay={() => setIsPaused(false)}
