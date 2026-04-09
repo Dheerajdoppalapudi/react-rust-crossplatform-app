@@ -15,6 +15,9 @@ backend/uploads/*
 backend/outputs/*
 backend/logs/*
 backend/.env
+autoimprov/output/
+autoimprov/outputs/
+autoimprov/history/
 !backend/uploads/.gitkeep
 
 # OS
@@ -27,3 +30,4 @@ Thumbs.db
 backend/logs/app.log
 /backend/logs
 references/
+backend/database.sqlite

@@ -49,7 +49,14 @@
       "Bash(grep -n \"return {\" routers/*.py)",
       "Bash(grep -n \"SessionSummary\\\\|SessionTurn\\\\|ConversationDetail\" routers/*.py)",
       "Bash(grep -n \"def.*current_user\" routers/*.py)",
-      "Bash(grep -n \"def.*Depends\" routers/*.py)"
+      "Bash(grep -n \"def.*Depends\" routers/*.py)",
+      "Bash(sqlite3 database.sqlite \"SELECT id, prompt, status, intent_type, render_path, output_dir, turn_index, conversation_id, created_at FROM sessions WHERE id IN \\('c95b4dfe86fd48ab8976d6eded80c456', 'cb7b07d26f1b452ab30468b1a095bc57'\\);\")",
+      "Bash(python3 -m json.tool --indent 2)",
+      "Bash(python3 -c \"import cairosvg; print\\(cairosvg.__file__\\)\")",
+      "Bash(python -c \"import cairosvg; print\\(cairosvg.__file__\\)\")",
+      "Bash(brew list:*)",
+      "Bash(gh api:*)",
+      "WebFetch(domain:github.com)"
     ]
   }
 }
