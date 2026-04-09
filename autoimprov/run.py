@@ -4,13 +4,17 @@ from pathlib import Path
 from openai import OpenAI
 
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format="%(asctime)s  %(levelname)-7s  %(message)s",
     handlers=[
         logging.StreamHandler(),
         logging.FileHandler(Path(__file__).parent / "run.log", mode="w", encoding="utf-8"),
     ],
 )
+# Suppress httpx/openai transport noise (HTTP headers, base64 bodies)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("openai").setLevel(logging.WARNING)
 log = logging.getLogger(__name__)
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
@@ -25,6 +29,9 @@ _OUTPUT_ROOT = _HERE / "output"
 
 client = OpenAI(api_key=API_KEY)
 
+# Serialize all LLM calls — prevents 429s on 30k TPM accounts
+_LLM_SEM = asyncio.Semaphore(1)
+
 
 def call_llm(prompt: str, max_tokens: int = 8192) -> str:
     response = client.chat.completions.create(
@@ -33,6 +40,12 @@ def call_llm(prompt: str, max_tokens: int = 8192) -> str:
         max_tokens=max_tokens,
     )
     return response.choices[0].message.content
+
+
+async def _call_llm_async(prompt: str, max_tokens: int = 8192) -> str:
+    """Throttled async wrapper — only 1 LLM call in flight at a time."""
+    async with _LLM_SEM:
+        return await asyncio.to_thread(call_llm, prompt, max_tokens)
 
 
 def _extract_json(text: str) -> dict:
@@ -55,7 +68,7 @@ async def run_vocab_plan() -> dict:
     template = (_PROMPTS_DIR / "planning_vocab.md").read_text(encoding="utf-8")
     prompt = template.replace("{{USER_PROMPT}}", PROMPT).replace("{{CONVERSATION_CONTEXT}}", "")
     print("[1/2] Planning...", flush=True)
-    raw = await asyncio.to_thread(call_llm, prompt, 8192)
+    raw = await _call_llm_async(prompt, 8192)
     return _extract_json(raw)
 
 
@@ -149,18 +162,18 @@ async def _generate_one_frame(frame: dict, svg_template: str, run_dir: Path) -> 
     prompt = svg_template.replace("{{DIAGRAM_DESCRIPTION}}", frame["description"])
 
     try:
-        raw = await asyncio.to_thread(call_llm, prompt)
+        raw = await _call_llm_async(prompt)
     except Exception as e:
         log.error("frame %d: LLM call failed: %s", idx, e, exc_info=True)
         return None
 
-    log.debug("frame %d: LLM response (first 300 chars): %s", idx, raw[:300])
+    log.info("frame %d: LLM response (first 300 chars): %s", idx, raw[:300])
     svg = _extract_svg(raw)
 
     if not svg.lower().startswith("<svg"):
         log.warning("frame %d: no valid SVG in response — retrying. Got: %s", idx, raw[:300])
         try:
-            raw = await asyncio.to_thread(call_llm,
+            raw = await _call_llm_async(
                 f"Your response had no valid SVG. Output ONLY raw SVG starting with <svg.\n\n{frame['description']}")
         except Exception as e:
             log.error("frame %d: retry LLM call failed: %s", idx, e, exc_info=True)
@@ -175,7 +188,7 @@ async def _generate_one_frame(frame: dict, svg_template: str, run_dir: Path) -> 
     if png is None:
         log.warning("frame %d: render error: %s — retrying", idx, err)
         try:
-            raw = await asyncio.to_thread(call_llm,
+            raw = await _call_llm_async(
                 f"Your SVG failed to render: {err}\nUse only flat fills and standard SVG primitives.\n\n{frame['description']}")
         except Exception as e:
             log.error("frame %d: retry LLM call failed: %s", idx, e, exc_info=True)
@@ -260,19 +273,19 @@ async def _generate_one_frame_tracked(frame: dict, svg_template: str, run_dir: P
     retried = False
 
     try:
-        raw = await asyncio.to_thread(call_llm, prompt)
+        raw = await _call_llm_async(prompt)
     except Exception as e:
         log.error("frame %d: LLM call failed: %s", idx, e, exc_info=True)
         return {"png": None, "retried": False, "svg": ""}
 
-    log.debug("frame %d: LLM response (first 300 chars): %s", idx, raw[:300])
+    log.info("frame %d: LLM response (first 300 chars): %s", idx, raw[:300])
     svg = _extract_svg(raw)
 
     if not svg.lower().startswith("<svg"):
         retried = True
         log.warning("frame %d: no valid SVG — retrying", idx)
         try:
-            raw = await asyncio.to_thread(call_llm,
+            raw = await _call_llm_async(
                 f"Your response had no valid SVG. Output ONLY raw SVG starting with <svg.\n\n{frame['description']}")
         except Exception as e:
             log.error("frame %d: retry LLM call failed: %s", idx, e, exc_info=True)
@@ -288,7 +301,7 @@ async def _generate_one_frame_tracked(frame: dict, svg_template: str, run_dir: P
         retried = True
         log.warning("frame %d: render error (%s) — retrying", idx, err)
         try:
-            raw = await asyncio.to_thread(call_llm,
+            raw = await _call_llm_async(
                 f"Your SVG failed to render: {err}\nUse only flat fills and standard SVG primitives.\n\n{frame['description']}")
         except Exception as e:
             log.error("frame %d: retry LLM call failed: %s", idx, e, exc_info=True)
@@ -306,7 +319,7 @@ async def run_vocab_plan_with_prompt(prompt: str) -> dict:
     template = (_PROMPTS_DIR / "planning_vocab.md").read_text(encoding="utf-8")
     p = template.replace("{{USER_PROMPT}}", prompt).replace("{{CONVERSATION_CONTEXT}}", "")
     print(f"  [1/2] Planning: {prompt[:60]}...", flush=True)
-    raw = await asyncio.to_thread(call_llm, p, 8192)
+    raw = await _call_llm_async(p, 8192)
     return _extract_json(raw)
 
 

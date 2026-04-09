@@ -7,17 +7,17 @@ Run:
 Each iteration:
   1. Snapshot both prompts → history/iter_N/
   2. Run full pipeline on 3 test prompts
-  3. Vision judge (GPT-5) scores each frame → issues + attributions
+  3. Vision judge (o4-mini) scores each frame → issues + attributions
   4. Compute final score (hard + judge)
   5. Ratchet: keep prompt only if score improved, else restore
-  6. Mutator (GPT-5) rewrites the target prompt with one targeted fix
+  6. Mutator (o3) rewrites the target prompt with targeted fixes
   7. Repeat
 
 After MAX_ITERATIONS, prompts/svg_prompt.md (and optionally planning_vocab.md)
 will have been improved by the best-scoring mutations.
 """
 
-import asyncio, base64, json, shutil
+import asyncio, base64, json, re, shutil
 from datetime import datetime
 from pathlib import Path
 from openai import OpenAI
@@ -27,10 +27,9 @@ TARGET_PROMPT  = "svg"          # "svg" or "vocab" — which prompt to optimize
 MAX_ITERATIONS = 5              # start small; increase for overnight runs
 
 GEN_MODEL      = "gpt-4.1"     # planning + SVG generation (fast, parallel)
-JUDGE_MODEL    = "o4-mini"     # vision judge — vision + reasoning, good at layout analysis
+JUDGE_MODEL    = "gpt-4o"      # vision judge — reliable structured output, follows YES/NO format
 MUTATOR_MODEL  = "o3"          # prompt rewriter — strong reasoning for prompt engineering
 
-API_KEY = "OPENAI_KEY_REMOVED"
 
 TEST_PROMPTS = [
     ("illustration", "explain how an electric mouse works using illustrations"),
@@ -174,7 +173,8 @@ ISSUES:
         print(f"    judge call failed: {e}", flush=True)
         return {"score": 0.5, "issues": [f"Judge error: {e}"], "attributions": ["rendering"]}
 
-    # Parse YES/NO answers
+    # Parse YES/NO answers — robust to o4-mini formatting:
+    #   "1. YES", "YES — explanation", "**YES**", "Yes", numbered issues, etc.
     lines = [l.strip() for l in raw.splitlines() if l.strip()]
     answers = []
     issues = []
@@ -182,25 +182,35 @@ ISSUES:
     in_issues = False
 
     for line in lines:
-        if line.upper().startswith("ISSUES:"):
+        if re.search(r'ISSUES\s*:', line, re.IGNORECASE):
             in_issues = True
             continue
         if in_issues:
-            if line.startswith("-"):
-                issue_text = line.lstrip("- ").strip()
+            # Accept "- text", "1. text", "1) text"
+            if line.startswith("-") or re.match(r'^\d+[\.\)]\s', line):
+                issue_text = re.sub(r'^\d+[\.\)]\s*', '', line).lstrip("- ").strip()
                 if "[rendering]" in issue_text.lower():
                     attributions.append("rendering")
-                    issue_text = issue_text.replace("[rendering]", "").replace("[Rendering]", "").strip()
+                    issue_text = re.sub(r'\[rendering\]', '', issue_text, flags=re.IGNORECASE).strip()
                 elif "[planning]" in issue_text.lower():
                     attributions.append("planning")
-                    issue_text = issue_text.replace("[planning]", "").replace("[Planning]", "").strip()
+                    issue_text = re.sub(r'\[planning\]', '', issue_text, flags=re.IGNORECASE).strip()
                 else:
-                    attributions.append("rendering")  # default
-                if issue_text.lower() != "none":
+                    attributions.append("rendering")
+                if issue_text.lower() not in ("none", ""):
                     issues.append(issue_text)
         else:
-            if line.upper() in ("YES", "NO"):
-                answers.append(line.upper() == "YES")
+            # Strip leading number/bullet and bold markers, then take first word
+            clean = re.sub(r'^\*{0,2}\d+[\.\)]\s*\*{0,2}', '', line).strip()
+            clean = re.sub(r'\*+', '', clean).strip()
+            first_word = clean.split()[0].upper() if clean else ""
+            if first_word in ("YES", "NO"):
+                answers.append(first_word == "YES")
+
+    # Log parse result — helps diagnose future format mismatches
+    print(f"    judge parse: {len(answers)}/6 answers, {len(issues)} issues", flush=True)
+    if len(answers) != 6:
+        print(f"    [WARN] unexpected judge response format. Raw (first 400):\n{raw[:400]}", flush=True)
 
     score = sum(answers) / 6.0 if len(answers) == 6 else 0.5
     return {"score": score, "issues": issues, "attributions": attributions}
@@ -358,7 +368,7 @@ CURRENT PROMPT:
     try:
         response = client.chat.completions.create(
             model=MUTATOR_MODEL,
-            max_tokens=16000,
+            max_completion_tokens=16000,
             messages=[{"role": "user", "content": mutator_prompt}],
         )
         return response.choices[0].message.content.strip()
@@ -394,6 +404,7 @@ def save_mutation_log(iter_n: int, target: str, issues: list[str], kept: bool):
 async def main():
     target       = TARGET_PROMPT
     best_score   = 0.0
+    best_iter    = 0        # which iteration holds the best-scoring prompt snapshot
     score_history: list[dict] = []
 
     print(f"\n{'='*60}")
@@ -407,7 +418,7 @@ async def main():
         print(f"Iteration {i}/{MAX_ITERATIONS}  |  Target: {target}  |  Best so far: {best_score:.3f}")
         print(f"{'─'*50}")
 
-        # 1. Snapshot current prompts
+        # 1. Snapshot current prompts (before mutation)
         snapshot(i)
 
         # 2. Run pipeline on all test prompts
@@ -425,14 +436,19 @@ async def main():
         for pp in score_result["per_prompt"]:
             print(f"    [{pp['intent']}] judge_avg={pp['judge_avg']:.3f}")
 
-        # 4. Ratchet
+        # 4. Ratchet — restore to best-known snapshot if no improvement
         improved = score_result["final"] > best_score
         if improved:
             print(f"  ✓ Improved: {best_score:.3f} → {score_result['final']:.3f} — keeping")
             best_score = score_result["final"]
+            best_iter  = i   # this snapshot is now the best baseline
         else:
-            print(f"  ✗ No improvement ({score_result['final']:.3f} ≤ {best_score:.3f}) — restoring")
-            restore(i)
+            if best_iter > 0:
+                print(f"  ✗ No improvement ({score_result['final']:.3f} ≤ {best_score:.3f}) — restoring to iter {best_iter}")
+                restore(best_iter)   # ← restore to the BEST snapshot, not current
+            else:
+                print(f"  ✗ No improvement — restoring current snapshot")
+                restore(i)
 
         save_mutation_log(i, target, score_result["all_issues"], improved)
 
@@ -444,7 +460,10 @@ async def main():
         # 6. Mutate for next iteration (skip on last iteration)
         if i < MAX_ITERATIONS:
             print(f"\n  Mutating {target} prompt...", flush=True)
-            new_prompt = mutate_prompt(target, score_result["all_issues"], score_result["attributions"])
+            # Cap at 10 most critical issues — prevents mutator from catastrophic rewrites
+            top_issues = score_result["all_issues"][:10]
+            top_attrs  = score_result["attributions"][:10]
+            new_prompt = mutate_prompt(target, top_issues, top_attrs)
             _PROMPT_FILES[target].write_text(new_prompt, encoding="utf-8")
             print(f"  Mutation applied ({len(new_prompt)} chars)")
 
@@ -455,7 +474,7 @@ async def main():
     print(f"History saved in: {_HISTORY_DIR}")
     print(f"\nScore progression:")
     for j, s in enumerate(score_history, 1):
-        marker = "✓" if j == 1 or s["final"] > score_history[j-2]["final"] else "✗"
+        marker = "✓" if j > 1 and s["final"] > score_history[j-2]["final"] else ("baseline" if j == 1 else " ")
         print(f"  iter {j:02d}: {s['final']:.3f}  {marker}")
     print(f"{'='*60}")
 

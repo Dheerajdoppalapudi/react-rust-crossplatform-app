@@ -18,6 +18,7 @@ backend/.env
 autoimprov/output/
 autoimprov/outputs/
 autoimprov/history/
+autoimprov/*.log
 !backend/uploads/.gitkeep
 
 # OS
