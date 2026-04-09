@@ -19,7 +19,6 @@ log = logging.getLogger(__name__)
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 PROMPT    = "explain how photosynthesis works using illustrations"
-API_KEY   = "OPENAI_KEY_REMOVED"
 MODEL     = "gpt-4.1"
 # ─────────────────────────────────────────────────────────────────────────────
 
