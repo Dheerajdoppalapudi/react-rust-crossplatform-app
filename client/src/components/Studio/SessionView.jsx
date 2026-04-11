@@ -1,13 +1,19 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { Box, Typography, Chip, useTheme } from '@mui/material'
-import QuestionAnswerOutlinedIcon from '@mui/icons-material/QuestionAnswerOutlined'
-import VideoPanel     from './VideoPanel'
-import FrameThumbnail from './FrameThumbnail'
-import NotesPanel     from './NotesPanel'
-import { getFrameType } from './constants'
+import {
+  Box, Typography, Chip, Dialog, DialogContent, IconButton, useTheme,
+} from '@mui/material'
+import CloseIcon                  from '@mui/icons-material/Close'
+import ArrowBackIosNewIcon         from '@mui/icons-material/ArrowBackIosNew'
+import ArrowForwardIosIcon         from '@mui/icons-material/ArrowForwardIos'
+import QuestionAnswerOutlinedIcon  from '@mui/icons-material/QuestionAnswerOutlined'
+import VideoPanel                  from './VideoPanel'
+import FrameThumbnail              from './FrameThumbnail'
+import NotesPanel                  from './NotesPanel'
+import { getFrameType }            from './constants'
+import { useMediaUrl }             from '../../hooks/useMediaUrl'
 
 // ─── Frame strip with keyboard navigation and scroll-fade indicators ──────────
-function FrameStrip({ sessionId, captions, images, activeFrame, onFrameChange }) {
+function FrameStrip({ sessionId, captions, images, activeFrame, onFrameChange, onExpandFrame }) {
   const theme       = useTheme()
   const isDark      = theme.palette.mode === 'dark'
   const stripRef    = useRef(null)
@@ -85,7 +91,7 @@ function FrameStrip({ sessionId, captions, images, activeFrame, onFrameChange })
             caption={caption}
             type={getFrameType(images[i])}
             isActive={activeFrame === i}
-            onClick={() => onFrameChange(i)}
+            onClick={() => { onFrameChange(i); onExpandFrame(i) }}
             aria-selected={activeFrame === i}
             role="option"
           />
@@ -104,6 +110,162 @@ function FrameStrip({ sessionId, captions, images, activeFrame, onFrameChange })
   )
 }
 
+// ─── Expanded slide dialog ────────────────────────────────────────────────────
+function SlideDialog({ open, frameIndex, captions, images, sessionId, onClose, onFrameChange, onAsk }) {
+  const theme  = useTheme()
+  const isDark = theme.palette.mode === 'dark'
+  const { getFrameUrl } = useMediaUrl(sessionId)
+  const total   = captions.length
+  const caption = captions[frameIndex] ?? ''
+  const type    = getFrameType(images[frameIndex])
+  const imgUrl  = getFrameUrl(frameIndex)
+
+  const goPrev = () => onFrameChange((f) => Math.max(f - 1, 0))
+  const goNext = () => onFrameChange((f) => Math.min(f + 1, total - 1))
+
+  // Keyboard navigation inside dialog
+  useEffect(() => {
+    if (!open) return
+    const handler = (e) => {
+      if (e.key === 'ArrowLeft')  goPrev()
+      if (e.key === 'ArrowRight') goNext()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [open, frameIndex, total]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const navBtn = (onClick, disabled, children) => (
+    <IconButton
+      onClick={onClick}
+      disabled={disabled}
+      size="small"
+      sx={{
+        color: '#fff',
+        bgcolor: 'rgba(0,0,0,0.45)',
+        backdropFilter: 'blur(4px)',
+        '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' },
+        '&.Mui-disabled': { opacity: 0.25 },
+      }}
+    >
+      {children}
+    </IconButton>
+  )
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="lg"
+      PaperProps={{
+        sx: {
+          bgcolor: isDark ? '#0d0d0d' : '#111',
+          borderRadius: '14px',
+          overflow: 'hidden',
+          width: '90vw',
+          maxWidth: 1000,
+        },
+      }}
+      slotProps={{ backdrop: { sx: { backdropFilter: 'blur(6px)', bgcolor: 'rgba(0,0,0,0.75)' } } }}
+    >
+      <DialogContent sx={{ p: 0, position: 'relative' }}>
+
+        {/* Close button */}
+        <IconButton
+          onClick={onClose}
+          size="small"
+          sx={{
+            position: 'absolute', top: 10, right: 10, zIndex: 10,
+            color: '#fff', bgcolor: 'rgba(0,0,0,0.5)',
+            backdropFilter: 'blur(4px)',
+            '&:hover': { bgcolor: 'rgba(0,0,0,0.75)' },
+          }}
+        >
+          <CloseIcon sx={{ fontSize: 16 }} />
+        </IconButton>
+
+        {/* Slide counter */}
+        <Box sx={{
+          position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)',
+          zIndex: 10, px: 1.5, py: 0.4, borderRadius: '20px',
+          bgcolor: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)',
+        }}>
+          <Typography sx={{ fontSize: 11, color: 'rgba(255,255,255,0.8)', fontWeight: 600 }}>
+            {frameIndex + 1} / {total}
+          </Typography>
+        </Box>
+
+        {/* Image area with prev/next */}
+        <Box sx={{
+          position: 'relative', bgcolor: '#000',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          {type === 'image' && imgUrl ? (
+            <img
+              src={imgUrl}
+              alt={caption}
+              style={{ width: '100%', maxHeight: '70vh', objectFit: 'contain', display: 'block' }}
+            />
+          ) : (
+            <Box sx={{
+              width: '100%', aspectRatio: '16/9',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <Typography sx={{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>
+                {caption || `Slide ${frameIndex + 1}`}
+              </Typography>
+            </Box>
+          )}
+
+          {/* Prev / Next overlays */}
+          {frameIndex > 0 && (
+            <Box sx={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }}>
+              {navBtn(goPrev, frameIndex === 0, <ArrowBackIosNewIcon sx={{ fontSize: 16 }} />)}
+            </Box>
+          )}
+          {frameIndex < total - 1 && (
+            <Box sx={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)' }}>
+              {navBtn(goNext, frameIndex === total - 1, <ArrowForwardIosIcon sx={{ fontSize: 16 }} />)}
+            </Box>
+          )}
+        </Box>
+
+        {/* Caption + ask chip */}
+        <Box sx={{
+          px: 3, py: 2,
+          display: 'flex', alignItems: 'flex-start', gap: 2,
+          borderTop: `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.08)'}`,
+        }}>
+          <Typography sx={{ flex: 1, fontSize: 13.5, color: 'rgba(255,255,255,0.85)', lineHeight: 1.6 }}>
+            <Box component="span" sx={{ fontWeight: 700, color: '#fff', mr: 0.75 }}>
+              Slide {frameIndex + 1}:
+            </Box>
+            {caption}
+          </Typography>
+          {caption && (
+            <Chip
+              icon={<QuestionAnswerOutlinedIcon sx={{ fontSize: 13 }} />}
+              label="Ask about this"
+              size="small"
+              onClick={() => { onAsk(frameIndex); onClose() }}
+              sx={{
+                flexShrink: 0, cursor: 'pointer',
+                fontSize: 11.5, fontWeight: 600, height: 26,
+                bgcolor: 'rgba(79,110,255,0.15)',
+                color: '#818cf8',
+                border: '1px solid rgba(79,110,255,0.35)',
+                '&:hover': { bgcolor: 'rgba(79,110,255,0.28)' },
+                '& .MuiChip-icon': { color: 'inherit' },
+                transition: 'all 0.15s',
+              }}
+            />
+          )}
+        </Box>
+
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 // ─── SessionView ──────────────────────────────────────────────────────────────
 /**
  * Props:
@@ -116,7 +278,8 @@ export default function SessionView({ session, videoPhase, framesData, onPauseAs
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
 
-  const [activeFrame, setActiveFrame] = useState(0)
+  const [activeFrame,   setActiveFrame]   = useState(0)
+  const [expandedFrame, setExpandedFrame] = useState(null)
 
   const captions = framesData?.captions || []
   const images   = framesData?.images   || []
@@ -142,6 +305,9 @@ export default function SessionView({ session, videoPhase, framesData, onPauseAs
         videoPhase={videoPhase}
         prompt={session.prompt}
         onPauseAsk={onPauseAsk}
+        captions={captions}
+        frameCount={captions.length}
+        onFrameSync={setActiveFrame}
       />
 
       {/* ── Frame strip ───────────────────────────────────────────────────── */}
@@ -160,6 +326,7 @@ export default function SessionView({ session, videoPhase, framesData, onPauseAs
             images={images}
             activeFrame={activeFrame}
             onFrameChange={setActiveFrame}
+            onExpandFrame={setExpandedFrame}
           />
 
           {/* Active frame caption + ask chip */}
@@ -199,6 +366,26 @@ export default function SessionView({ session, videoPhase, framesData, onPauseAs
 
       {/* ── Notes ─────────────────────────────────────────────────────────── */}
       {notes && <NotesPanel notes={notes} />}
+
+      {/* ── Expanded slide dialog ─────────────────────────────────────────── */}
+      {expandedFrame !== null && captions.length > 0 && (
+        <SlideDialog
+          open={expandedFrame !== null}
+          frameIndex={expandedFrame}
+          captions={captions}
+          images={images}
+          sessionId={session.id}
+          onClose={() => setExpandedFrame(null)}
+          onFrameChange={(updater) => {
+            setExpandedFrame((prev) => {
+              const next = typeof updater === 'function' ? updater(prev) : updater
+              setActiveFrame(next)
+              return next
+            })
+          }}
+          onAsk={handleFrameAsk}
+        />
+      )}
 
     </Box>
   )

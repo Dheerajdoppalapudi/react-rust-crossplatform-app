@@ -26,7 +26,7 @@ import { useAuth } from '../../contexts/AuthContext'
 
 const DRAWER_OPEN   = 260
 const DRAWER_CLOSED = 56
-const ICON_SIZE     = 20
+const ICON_SIZE     = 17
 
 const mainItems = [
   { label: 'About Us', path: '/',       icon: <HomeOutlinedIcon        sx={{ fontSize: ICON_SIZE }} /> },
@@ -66,7 +66,7 @@ const CollapsedBtn = ({ label, icon, onClick, isActive, accent, isDark }) => {
         <ListItemButton
           onClick={onClick}
           sx={{
-            borderRadius: '8px', minHeight: 40, px: 0,
+            borderRadius: '7px', minHeight: 34, px: 0,
             justifyContent: 'center',
             bgcolor: isActive ? activeBg : 'transparent',
             '&:hover': { bgcolor: isActive ? activeBg : hoverBg },
@@ -106,18 +106,18 @@ const NavItem = ({ item, open, isActive, onClick }) => {
   const hoverBg  = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)'
 
   return (
-    <ListItem disablePadding sx={{ px: 0.75, mb: 0.25 }}>
+    <ListItem disablePadding sx={{ px: 0.75, mb: 0.15 }}>
       <ListItemButton
         onClick={onClick}
         sx={{
-          borderRadius: '8px', minHeight: 40, px: 1.25,
+          borderRadius: '7px', minHeight: 34, px: 1,
           bgcolor: isActive ? activeBg : 'transparent',
           '&:hover': { bgcolor: isActive ? activeBg : hoverBg },
           transition: 'background 0.15s',
         }}
       >
         <ListItemIcon sx={{
-          minWidth: 0, mr: 1.5, justifyContent: 'center',
+          minWidth: 0, mr: 1.25, justifyContent: 'center',
           color: isActive ? accent : theme.palette.text.secondary,
         }}>
           {item.icon}
@@ -126,14 +126,14 @@ const NavItem = ({ item, open, isActive, onClick }) => {
           primary={item.label}
           sx={{
             '& .MuiTypography-root': {
-              fontSize: 13.5,
+              fontSize: 12.5,
               fontWeight: isActive ? 600 : 400,
               color: isActive ? accent : theme.palette.text.primary,
             },
           }}
         />
         {isActive && (
-          <Box sx={{ width: 5, height: 5, borderRadius: '50%', bgcolor: accent, flexShrink: 0, ml: 0.5 }} />
+          <Box sx={{ width: 4, height: 4, borderRadius: '50%', bgcolor: accent, flexShrink: 0, ml: 0.5 }} />
         )}
       </ListItemButton>
     </ListItem>
@@ -174,7 +174,7 @@ const ConvItem = ({ conv, isActive, onClick, onRename, onStar, onDelete }) => {
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         sx={{
-          px: 1.5, py: 0.6, mx: 0.75, mb: 0.15,
+          px: 1.25, py: 0.4, mx: 0.75, mb: 0.1,
           borderRadius: '8px', cursor: 'pointer',
           bgcolor: isActive
             ? (isDark ? 'rgba(79,110,255,0.12)' : 'rgba(0,26,255,0.07)')
@@ -190,12 +190,12 @@ const ConvItem = ({ conv, isActive, onClick, onRename, onStar, onDelete }) => {
       >
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography noWrap sx={{
-            fontSize: 13, fontWeight: isActive ? 600 : 400,
+            fontSize: 12.5, fontWeight: isActive ? 500 : 400,
             color: isActive ? accent : theme.palette.text.primary, lineHeight: 1.4,
           }}>
             {conv.title || 'Untitled'}
           </Typography>
-          <Typography sx={{ fontSize: 10.5, color: theme.palette.text.disabled, mt: 0.1 }}>
+          <Typography sx={{ fontSize: 10, color: theme.palette.text.disabled, mt: 0.1, opacity: 0.7 }}>
             {relativeTime(conv.updated_at)}
           </Typography>
         </Box>
@@ -361,9 +361,9 @@ function RenameDialog({ conv, onClose, onConfirm }) {
 function SectionLabel({ children }) {
   return (
     <Typography sx={{
-      fontSize: 10, fontWeight: 600, letterSpacing: '0.06em',
-      color: 'text.disabled',
-      px: 2.25, pt: 1.5, pb: 0.5, textTransform: 'uppercase',
+      fontSize: 9.5, fontWeight: 600, letterSpacing: '0.07em',
+      color: 'text.disabled', opacity: 0.7,
+      px: 2, pt: 1.25, pb: 0.4, textTransform: 'uppercase',
     }}>
       {children}
     </Typography>
@@ -474,7 +474,7 @@ const Sidebar = ({
         {/* ── Header ──────────────────────────────────────────────────────── */}
         <Box sx={{
           flexShrink: 0, display: 'flex', alignItems: 'center',
-          px: 0.75, height: 52,
+          px: 0.75, height: 46,
           borderBottom: `1px solid ${theme.palette.divider}`,
           gap: 0.5,
         }}>
@@ -497,7 +497,7 @@ const Sidebar = ({
 
           {open && (
             <Typography sx={{
-              fontWeight: 800, fontSize: 15, letterSpacing: '-0.3px',
+              fontWeight: 700, fontSize: 13.5, letterSpacing: '-0.2px',
               color: theme.palette.text.primary, whiteSpace: 'nowrap', flex: 1,
             }}>
               Zenith
@@ -530,9 +530,9 @@ const Sidebar = ({
         <Box sx={{ flexShrink: 0, pt: 1 }}>
           {open && (
             <Typography sx={{
-              fontSize: 10, fontWeight: 600, color: theme.palette.text.secondary,
+              fontSize: 9.5, fontWeight: 600, color: theme.palette.text.secondary,
               textTransform: 'uppercase', letterSpacing: '0.8px',
-              px: 2, mb: 0.75, opacity: 0.6,
+              px: 2, mb: 0.5, opacity: 0.5,
             }}>
               Workspace
             </Typography>
@@ -552,23 +552,23 @@ const Sidebar = ({
 
         {/* ── New Chat ─────────────────────────────────────────────────────── */}
         {open ? (
-          <ListItem disablePadding sx={{ px: 0.75, py: 0.5 }}>
+          <ListItem disablePadding sx={{ px: 0.75, py: 0.35 }}>
             <ListItemButton
               onClick={onNewConversation}
               sx={{
-                borderRadius: '8px', minHeight: 40, px: 1.25,
+                borderRadius: '7px', minHeight: 34, px: 1,
                 '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)' },
                 transition: 'background 0.15s',
               }}
             >
-              <ListItemIcon sx={{ minWidth: 0, mr: 1.5, justifyContent: 'center', color: theme.palette.text.secondary }}>
+              <ListItemIcon sx={{ minWidth: 0, mr: 1.25, justifyContent: 'center', color: theme.palette.text.secondary }}>
                 <AddIcon sx={{ fontSize: ICON_SIZE }} />
               </ListItemIcon>
               <ListItemText
                 primary="New chat"
-                sx={{ '& .MuiTypography-root': { fontSize: 13.5, fontWeight: 400, color: theme.palette.text.primary } }}
+                sx={{ '& .MuiTypography-root': { fontSize: 12.5, fontWeight: 400, color: theme.palette.text.primary } }}
               />
-              <Typography sx={{ fontSize: 10, color: theme.palette.text.disabled, opacity: 0.6, letterSpacing: '0.02em' }}>
+              <Typography sx={{ fontSize: 9.5, color: theme.palette.text.disabled, opacity: 0.5, letterSpacing: '0.02em' }}>
                 {newChatShortcut}
               </Typography>
             </ListItemButton>
@@ -593,8 +593,8 @@ const Sidebar = ({
             <Box sx={{ px: 0.75, mb: 0.5, flexShrink: 0 }}>
               <Box sx={{ px: 0.75, mb: 0.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Typography sx={{
-                  fontSize: 10, fontWeight: 600, color: theme.palette.text.secondary,
-                  textTransform: 'uppercase', letterSpacing: '0.8px', opacity: 0.6,
+                  fontSize: 9.5, fontWeight: 600, color: theme.palette.text.secondary,
+                  textTransform: 'uppercase', letterSpacing: '0.8px', opacity: 0.5,
                 }}>
                   Your Chats
                 </Typography>
@@ -607,11 +607,11 @@ const Sidebar = ({
 
               <Box sx={{
                 display: 'flex', alignItems: 'center', gap: 0.75,
-                bgcolor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)',
-                borderRadius: '8px', px: 1.25, py: 0.5, mx: 0.25,
-                border: `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)'}`,
+                bgcolor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
+                borderRadius: '7px', px: 1, py: 0.4, mx: 0.25,
+                border: `1px solid ${isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)'}`,
               }}>
-                <SearchIcon sx={{ fontSize: 14, color: theme.palette.text.disabled, flexShrink: 0 }} />
+                <SearchIcon sx={{ fontSize: 13, color: theme.palette.text.disabled, flexShrink: 0, opacity: 0.7 }} />
                 <InputBase
                   inputRef={searchRef}
                   value={search}
@@ -623,13 +623,13 @@ const Sidebar = ({
                   sx={{
                     flex: 1,
                     '& input': {
-                      fontSize: 12.5, color: theme.palette.text.primary, p: 0,
+                      fontSize: 12, color: theme.palette.text.primary, p: 0,
                       '&::placeholder': { color: theme.palette.text.disabled, opacity: 1 },
                     },
                   }}
                 />
                 {!search && (
-                  <Typography sx={{ fontSize: 10, color: theme.palette.text.disabled, opacity: 0.55, flexShrink: 0, letterSpacing: '0.02em' }}>
+                  <Typography sx={{ fontSize: 9.5, color: theme.palette.text.disabled, opacity: 0.45, flexShrink: 0, letterSpacing: '0.02em' }}>
                     {searchShortcut}
                   </Typography>
                 )}
@@ -706,15 +706,15 @@ const Sidebar = ({
           {user && (
             open ? (
               <Box sx={{
-                display: 'flex', alignItems: 'center', gap: 1.25,
-                px: 1.75, py: 1, mb: 0.5,
+                display: 'flex', alignItems: 'center', gap: 1,
+                px: 1.5, py: 0.75, mb: 0.25,
               }}>
-                <Avatar src={user.avatar} alt={user.name} sx={{ width: 28, height: 28, flexShrink: 0 }} />
+                <Avatar src={user.avatar} alt={user.name} sx={{ width: 24, height: 24, flexShrink: 0 }} />
                 <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography noWrap sx={{ fontSize: 12.5, fontWeight: 600, color: 'text.primary', lineHeight: 1.3 }}>
+                  <Typography noWrap sx={{ fontSize: 12, fontWeight: 600, color: 'text.primary', lineHeight: 1.3 }}>
                     {user.name}
                   </Typography>
-                  <Typography noWrap sx={{ fontSize: 10.5, color: 'text.secondary' }}>
+                  <Typography noWrap sx={{ fontSize: 10, color: 'text.secondary', opacity: 0.7 }}>
                     {user.email}
                   </Typography>
                 </Box>
@@ -754,12 +754,12 @@ const Sidebar = ({
               <ListItemButton
                 onClick={onThemeToggle}
                 sx={{
-                  borderRadius: '8px', minHeight: 40, px: 1.25,
+                  borderRadius: '7px', minHeight: 34, px: 1,
                   '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)' },
                   transition: 'background 0.15s',
                 }}
               >
-                <ListItemIcon sx={{ minWidth: 0, mr: 1.5, justifyContent: 'center', color: theme.palette.text.secondary }}>
+                <ListItemIcon sx={{ minWidth: 0, mr: 1.25, justifyContent: 'center', color: theme.palette.text.secondary }}>
                   {themeMode === 'dark'
                     ? <LightModeOutlinedIcon sx={{ fontSize: ICON_SIZE }} />
                     : <DarkModeOutlinedIcon  sx={{ fontSize: ICON_SIZE }} />
@@ -767,7 +767,7 @@ const Sidebar = ({
                 </ListItemIcon>
                 <ListItemText
                   primary={themeMode === 'dark' ? 'Light mode' : 'Dark mode'}
-                  sx={{ '& .MuiTypography-root': { fontSize: 13.5, fontWeight: 400, color: theme.palette.text.primary } }}
+                  sx={{ '& .MuiTypography-root': { fontSize: 12.5, fontWeight: 400, color: theme.palette.text.primary } }}
                 />
               </ListItemButton>
             </ListItem>

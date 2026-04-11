@@ -1,5 +1,5 @@
 import { useState, useMemo, createContext, useContext, useCallback, useEffect } from 'react'
-import { Routes, Route, useLocation, useNavigate, Navigate } from 'react-router-dom'
+import { Routes, Route, useLocation, useNavigate, useMatch, Navigate } from 'react-router-dom'
 import { Box, ThemeProvider, CssBaseline, createTheme } from '@mui/material'
 import Sidebar from './components/common/Sidebar'
 import Footer from './components/common/Footer'
@@ -54,7 +54,6 @@ const buildTheme = (mode) =>
   })
 
 // ─── Pages that use the full viewport height — no footer, no padding ──────────
-const FULL_HEIGHT_PAGES = ['/studio']
 const NO_PADDING_PAGES  = ['/']
 
 // ─── Inner app — has access to ToastProvider + AuthContext ────────────────────
@@ -64,14 +63,25 @@ function AppInner() {
   const toast       = useToast()
   const { user }    = useAuth()
   const { mode: themeMode, toggle: onThemeToggle } = useContext(ColorModeContext)
-  const isFullHeight = FULL_HEIGHT_PAGES.includes(location.pathname)
+  const isFullHeight = location.pathname.startsWith('/studio')
   const isNoPadding  = NO_PADDING_PAGES.includes(location.pathname)
   const isLoginPage  = location.pathname === '/login' || location.pathname === '/register'
 
   // ── Conversations — lifted so Sidebar and Studio share state ─────────────
   const [conversations, setConversations]             = useState([])
-  const [activeConvId, setActiveConvId]               = useState(null)
   const [isLoadingConversations, setIsLoadingConversations] = useState(true)
+
+  // activeConvId is derived directly from the URL — the URL is the single source
+  // of truth. No state, no sync effects, no stale closures. This is how
+  // ChatGPT (/c/:id) and Claude (/chat/:id) handle conversation routing.
+  const studioMatch  = useMatch('/studio/:convId')
+  const activeConvId = studioMatch?.params?.convId ?? null
+
+  // Passed to Studio as onActiveConvIdChange. Studio calls this when a new
+  // conversation is created so the URL updates to /studio/:newId.
+  const onActiveConvIdChange = useCallback((id) => {
+    navigate(id ? '/studio/' + id : '/studio')
+  }, [navigate])
 
   const fetchConversations = useCallback(async () => {
     if (!user) {
@@ -92,12 +102,10 @@ function AppInner() {
   useEffect(() => { fetchConversations() }, [fetchConversations])
 
   const handleSelectConv = useCallback((conv) => {
-    setActiveConvId(conv.id)
-    navigate('/studio')
+    navigate('/studio/' + conv.id)
   }, [navigate])
 
   const handleNewConversation = useCallback(() => {
-    setActiveConvId(null)
     navigate('/studio')
   }, [navigate])
 
@@ -130,7 +138,6 @@ function AppInner() {
       await api.deleteConversation(convId)
       setConversations((prev) => prev.filter((c) => c.id !== convId))
       if (activeConvId === convId) {
-        setActiveConvId(null)
         navigate('/studio')
       }
     } catch {
@@ -170,8 +177,9 @@ function AppInner() {
             '& > *': { flex: 1, minHeight: 0 },
           }}
         >
-          {/* Route-level boundary: page crashes don't take down the sidebar */}
-          <ErrorBoundary level="page" key={location.pathname}>
+          {/* Route-level boundary: page crashes don't take down the sidebar.
+              Key stays constant within /studio/* so Studio never remounts on conv switch. */}
+          <ErrorBoundary level="page" key={location.pathname.startsWith('/studio') ? '/studio' : location.pathname}>
             <Routes>
               {/* Always public */}
               <Route path="/"      element={<AboutUs />} />
@@ -189,7 +197,21 @@ function AppInner() {
                     activeConvId={activeConvId}
                     activeConvTitle={conversations.find((c) => c.id === activeConvId)?.title ?? null}
                     activeConvStarred={!!(conversations.find((c) => c.id === activeConvId)?.starred)}
-                    onActiveConvIdChange={setActiveConvId}
+                    onActiveConvIdChange={onActiveConvIdChange}
+                    onConversationsRefresh={fetchConversations}
+                    onRenameConv={handleRenameConv}
+                    onStarConv={handleStarConv}
+                    onDeleteConv={handleDeleteConv}
+                  />
+                </ProtectedRoute>
+              } />
+              <Route path="/studio/:convId" element={
+                <ProtectedRoute>
+                  <Studio
+                    activeConvId={activeConvId}
+                    activeConvTitle={conversations.find((c) => c.id === activeConvId)?.title ?? null}
+                    activeConvStarred={!!(conversations.find((c) => c.id === activeConvId)?.starred)}
+                    onActiveConvIdChange={onActiveConvIdChange}
                     onConversationsRefresh={fetchConversations}
                     onRenameConv={handleRenameConv}
                     onStarConv={handleStarConv}

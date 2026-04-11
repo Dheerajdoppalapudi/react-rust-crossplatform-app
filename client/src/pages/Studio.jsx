@@ -19,7 +19,6 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
   const toast  = useToast()
-
   // ── Notes toggle — persisted across sessions ─────────────────────────────────
   const [notesEnabled, setNotesEnabled] = useState(
     () => localStorage.getItem('studio-notes-enabled') === 'true'
