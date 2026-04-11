@@ -17,10 +17,13 @@ After MAX_ITERATIONS, prompts/svg_prompt.md (and optionally planning_vocab.md)
 will have been improved by the best-scoring mutations.
 """
 
-import asyncio, base64, json, re, shutil
+import asyncio, base64, json, os, re, shutil
 from datetime import datetime
 from pathlib import Path
 from openai import OpenAI
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).parent / ".env")
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 TARGET_PROMPT  = "svg"          # "svg" or "vocab" — which prompt to optimize
@@ -30,6 +33,7 @@ GEN_MODEL      = "gpt-4.1"     # planning + SVG generation (fast, parallel)
 JUDGE_MODEL    = "gpt-4o"      # vision judge — reliable structured output, follows YES/NO format
 MUTATOR_MODEL  = "o3"          # prompt rewriter — strong reasoning for prompt engineering
 
+API_KEY = os.environ["OPENAI_API_KEY"]
 
 TEST_PROMPTS = [
     ("illustration", "explain how an electric mouse works using illustrations"),
@@ -111,9 +115,10 @@ Frame description (what it should show):
 4. Is the layout balanced — no overlapping shapes, adequate spacing between elements?
 5. Does the overall visual match the teaching intent described?
 6. Does the frame visually communicate at least 70% of the educational concept without needing audio — a student who sees only this frame should understand the core idea even without narration?
+7. Are all text labels free of collisions — no label overlaps another label, a shape it does not belong to, or an arrow line?
 
 ─── PART 2: Deep analysis — be specific and ruthless ───
-After the 6 YES/NO lines, write: ISSUES:
+After the 7 YES/NO lines, write: ISSUES:
 List every problem you see (no limit). For each issue:
 - Describe it precisely: which entity, which position, what is wrong
 - Include measurements if relevant: "text overflows ~40px beyond right edge"
@@ -122,16 +127,16 @@ List every problem you see (no limit). For each issue:
 Cover these dimensions:
 SHAPE QUALITY: Do entities look like what they represent? (e.g. does a "server" look like a server — 3D rack appearance, horizontal stripes? Does a "database" look like a cylinder?)
   - If a shape is just a plain rectangle with a label where it should be a recognisable icon, flag it.
-COMPONENT DETAIL: Are sub-components present? (e.g. server should have rack lines, database should have elliptical top, browser should have address bar)
-COLOR: Are colors appropriate, distinct, and visually pleasing? Note any clashes, poor contrast, or missed fill assignments.
+COMPONENT DETAIL: Are sub-components present and recognisable? (e.g. server should have rack lines, database should have elliptical top, mouse should have scroll wheel and button divider)
+COLOR: Are colors appropriate, distinct, and visually pleasing? Are arrow lines black (#1e1e1e)?
 LAYOUT MATH: Flag exact overlaps, insufficient spacing (< 20px between elements), elements near or outside canvas edges.
-ARROWS/CONNECTIONS: Are they pointing to the right place? Is the arrowhead visible? Is there a label where needed?
-TEXT: Font size too small (< 11px), truncated, or colliding with shapes?
+ARROWS/CONNECTIONS: Are they pointing to the right place? Is the arrowhead visible and black? Is there a label where needed? Are bent/orthogonal paths used where appropriate?
+TEXT COLLISION: Are any labels overlapping each other, sitting inside a shape they don't belong to, or crossing an arrow line? For dense/small components, are leader lines used instead of direct placement?
 TEACHING CLARITY (the 70% rule): Does the visual tell the story without audio?
-  - Are key relationships (flow, sequence, cause→effect, A-vs-B contrast) visible in the diagram — not just implied by labels?
-  - Is the most important concept the visual focal point, or is it buried?
+  - Are key relationships (flow, sequence, cause→effect, A-vs-B contrast) visible — not just implied by labels?
+  - Is the most important concept the visual focal point?
   - Are any concepts from the description completely absent from the visual?
-  - Flag each missing concept as [planning] if it was never described to the renderer, or [rendering] if it was described but not drawn.
+  - Flag each missing concept as [planning] if never described, or [rendering] if described but not drawn.
 
 If no issues in a dimension, skip that dimension. If everything is perfect, write "- none".
 
@@ -142,12 +147,12 @@ YES
 YES
 YES
 YES
+YES
 ISSUES:
 - server icon is a plain rect with no rack stripes or 3D depth [rendering]
-- database icon missing elliptical top cap [rendering]
-- "Browser" label overflows the shape boundary by ~30px [rendering]
+- "Optical Sensor" and "Circuit Board" labels overlap each other — use leader lines [rendering]
 - arrow from browser to server has no arrowhead marker [rendering]
-- TCP ACK arrow (the core teaching concept) is missing — student cannot understand reliability without it [rendering]
+- TCP ACK arrow (the core teaching concept) is missing [rendering]
 """
 
     try:
@@ -208,11 +213,11 @@ ISSUES:
                 answers.append(first_word == "YES")
 
     # Log parse result — helps diagnose future format mismatches
-    print(f"    judge parse: {len(answers)}/6 answers, {len(issues)} issues", flush=True)
-    if len(answers) != 6:
+    print(f"    judge parse: {len(answers)}/7 answers, {len(issues)} issues", flush=True)
+    if len(answers) != 7:
         print(f"    [WARN] unexpected judge response format. Raw (first 400):\n{raw[:400]}", flush=True)
 
-    score = sum(answers) / 6.0 if len(answers) == 6 else 0.5
+    score = sum(answers) / 7.0 if len(answers) == 7 else 0.5
     return {"score": score, "issues": issues, "attributions": attributions}
 
 
@@ -322,9 +327,10 @@ def should_switch_target(score_history: list[dict]) -> bool:
 
 # ── Mutator ───────────────────────────────────────────────────────────────────
 
-def mutate_prompt(target: str, issues: list[str], attributions: list[str]) -> str:
+def mutate_prompt(target: str, issues: list[str], attributions: list[str],
+                  score_result: dict | None = None, score_history: list[dict] | None = None) -> str:
     """
-    Ask MUTATOR_MODEL to propose ONE targeted improvement to the target prompt.
+    Ask MUTATOR_MODEL to rewrite the target prompt based on judge feedback.
     Reads the full current prompt, returns the full updated prompt text.
     """
     prompt_path = _PROMPT_FILES[target]
@@ -333,13 +339,45 @@ def mutate_prompt(target: str, issues: list[str], attributions: list[str]) -> st
     issues_text = "\n".join(f"- {iss}" for iss in issues) if issues else "- No specific issues captured — improve overall shape recognisability and layout precision"
     attr_summary = f"{attributions.count('rendering')} rendering failures, {attributions.count('planning')} planning failures"
 
+    # Build per-intent breakdown
+    intent_breakdown = ""
+    if score_result:
+        lines = []
+        for pp in score_result.get("per_prompt", []):
+            lines.append(f"  [{pp['intent']}] judge_avg={pp['judge_avg']:.2f}  prompt: {pp['prompt'][:55]}")
+        if lines:
+            intent_breakdown = "Per-intent scores (focus fixes on the lowest):\n" + "\n".join(lines)
+
+    # Build score trend context
+    score_context = ""
+    if score_history and len(score_history) >= 2:
+        trend = " → ".join(f"{s['final']:.3f}" for s in score_history[-4:])
+        best  = max(s["final"] for s in score_history)
+        score_context = f"Score trend (recent): {trend}  |  Best so far: {best:.3f}\nCurrent score: {score_result['final']:.3f}" if score_result else ""
+
+    # Identify what's passing consistently — don't touch those sections
+    passing = []
+    if score_result:
+        if score_result.get("render_rate", 0) >= 1.0:
+            passing.append("render_rate=100% (generation working perfectly — don't change output format rules)")
+        if score_result.get("no_retry_rate", 0) >= 0.9:
+            passing.append("no_retry_rate≥90% (SVG validity is solid — don't over-restrict SVG syntax)")
+
+    passing_text = ("What is already working well — DO NOT regress these:\n" +
+                    "\n".join(f"  ✓ {p}" for p in passing)) if passing else ""
+
     mutator_prompt = f"""You are an expert prompt engineer. Your job is to improve the SVG generation prompt below so that it produces better-looking educational diagrams.
 
-The judge evaluated the generated frames and found these specific failures:
+{score_context}
 
+{intent_breakdown}
+
+The judge found these specific failures (top 10 by severity):
 {issues_text}
 
 Attribution summary: {attr_summary}
+
+{passing_text}
 
 YOUR TASK: Rewrite the prompt to fix as many of the above failures as possible.
 
@@ -347,19 +385,15 @@ FREEDOM — you may do any of the following:
 - Add new rules, sections, or examples
 - Remove rules that are vague, contradictory, or unhelpful
 - Restructure or reorder sections for clarity
-- Replace prose descriptions with precise mathematical formulas or coordinate recipes
-- Add detailed sub-component recipes for entity types (e.g. exactly how to draw a server, database, browser using SVG primitives with relative measurements)
+- Strengthen visual briefs for entity types that are failing (make them look more like the real thing)
 - Add layout patterns with worked examples (centering math, spacing formulas, column/row calculations)
 - Add color guidance (contrast rules, fill hierarchy, palette constraints)
-- Add double-line or depth techniques for 3D-looking shapes
 - Redesign any section from scratch if it is causing the failures
 
 CONSTRAINTS — you must not:
 - Change or remove the `{{{{DIAGRAM_DESCRIPTION}}}}` placeholder — it is the pipeline injection point
-- Make changes that are unrelated to the observed failures — stay issue-directed
+- Regress anything listed in "what is already working well" above
 - Return anything other than the complete updated prompt text — no explanation, no markdown fences, no preamble
-
-The failures above are your directive. Use whatever technique produces a prompt that an LLM will follow to draw recognisable, well-laid-out, visually appealing SVG diagrams.
 
 CURRENT PROMPT:
 {current_text}
@@ -463,7 +497,7 @@ async def main():
             # Cap at 10 most critical issues — prevents mutator from catastrophic rewrites
             top_issues = score_result["all_issues"][:10]
             top_attrs  = score_result["attributions"][:10]
-            new_prompt = mutate_prompt(target, top_issues, top_attrs)
+            new_prompt = mutate_prompt(target, top_issues, top_attrs, score_result, score_history)
             _PROMPT_FILES[target].write_text(new_prompt, encoding="utf-8")
             print(f"  Mutation applied ({len(new_prompt)} chars)")
 

@@ -56,7 +56,8 @@
       "Bash(python -c \"import cairosvg; print\\(cairosvg.__file__\\)\")",
       "Bash(brew list:*)",
       "Bash(gh api:*)",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); [print\\(f'- {i}'\\) for i in d['all_issues'][:15]]\")"
     ]
   }
 }

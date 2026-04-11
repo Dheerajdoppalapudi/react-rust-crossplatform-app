@@ -20,9 +20,13 @@ HARD STYLE CONSTRAINTS — FATAL IF VIOLATED
 3. Server icon: must be a tall rounded rectangle WITH three evenly-spaced horizontal inner stripes.  
 4. Canvas background: the very first child after <defs> MUST be  
    <rect width="1200" height="HEIGHT" fill="white"/>.  
-5. Arrow heads:  
-   5a. Logical-flow connectors (entity_type = "arrow", "connector", or any recipe in SECTION 3) MUST use marker-end="url(#arrow)" unless the description explicitly overrides.  
-   5b. Physical cables (entity_type contains "_cable" or "_wire") MUST NOT have ANY marker attached unless the payload sets "directional": true. This prevents stray arrowheads in cable drawings.  
+5. Arrow lines and heads:
+   5a. ALWAYS draw lines in the direction of travel. marker-end="url(#arrow)" goes on the END of the line — orient="auto" handles rotation automatically. NEVER use arrow_rev.
+   5b. Arrow line colour: ALWAYS stroke="#1e1e1e". Never use a coloured arrow line.
+   5c. Arrowhead fill: the marker polygon fill is already #1e1e1e in the template — do not override it.
+   5d. For a return flow (e.g. server responding to browser), draw the line FROM server TO browser coordinates and add marker-end="url(#arrow)".
+   5e. Routing: prefer ORTHOGONAL (L-bend) paths over diagonals when entities are in different rows AND columns. Use two right-angle segments: go horizontally to the target column, then vertically to the target row (or vice versa). Example: <path d="M x1,y1 H x2 V y2" .../>.
+   5f. Physical cables MUST NOT have ANY marker attached unless the payload sets "directional": true.  
 6. Text colour: all <text> elements must have fill="#1e1e1e".  
 7. Anti-default: always specify BOTH fill and stroke on every visible shape.  
 8. Completeness: every entity in {{DIAGRAM_DESCRIPTION}} MUST be rendered. Missing ONE entity = failure.  
@@ -40,9 +44,7 @@ HARD STYLE CONSTRAINTS — FATAL IF VIOLATED
     <marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
       <polygon points="0 0, 10 3.5, 0 7" fill="#1e1e1e"/>
     </marker>
-    <marker id="arrow_rev" markerWidth="10" markerHeight="7" refX="1" refY="3.5" orient="auto">
-      <polygon points="10 0, 0 3.5, 10 7" fill="#1e1e1e"/>
-    </marker>
+    <!-- arrow_rev removed — always draw lines in direction of travel, use marker-end="url(#arrow)" only -->
     <marker id="arrow_open" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
       <polyline points="0 0, 10 3.5, 0 7" fill="none" stroke="#1e1e1e" stroke-width="1.5"/>
     </marker>
@@ -133,11 +135,18 @@ queue
  MINIMUM: horizontal cylinder (rect with elliptical end caps). A plain rect is a FAILURE.
 
 --------------------------------------------------------------
-ILLUSTRATION ENTITIES (free-form — use your best SVG judgement)
+ILLUSTRATION ENTITIES (free-form — use your best SVG knowledge)
 --------------------------------------------------------------
 mouse_body
  LOOKS LIKE: a computer mouse viewed from above — rounded oval body, visible scroll wheel in the centre, left/right button division line.
  MINIMUM: tall oval (rx≈60) + scroll wheel rect in centre + vertical divider line.
+
+For ALL illustration sub-components (optical_sensor, circuit_board, led_source, scroll_wheel, left_button, right_button, or any hardware part):
+ DO NOT reduce these to plain labeled rectangles or circles.
+ You have seen thousands of SVG technical illustrations — draw what the real object looks like.
+ A circuit_board should look like a PCB. An optical_sensor should look like a sensor. An led_source should look like a glowing LED.
+ Use your full SVG knowledge: grouped shapes, subtle gradients, layered details, realistic proportions.
+ If in doubt: spend extra tokens making it detailed. A recognisable sub-component is always better than a labeled box.
 
 sensor
  LOOKS LIKE: a detection/emission point — circle with radiating signal lines or arrows outward.
@@ -152,24 +161,61 @@ usb_cable
  MINIMUM: thick path (stroke-width≥4, no arrow marker unless "directional":true) + small yellow rect plug at end.
 
 --------------------------------------------------------------
+DNS / NETWORK VARIANTS
+--------------------------------------------------------------
+dns_resolver
+ Same as database (cylinder) — it IS a database of DNS records.
+ Default fill: #ffe066
+
+dns_cache
+ Smaller cylinder than dns_resolver with a clock or "⟳" symbol inside to suggest cached data.
+ Default fill: #fff3bf
+
+tcp_server / udp_server
+ Same as server (tall rect + 3 stripes).
+ tcp_server default fill: #b2f2bb   udp_server default fill: #ffc9c9
+
+--------------------------------------------------------------
+LABEL PLACEMENT — LEADER LINES (HARD RULE)
+--------------------------------------------------------------
+When an entity is SMALL (width < 80px OR height < 60px) OR when 3 or more entities share the same vertical column:
+  DO NOT place the label inside the shape or directly below it — it will collide with neighbour labels.
+  INSTEAD use a leader line:
+  1. Draw a dashed line from the shape edge to a clear area 40–60px away: stroke="#868e96" stroke-width="1.5" stroke-dasharray="4,3"
+  2. Add a tiny filled circle (r=3, fill="#868e96") at the shape-end of the line (anchor dot)
+  3. Place the label at the far end of the line, text-anchor toward the open side
+
+ILLUSTRATION FRAMES — EXPLODED VIEW PATTERN:
+  When the frame shows a single object with multiple internal sub-components (e.g. a mouse with optical sensor, circuit board, scroll wheel):
+  • Place the main object centred on canvas
+  • Arrange sub-component labels AROUND the outside using leader lines radiating outward
+  • No sub-component label should sit inside the parent shape
+
+--------------------------------------------------------------
 UNKNOWN / GENERIC ENTITY TYPES
 --------------------------------------------------------------
-For any entity_type not listed above: use your best judgement to draw something that looks like the real-world object. DO NOT fall back to a plain labeled rectangle. Use paths, groups, and sub-shapes to make it recognisable.
+For any entity_type not listed above: use your best judgement to draw what the real-world object looks like. DO NOT fall back to a plain labeled rectangle. You have seen enough SVG data to know what most objects look like — draw that.
 
 --------------------------------------------------------------
 DEFAULT COLOR PALETTE (use unless overridden)
 --------------------------------------------------------------
-client  #a5d8ff   server  #b2f2bb   database #ffe066  
-browser #ffd8a8   cloud  #e7f5ff   packet   #d0bfff
+client  #a5d8ff   server     #b2f2bb   database    #ffe066  
+browser #ffd8a8   cloud      #e7f5ff   packet      #d0bfff
+dns_resolver #ffe066   dns_cache #fff3bf
+tcp_server   #b2f2bb   udp_server #ffc9c9
 
 ════════════════════════════════════════════════════════════════════
 ## SECTION 3 — CONNECTORS & ARROWS
 
-• Use straight <line> for centre-to-centre distances ≤ 250 px; otherwise cubic <path>.  
-• Stroke-width: 2 px for logical flow, 4 px for physical cables.  
-• Logical connectors follow rule 5a for arrow heads.  
-• Anchor points: start at bottom-centre of source, end at top-centre of target (unless overridden).  
-• Label flows: small <text font-size="16"> positioned 12 px above the connector midpoint.
+• Stroke: always stroke="#1e1e1e". Never a coloured arrow.
+• Stroke-width: 2 px for logical flow, 4 px for physical cables.
+• Routing preference:
+  – Same row, close (≤250px): straight <line>
+  – Different row OR different column: ORTHOGONAL L-bend path → <path d="M x1,y1 H xMid V y2" marker-end="url(#arrow)" .../>
+  – Crossing obstacle: add a jog (offset ±40px) to route around it
+• Anchor points: leave a 4px gap between the arrowhead tip and the shape boundary.
+• Bidirectional flows: offset the two lines by ±10px vertically so they don't overlap.
+• Label: <text font-size="15" fill="#1e1e1e"> placed 12px above the midpoint of the connector.
 
 ════════════════════════════════════════════════════════════════════
 ## SECTION 4 — LAYOUT ENGINE (MUST FOLLOW)
@@ -203,6 +249,29 @@ GOAL: recognisable shapes & precise spacing, zero overlaps.
 6. Auto-height  
    diagramHeight = max(bottom of every bbox, bottom of every connector) + 60.  
    Replace HEIGHT in template with diagramHeight.
+
+7. VISUAL NARRATIVE PATTERNS — pick the one that matches the teaching intent:
+
+   SEQUENCE (step-by-step process):
+   • Entities in a left-to-right chain, all at the same cy
+   • Each step numbered in a small circle (r=14, fill="#1e1e1e", text fill="white") above the entity
+   • All arrows point right, labelled with action verbs
+
+   COMPARISON (A vs B):
+   • Split canvas vertically: left half for A, right half for B
+   • Bold divider line at x=600, stroke="#1e1e1e", stroke-width=2, stroke-dasharray="8,4"
+   • Header labels "A" and "B" at top of each panel (font-size=22, bold)
+   • Matching entities side-by-side at same y positions for easy visual comparison
+
+   CAUSE → EFFECT:
+   • Cause entity on the left, larger (scale ×1.2)
+   • Thick arrow (stroke-width=4) pointing right to effect entity
+   • Effect entity normal size on the right
+
+   ILLUSTRATION (anatomy / exploded view):
+   • Main object centred on canvas
+   • Sub-components spread around it, leader lines pointing inward
+   • No label inside the main object — all labels radiate outward with anchor dots
 
 ════════════════════════════════════════════════════════════════════
 ## SECTION 5 — SHAPE RECOGNISABILITY (HARD RULES)

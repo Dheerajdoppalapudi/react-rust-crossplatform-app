@@ -39,9 +39,7 @@ First child: <rect width="1200" height="<height>" fill="white"/>
     <marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
       <polygon points="0 0, 10 3.5, 0 7" fill="STROKE_COLOR"/>
     </marker>
-    <marker id="arrow_rev" markerWidth="10" markerHeight="7" refX="1" refY="3.5" orient="auto">
-      <polygon points="10 0, 0 3.5, 10 7" fill="STROKE_COLOR"/>
-    </marker>
+    <!-- arrow_rev intentionally removed — always draw lines in the direction of travel; use marker-end="url(#arrow)" only -->
     <marker id="arrow_open" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
       <polyline points="0 0, 10 3.5, 0 7" fill="none" stroke="STROKE_COLOR" stroke-width="1.5"/>
     </marker>
@@ -69,6 +67,10 @@ Emit elements in this exact sequence. Later elements paint over earlier ones —
 ```
 
 **No title, no background**: Do NOT add a title `<text>` at the top of the frame. Do NOT add any background or container `<rect>` — the white canvas rect IS the background.
+
+**NO NARRATION TEXT**: Text on the frame is strictly limited to entity labels (1–4 words), arrow labels (1–3 words), and optional step numbers. NEVER write sentences, bullet points, or explanatory paragraphs as SVG text — narration is audio only. Exception: comparison panels where short property labels (e.g. "Guaranteed delivery") are acceptable list items.
+
+**TEACHING CLARITY**: The diagram must visually communicate the core concept at 70% without audio. Key relationships (flow direction, sequence, cause→effect, A-vs-B contrast) must be DRAWN — not just implied by labels. A student seeing only this frame must understand what is happening.
 
 **Pairing rule**: Every filled `<rect>` must be immediately followed by its own `<text>`. Never batch all rects then all text. Exception: text in layers 6, 7, 8 goes at those layer positions, not immediately after its shape.
 
@@ -190,6 +192,48 @@ Never place symbol and body text at the same x.
 ```
 
 ════════════════════════════════════════════════════════════════════
+## SECTION 3B — ENTITY VISUAL BRIEFS (Track B primitives)
+
+You are not constrained to a fixed SVG recipe. Use your full SVG knowledge — paths, grouped shapes, perspective cues, whatever makes each entity IMMEDIATELY recognisable at first glance. The entries below tell you WHAT IT SHOULD LOOK LIKE and give a MINIMUM BASELINE. You are always free — and encouraged — to draw richer, more detailed versions.
+
+**server**
+LOOKS LIKE: a physical rack-mount server — tall box with visible rack slots, status LEDs, face-plate detail.
+MINIMUM: tall rounded rect + at least 3 evenly-spaced horizontal inner stripes. FAILURE: a plain labeled box with no stripes.
+
+**database**
+LOOKS LIKE: a classic storage cylinder. The visible elliptical top cap is the key recognition cue.
+MINIMUM: top ellipse cap + body rect + bottom arc. FAILURE: a plain rect.
+
+**browser**
+LOOKS LIKE: a browser window with an address/title bar across the top.
+MINIMUM: outer rect + distinct top bar strip (~24 px tall, different fill). FAILURE: a plain rect.
+
+**router**
+LOOKS LIKE: a network device — octagon or circle with radial port indicators.
+MINIMUM: octagon polygon. FAILURE: a rect or plain circle.
+
+**cloud**
+LOOKS LIKE: a fluffy cloud — multiple overlapping rounded bumps.
+MINIMUM: at least 3 overlapping ellipses. FAILURE: a single rounded rect.
+
+**person**
+LOOKS LIKE: a simple human figure — circle head, trapezoid or rectangular body.
+MINIMUM: circle head (r≈22) + body below. FAILURE: a plain rect or circle alone.
+
+**phone**
+LOOKS LIKE: a smartphone — tall narrow rounded rect with a home button or notch.
+MINIMUM: tall rounded rect (w≈90, h≈160, rx≈14) + small circle near bottom.
+
+**api**
+LOOKS LIKE: a code endpoint box. MINIMUM: rect + `</>` monospace text centred inside.
+
+**dns_resolver** — same as database (cylinder). **dns_cache** — smaller cylinder with a "⟳" symbol inside.
+**tcp_server / udp_server** — same as server (tall rect + inner stripes).
+**queue** — horizontal cylinder (rect with elliptical end caps). FAILURE: a plain rect.
+
+For any entity type not listed: use your best judgement to draw what the real-world object looks like. DO NOT fall back to a plain labeled rectangle.
+
+════════════════════════════════════════════════════════════════════
 ## SECTION 4 — COLOR RULES
 
 Max 4–5 colors per frame.
@@ -207,6 +251,10 @@ Max 4–5 colors per frame.
 | Muted text            | #495057                                                      |
 | Leader lines          | #868e96                                                      |
 
+**Approved fill palette** (use unless overridden by style constraints — pick freely, max 4–5 per frame):
+
+`#a5d8ff` `#b2f2bb` `#ffe066` `#ffd8a8` `#e7f5ff` `#d0bfff` `#fff3bf` `#ffc9c9`
+
 **Contrast rule**: Dark text (#1e1e1e) needs light background. If shape fill is dark (R+G+B < 300), use fill="white" for its label.
 
 ════════════════════════════════════════════════════════════════════
@@ -216,7 +264,13 @@ Max 4–5 colors per frame.
 `marker-end` places the arrowhead at (x2, y2). Arrow goes FROM (x1,y1) TO (x2,y2).
 - Rightward:  x2 > x1   Leftward: x2 < x1   Downward: y2 > y1   Upward: y2 < y1
 
-If your arrow points backward, swap (x1,y1) and (x2,y2).
+If your arrow points backward, swap (x1,y1) and (x2,y2). NEVER use `arrow_rev` — it has been removed from defs. For a return flow, draw the line in the return direction and use `marker-end="url(#arrow)"`.
+
+### Routing preference (apply before choosing arrow style)
+- Same row, gap ≤ 250 px: straight `<line>`
+- Different row OR different column: prefer **orthogonal L-bend** over diagonal → `<path d="M x1,y1 H xMid V y2" fill="none" .../>`
+- Crossing an unrelated box: use L-bend or jog ±40 px to route around it
+- Bidirectional flows: offset the two lines ±10 px so they never overlap
 
 ### Shape boundary connection points (use these — never shape centers)
 ```
@@ -286,15 +340,24 @@ If crossing → L-bend:
 ════════════════════════════════════════════════════════════════════
 ## SECTION 6 — LEADER LINES
 
+**WHEN to use leader lines** — required in these cases:
+- Entity is small (width < 80 px OR height < 60 px) — inline label would overflow
+- 3 or more entities share the same vertical column — direct labels collide
+- Illustration frames with sub-components around a central object — all labels radiate outward
+
+**HOW to draw**:
 ```svg
-<!-- Start at shape boundary, end 10px before label text -->
-<line x1="BOUNDARY_X" y1="BOUNDARY_Y" x2="LABEL_X - 10" y2="LABEL_Y"
+<!-- anchor dot at shape edge, dashed line to clear area 40–60 px away -->
+<circle cx="BOUNDARY_X" cy="BOUNDARY_Y" r="3" fill="#868e96"/>
+<line x1="BOUNDARY_X" y1="BOUNDARY_Y" x2="LABEL_X" y2="LABEL_Y"
       stroke="#868e96" stroke-width="1.5" stroke-dasharray="4,3"/>
 <text x="LABEL_X" y="LABEL_Y"
       font-family="Arial, Helvetica, sans-serif" font-size="16" fill="#1e1e1e">Label</text>
 ```
 
 Arrange labels clockwise around the shape: top → upper-right → right → lower-right → bottom → lower-left → left → upper-left. Never place two labels on the same side if their leader lines would cross.
+
+**Illustration / exploded-view frames**: place the main object centred on canvas, arrange all sub-component labels around the outside with leader lines radiating outward. No sub-component label sits inside the parent shape.
 
 ════════════════════════════════════════════════════════════════════
 ## SECTION 7 — DATABASE CYLINDER (special draw order)
@@ -335,6 +398,13 @@ Arrange labels clockwise around the shape: top → upper-right → right → low
 | Missing fill="none" on connector path | Path renders as black filled shape | All connector `<path>` need fill="none" |
 | Wrong viewBox height | Bottom clipped | Use the height the description specifies |
 | Guessing coordinates not in description | Misalignment | Flag with comment, do not guess |
+| Server drawn as plain rect | Not recognisable as server hardware | Draw with at least 3 horizontal inner stripes |
+| Database drawn as plain rect | Not recognisable as database | Must have elliptical top cap (cylinder) |
+| Browser drawn as plain rect | Not recognisable as browser | Must have distinct top title bar strip |
+| Router drawn as rect or circle | Not recognisable as router | Must be an octagon polygon |
+| arrow_rev used | Arrowhead points backward | Draw line in direction of travel, use marker-end="url(#arrow)" only |
+| Diagonal arrow between different row+col | Looks like a slanted line, hard to follow | Use orthogonal L-bend path instead |
+| Explanatory sentences as SVG text | Cluttered, unreadable frame | Labels only — 1–4 words per entity, 1–3 words per arrow |
 
 ════════════════════════════════════════════════════════════════════
 ## COMPLETE REFERENCE EXAMPLES

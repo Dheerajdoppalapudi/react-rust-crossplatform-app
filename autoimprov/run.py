@@ -1,7 +1,10 @@
-import asyncio, json, re, logging
+import asyncio, json, re, logging, os
 from datetime import datetime
 from pathlib import Path
 from openai import OpenAI
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).parent / ".env")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -19,6 +22,7 @@ log = logging.getLogger(__name__)
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 PROMPT    = "explain how photosynthesis works using illustrations"
+API_KEY   = os.environ["OPENAI_API_KEY"]
 MODEL     = "gpt-4.1"
 # ─────────────────────────────────────────────────────────────────────────────
 
