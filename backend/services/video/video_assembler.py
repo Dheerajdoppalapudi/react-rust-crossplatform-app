@@ -222,14 +222,14 @@ def _build_video_clip(
 
     if caption:
         font       = _find_font()
-        font_arg   = f":fontfile={font}" if font else ""
         bar_y      = VIDEO_H - 90
         escaped    = _escape_drawtext(caption)
+        font_part  = f"fontfile={font}:" if font else ""
         vf_parts.append(
             f"drawbox=y={bar_y}:color=black@0.69:width=iw:height=90:t=fill"
         )
         vf_parts.append(
-            f"drawtext{font_arg}:text='{escaped}'"
+            f"drawtext={font_part}text='{escaped}'"
             f":fontsize=38:fontcolor=white"
             f":x=(w-tw)/2:y={bar_y}+(90-th)/2"
         )

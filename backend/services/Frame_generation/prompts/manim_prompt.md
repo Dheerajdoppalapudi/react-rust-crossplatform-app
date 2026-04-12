@@ -81,6 +81,10 @@ arr   = Arrow(start=obj1.get_right(), end=obj2.get_left(), buff=0.1)
 # Brace annotation:
 brace = Brace(obj, DOWN, color=YELLOW)
 label = brace.get_text("length c")
+# Opacity — NEVER use opacity=; use these instead:
+curve = axes.plot(lambda x: x**2, color=BLUE, stroke_opacity=0.7)  # for curves/lines
+rect2 = Rectangle(fill_opacity=0.4)                                  # for filled shapes
+obj.set_opacity(0.6)                                                  # post-creation
 ```
 
 ### Positioning
@@ -127,8 +131,11 @@ self.wait(1)                                      # pause (seconds)
 ## Anti-Patterns (will cause hard failures — never use)
 
 - `MathTex(...)`, `Tex(...)`, `SingleStringMathTex(...)` — **requires LaTeX (not installed)**
+- `Axes(axis_config={"numbers_to_include": [...]})` — renders axis labels with LaTeX; **crashes**. Instead use `Axes` without `numbers_to_include` and manually add `Text` labels if needed.
+- `NumberLine(numbers_to_include=[...])` — same LaTeX crash. Use a plain `NumberLine` and add `Text` labels manually.
+- `opacity=` as a constructor kwarg on any Mobject — **not a valid argument**, crashes with `TypeError`. Use `stroke_opacity=` for curves/lines, `fill_opacity=` for filled shapes, or call `.set_opacity(value)` after creation.
 - `ImageMobject(...)` — requires external image files
-- `SVGMobject("path/to/file")` — requires external SVG files
+- `SVGMobject(...)` in ANY form — requires an external SVG file. Never use `SVGMobject()` with or without arguments. For custom shapes use `Polygon(p1, p2, ...)` or a `VMobject` with `.set_points_as_corners([...])`
 - `ThreeDScene`, `Surface`, `ParametricSurface` — 3D, complex setup
 - Any import other than `from manim import *`
 - Using a variable before it's defined
