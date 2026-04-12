@@ -17,6 +17,30 @@ const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 const AuthContext = createContext(null)
 export const useAuth = () => useContext(AuthContext)
 
+// Module-level promise — survives React 18 Strict Mode's double effect invocation.
+// Strict Mode runs effects twice (setup → cleanup → setup) to detect side-effect bugs.
+// Without deduplication, two concurrent POST /auth/refresh requests go out with the
+// same cookie. The server rotates the token on the first request; the second arrives
+// with the already-used token, triggers anti-reuse detection, clears ALL tokens, and
+// returns 401 — logging the user out on every cold page load.
+// Storing the promise at module scope means the second effect run awaits the same
+// in-flight request rather than firing a second one.
+let _silentRefreshPromise = null
+
+async function _fetchRefreshData(apiBase) {
+  try {
+    const res = await fetch(`${apiBase}/auth/refresh`, {
+      method: 'POST',
+      credentials: 'include',
+    })
+    if (!res.ok) return null
+    const body = await res.json()
+    return body.status === 'success' ? body.data : null
+  } catch {
+    return null
+  }
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser]           = useState(null)
   const [isLoading, setIsLoading] = useState(true)  // true until first refresh attempt completes
@@ -32,17 +56,17 @@ export function AuthProvider({ children }) {
     let cancelled = false
     ;(async () => {
       try {
-        const res  = await fetch(`${API_BASE}/auth/refresh`, {
-          method: 'POST',
-          credentials: 'include',
-        })
-        if (!res.ok) return
-        const body = await res.json()
-        if (!cancelled && body.status === 'success') {
-          _setAuth(body.data.access_token, body.data.user)
+        // Deduplicate: if Strict Mode re-runs this effect before the first fetch
+        // completes, both runs await the same promise — only one HTTP request is made.
+        if (!_silentRefreshPromise) {
+          _silentRefreshPromise = _fetchRefreshData(API_BASE)
+        }
+        const data = await _silentRefreshPromise
+        if (!cancelled && data) {
+          _setAuth(data.access_token, data.user)
         }
       } catch {
-        // Network error — treat as unauthenticated
+        // Treat any unexpected error as unauthenticated
       } finally {
         if (!cancelled) setIsLoading(false)
       }

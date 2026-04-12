@@ -234,6 +234,9 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
   loadConversationByIdRef.current = loadConversationById
 
   // CRIT-7: Cancel all in-flight requests when unmounting.
+  // Also reset loadedConvIdRef so that if the component remounts (React Strict Mode
+  // double-invokes effects in dev, or genuine unmount/remount), the active conversation
+  // is re-loaded rather than silently skipped due to the ref still holding its old value.
   useEffect(() => {
     return () => {
       generationAbortRef.current?.abort()
@@ -241,6 +244,7 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
       for (const controller of videoAbortControllersRef.current.values()) {
         controller.abort()
       }
+      loadedConvIdRef.current = null
     }
   }, [])
 

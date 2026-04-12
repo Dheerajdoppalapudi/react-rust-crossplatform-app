@@ -14,6 +14,7 @@ import DarkModeOutlinedIcon    from '@mui/icons-material/DarkModeOutlined'
 import LightModeOutlinedIcon   from '@mui/icons-material/LightModeOutlined'
 import AutoAwesomeIcon         from '@mui/icons-material/AutoAwesome'
 import ChevronLeftIcon         from '@mui/icons-material/ChevronLeft'
+import ChevronRightIcon        from '@mui/icons-material/ChevronRight'
 import LogoutOutlinedIcon      from '@mui/icons-material/LogoutOutlined'
 import MoreHorizIcon           from '@mui/icons-material/MoreHoriz'
 import StarOutlineIcon         from '@mui/icons-material/StarOutline'
@@ -391,6 +392,7 @@ const Sidebar = ({
   const { user, logout } = useAuth()
 
   const [open, setOpen]           = useState(false)
+  const [sidebarHovered, setSidebarHovered] = useState(false)
   const [search, setSearch]       = useState('')
   const [isFetchingConv, setIsFetchingConv] = useState(false)
   const [renamingConv, setRenamingConv]     = useState(null)  // conv object being renamed
@@ -449,10 +451,14 @@ const Sidebar = ({
   })
 
   return (
-    <Box sx={{ position: 'relative', flexShrink: 0 }}>
+    <Box
+      sx={{ position: 'relative', flexShrink: 0 }}
+      onMouseEnter={() => setSidebarHovered(true)}
+      onMouseLeave={() => setSidebarHovered(false)}
+    >
       <Drawer
         variant="permanent"
-        onClick={!open ? () => setOpen(true) : undefined}
+        onClick={() => { if (!open) setOpen(true) }}
         sx={{
           cursor: !open ? 'pointer' : 'default',
           width: open ? DRAWER_OPEN : DRAWER_CLOSED,
@@ -474,7 +480,8 @@ const Sidebar = ({
         {/* ── Header ──────────────────────────────────────────────────────── */}
         <Box sx={{
           flexShrink: 0, display: 'flex', alignItems: 'center',
-          px: 0.75, height: 46,
+          justifyContent: open ? 'flex-start' : 'center',
+          px: open ? 0.75 : 0, height: 46,
           borderBottom: `1px solid ${theme.palette.divider}`,
           gap: 0.5,
         }}>
@@ -483,15 +490,20 @@ const Sidebar = ({
               onClick={(e) => { e.stopPropagation(); setOpen((p) => !p) }}
               sx={{
                 width: 32, height: 32, borderRadius: '8px', flexShrink: 0,
-                background: 'linear-gradient(135deg, #001AFF 0%, #6B44F8 100%)',
+                background: (!open && sidebarHovered)
+                  ? 'transparent'
+                  : 'linear-gradient(135deg, #001AFF 0%, #6B44F8 100%)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                boxShadow: `0 2px 10px ${accent}40`,
+                boxShadow: (!open && sidebarHovered) ? 'none' : `0 2px 10px ${accent}40`,
                 cursor: 'pointer',
-                '&:hover': { opacity: 0.85 },
-                transition: 'opacity 0.15s',
+                transition: 'background 0.15s, box-shadow 0.15s, opacity 0.15s',
+                '&:hover': { opacity: (!open && sidebarHovered) ? 1 : 0.85 },
               }}
             >
-              <AutoAwesomeIcon sx={{ fontSize: 14, color: '#fff' }} />
+              {(!open && sidebarHovered)
+                ? <ChevronRightIcon sx={{ fontSize: 18, color: theme.palette.text.secondary }} />
+                : <AutoAwesomeIcon  sx={{ fontSize: 14, color: '#fff' }} />
+              }
             </Box>
           </Tooltip>
 
@@ -505,24 +517,22 @@ const Sidebar = ({
           )}
 
           {open && (
-            <Tooltip title="Collapse" placement="right" arrow>
-              <Box
-                onClick={(e) => { e.stopPropagation(); setOpen(false) }}
-                sx={{
-                  width: 26, height: 26, borderRadius: '6px',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  cursor: 'pointer', flexShrink: 0,
-                  color: theme.palette.text.disabled,
-                  '&:hover': {
-                    bgcolor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)',
-                    color: theme.palette.text.secondary,
-                  },
-                  transition: 'background 0.15s, color 0.15s',
-                }}
-              >
-                <ChevronLeftIcon sx={{ fontSize: 16 }} />
-              </Box>
-            </Tooltip>
+            <IconButton
+              size="small"
+              title="Close sidebar"
+              onClick={(e) => { e.stopPropagation(); setOpen(false) }}
+              sx={{
+                width: 26, height: 26, borderRadius: '6px', flexShrink: 0,
+                color: theme.palette.text.disabled,
+                '&:hover': {
+                  bgcolor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)',
+                  color: theme.palette.text.secondary,
+                },
+                transition: 'background 0.15s, color 0.15s',
+              }}
+            >
+              <ChevronLeftIcon sx={{ fontSize: 16 }} />
+            </IconButton>
           )}
         </Box>
 

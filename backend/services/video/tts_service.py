@@ -93,7 +93,7 @@ def _openai_tts_generate(text: str, out_path: str) -> bool:
     """Generate speech with OpenAI TTS (tts-1 model). Returns True on success."""
     try:
         from openai import OpenAI  # type: ignore
-        client = OpenAI()
+        client = OpenAI(timeout=30.0)
         response = client.audio.speech.create(
             model="tts-1",
             voice="alloy",   # clear, neutral voice — good for education
