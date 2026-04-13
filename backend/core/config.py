@@ -64,8 +64,6 @@ COOKIE_SECURE:   bool = os.getenv("ENV", "development") == "production"
 COOKIE_SAMESITE: str  = "lax"
 
 # ── Feature flags ────────────────────────────────────────────────────────────
-# Set ENABLE_COMPONENT_GEN=true in .env to enable component_prompt.md in the SVG path.
-ENABLE_COMPONENT_GEN: bool = os.getenv("ENABLE_COMPONENT_GEN", "false").lower() == "true"
 
 # ── Intent routing ────────────────────────────────────────────────────────────
 MERMAID_INTENT_TYPES: frozenset[str] = frozenset({"process", "architecture", "timeline"})

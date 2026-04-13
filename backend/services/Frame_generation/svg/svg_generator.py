@@ -34,8 +34,6 @@ except (ImportError, OSError):
     _CAIROSVG_AVAILABLE = False
 
 from services.Frame_generation.planner import GenerationPlan, FramePlan, call_llm
-from services.Frame_generation.svg.component_library import SVGComponent
-from services.Frame_generation.svg.component_generator import generate_svg_components
 
 
 # ---------------------------------------------------------------------------
@@ -167,20 +165,9 @@ def _generate_svg_code(
     frame: FramePlan,
     plan: GenerationPlan,
     prompt_template: str,
-    component_library: dict[str, SVGComponent] | None = None,
     frame_index: int = 0,
 ) -> str:
-    """
-    Synchronous LLM call that returns the raw LLM response for one frame.
-
-    If component_library is provided (non-empty), injects the actual SVG
-    markup for each entity so the model copy-pastes exact icons rather than
-    re-drawing them from a text description.  This guarantees pixel-identical
-    icons across all parallel frames.
-
-    If component_library is empty or None, falls back to injecting the
-    text-based element_vocabulary as before.
-    """
+    """Synchronous LLM call that returns the raw LLM response for one SVG frame."""
     stroke = plan.shared_style.strokeColor
     bg     = plan.shared_style.backgroundColor
 
@@ -193,24 +180,7 @@ def _generate_svg_code(
         f'- font-family="Arial, Helvetica, sans-serif" on every <text> element\n'
     )
 
-    if component_library:
-        # Inject component SVG fragments as visual reference — renderer picks positions freely
-        lines = [
-            "\n\nCOMPONENT LIBRARY (use these exact SVG fragments for each named entity —"
-            " paste verbatim inside <g transform=\"translate(X,Y)\"> and choose positions freely):"
-        ]
-        for key, comp in component_library.items():
-            lines.append(
-                f"\n  {key} (bounding box: {comp.width}×{comp.height},"
-                f" right_edge_y={comp.right_edge_y}, bottom_edge_x={comp.bottom_edge_x}):\n"
-                f"  {comp.svg}"
-            )
-        description = frame.description + style_note + "\n".join(lines)
-        prompt = prompt_template.replace("{{DIAGRAM_DESCRIPTION}}", description)
-        return call_llm(prompt, prompt_name=f"svg_prompt.md (frame {frame_index})")
-    elif plan.element_vocabulary:
-        # Fallback: text descriptions only (no component library available)
-        # Normalise values — new planner uses dicts, old planner uses strings
+    if plan.element_vocabulary:
         lines = []
         for k, v in plan.element_vocabulary.items():
             if isinstance(v, dict):
@@ -334,7 +304,6 @@ async def _generate_one_svg_frame(
     plan: GenerationPlan,
     prompt_template: str,
     output_dir: str,
-    component_library: dict[str, SVGComponent] | None = None,
 ) -> Optional[str]:
     """
     Generate and render one SVG frame. Returns absolute PNG path or None.
@@ -346,7 +315,7 @@ async def _generate_one_svg_frame(
     is attempted with the specific error included in the prompt. Only the
     failing frame retries — successful frames are never re-run.
     """
-    raw = await asyncio.to_thread(_generate_svg_code, frame, plan, prompt_template, component_library, frame_index)
+    raw = await asyncio.to_thread(_generate_svg_code, frame, plan, prompt_template, frame_index)
     svg_text = _extract_svg(raw)
 
     # ── Retry if extraction produced no valid SVG ────────────────────────────
@@ -397,29 +366,13 @@ async def generate_svg_frames(
     plan: GenerationPlan,
     prompt_template: str,
     output_dir: str,
-    component_library: dict[str, SVGComponent] | None = None,
 ) -> list[Optional[str]]:
     """
-    Generate one PNG per frame using SVG.
-
-    Input:  GenerationPlan + svg prompt template + output dir + optional pre-built component library
-    Output: List of absolute PNG paths, one per frame (None = failed frame)
-
-    When called from the SVG pipeline in main.py, component_library is already
-    built (Stage 1.5 ran before Phase B).  When called standalone or from a
-    fallback path, component_library=None triggers an internal build.
-
-    Stage 2 — Frame generation (parallel):
-      All N frames run concurrently.  Each receives the component library and
-      injects exact SVG fragments into its frame description, guaranteeing
-      pixel-identical icons across frames.
+    Generate one PNG per frame using SVG. All frames run in parallel.
+    Returns a list of absolute PNG paths (None = failed frame).
     """
-    if component_library is None:
-        component_library = {}
-
-    # ── Stage 2: all frames in parallel ──────────────────────────────────────
     tasks = [
-        _generate_one_svg_frame(frame, i, plan, prompt_template, output_dir, component_library)
+        _generate_one_svg_frame(frame, i, plan, prompt_template, output_dir)
         for i, frame in enumerate(plan.frames)
     ]
 

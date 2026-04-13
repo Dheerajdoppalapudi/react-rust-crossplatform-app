@@ -82,9 +82,17 @@ def _generate_manim_code(
 ) -> str:
     """Synchronous LLM call. Returns raw Manim Python code string."""
     primary_color = getattr(plan.shared_style, "strokeColor", "#4F86C6")
+
+    all_captions = [f.caption for f in plan.frames]
+    frame_context = (
+        f"Frame {frame.index + 1} of {plan.frame_count}: \"{frame.caption}\"\n"
+        f"Lesson outline: {' → '.join(all_captions)}\n\n"
+        f"{frame.description}"
+    )
+
     prompt = (
         prompt_template
-        .replace("{{DIAGRAM_DESCRIPTION}}", frame.description)
+        .replace("{{DIAGRAM_DESCRIPTION}}", frame_context)
         .replace("{{PRIMARY_COLOR}}", primary_color)
     )
     return call_llm(prompt, prompt_name=f"manim_prompt.md (frame {frame.index})")

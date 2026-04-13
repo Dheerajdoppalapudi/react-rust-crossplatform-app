@@ -1,26 +1,14 @@
 """
-Planner — SVG pipeline orchestration.
+Planner — pipeline orchestration for all render paths.
 
-The SVG pipeline runs in three sequential stages before frame rendering:
+Stage 1A — create_vocab_plan():
+  One LLM call routed by intent: planning_svg.md (illustration/concept_analogy/comparison),
+  planning_mermaid.md (process/architecture/timeline), planning_math.md (math).
+  Builds element_vocabulary with entity identity — no pixel coordinates.
 
-  Stage 1A — create_vocab_plan():
-    One LLM call (Phase A prompt). Classifies intent, decides frame count,
-    builds element_vocabulary with entity identity (entity_type, visual,
-    fill, label) — NO geometry, NO pixel coordinates.
-
-  Stage 1B — create_spatial_plan():
-    One LLM call (Phase B prompt). Receives the vocabulary plan AND the
-    dimension map from Prompt 2 (exact icon sizes). Computes all pixel
-    coordinates, arrow endpoints, viewBox heights. Outputs the full
-    GenerationPlan with complete frame descriptions.
-
-  Stage 1.5 — generate_svg_components() (in component_generator.py):
-    Runs between Stage 1A and Stage 1B.
-    Builds the icon library from element_vocabulary — DB lookup first,
-    LLM generation for novel entities. Returns dimension map.
-
-Non-SVG paths (Mermaid, Manim) still use create_plan() which calls
-planning_prompt.md as before.
+_vocab_plan_to_generation_plan():
+  Pure Python conversion. Builds FramePlan objects from the vocab plan.
+  Used by all render paths (Manim, Mermaid, SVG, slim JSON fallback).
 """
 
 import asyncio
@@ -217,60 +205,68 @@ def _extract_json(text: str) -> dict:
 # Stage 1A — Vocabulary plan (no geometry)
 # ---------------------------------------------------------------------------
 
-async def create_vocab_plan(user_prompt: str, conversation_context: str = "") -> VocabularyPlan:
+async def classify_intent(user_prompt: str, conversation_context: str = "") -> tuple[str, int]:
     """
-    Phase A: classify intent, build element_vocabulary with entity identity
-    (entity_type, visual, fill, label) — NO pixel coordinates.
-
-    Output drives Prompt 2 (icon generation). Phase B runs after Prompt 2
-    returns real dimensions.
+    Call 1 — tiny classification call.
+    Returns (intent_type, frame_count). Fast and cheap (~300 tokens).
     """
-    template_path = os.path.join(os.path.dirname(__file__), "prompts", "planning_vocab.md")
-    with open(template_path) as f:
+    _prompts_dir = os.path.join(os.path.dirname(__file__), "prompts")
+    with open(os.path.join(_prompts_dir, "planning_classify.md")) as f:
         template = f.read()
 
+    context_block = f"Conversation context:\n{conversation_context}\n\n" if conversation_context else ""
     prompt = (
         template
         .replace("{{USER_PROMPT}}", user_prompt)
-        .replace("{{CONVERSATION_CONTEXT}}", conversation_context)
+        .replace("{{CONVERSATION_CONTEXT}}", context_block)
     )
 
-    raw = await asyncio.to_thread(call_llm, prompt, prompt_name="planning_vocab.md")
-    plan_dict = _extract_json(raw)
-    return VocabularyPlan(**plan_dict)
+    raw = await asyncio.to_thread(call_llm, prompt, 512, prompt_name="planning_classify.md")
+    data = _extract_json(raw)
+    intent_type = data.get("intent_type", "process")
+    frame_count = max(2, min(8, int(data.get("frame_count", 3))))
+    return intent_type, frame_count
 
 
-# ---------------------------------------------------------------------------
-# Stage 1B — Spatial plan (full coordinates, uses real icon dimensions)
-# ---------------------------------------------------------------------------
-
-async def create_spatial_plan(
-    vocab_plan: VocabularyPlan,
-    dimension_map: dict,
-) -> GenerationPlan:
+async def create_vocab_plan(
+    user_prompt: str,
+    conversation_context: str = "",
+    intent_type: str = "process",
+    frame_count: int = 3,
+) -> VocabularyPlan:
     """
-    Phase B: compute ALL pixel coordinates using the real icon dimensions
-    from Prompt 2. Outputs GenerationPlan with complete frame descriptions
-    ready for Prompt 3 (SVG renderer).
-
-    dimension_map: { entity_key: { width, height, right_edge_y, bottom_edge_x } }
+    Call 2 — intent-specific planning.
+    Routes to planning_math.md (math), planning_svg.md (illustration/concept_analogy/comparison),
+    or planning_mermaid.md (process/architecture/timeline).
+    intent_type and frame_count come from classify_intent() (Call 1).
     """
-    template_path = os.path.join(os.path.dirname(__file__), "prompts", "planning_spatial.md")
-    with open(template_path) as f:
+    _prompts_dir = os.path.join(os.path.dirname(__file__), "prompts")
+    context_block = f"Conversation context:\n{conversation_context}\n\n" if conversation_context else ""
+
+    if intent_type == "math":
+        prompt_file = "planning_math.md"
+    elif intent_type in {"illustration", "concept_analogy", "comparison"}:
+        prompt_file = "planning_svg.md"
+    else:
+        # process, architecture, timeline → Mermaid
+        prompt_file = "planning_mermaid.md"
+
+    with open(os.path.join(_prompts_dir, prompt_file)) as f:
         template = f.read()
-
-    vocab_json  = json.dumps(vocab_plan.model_dump(), indent=2)
-    dims_json   = json.dumps(dimension_map, indent=2)
-
     prompt = (
         template
-        .replace("{{VOCAB_PLAN}}", vocab_json)
-        .replace("{{DIMENSION_MAP}}", dims_json)
+        .replace("{{USER_PROMPT}}", user_prompt)
+        .replace("{{CONVERSATION_CONTEXT}}", context_block)
+        .replace("{{INTENT_TYPE}}", intent_type)
+        .replace("{{FRAME_COUNT}}", str(frame_count))
     )
+    raw = await asyncio.to_thread(call_llm, prompt, prompt_name=prompt_file)
 
-    raw = await asyncio.to_thread(call_llm, prompt, 16000, prompt_name="planning_spatial.md")
     plan_dict = _extract_json(raw)
-    return GenerationPlan(**plan_dict)
+    # Always enforce Call 1's classification — never let Call 2 override it
+    plan_dict["intent_type"] = intent_type
+    plan_dict["frame_count"] = frame_count
+    return VocabularyPlan(**plan_dict)
 
 
 # ---------------------------------------------------------------------------
@@ -288,10 +284,11 @@ def _vocab_plan_to_generation_plan(vocab_plan: VocabularyPlan) -> GenerationPlan
     """
     frames = []
     for i, f in enumerate(vocab_plan.frames):
-        entities_line = ", ".join(f.get("entities_used", []))
+        entities = f.get("entities_used", [])
+        entities_line = f"Entities present: {', '.join(entities)}\n" if entities else ""
         description = (
             f"{f.get('teaching_intent', '')}\n"
-            f"Entities present: {entities_line}\n"
+            f"{entities_line}"
             f"Narration: {f.get('narration', '')}"
         )
         frames.append(FramePlan(

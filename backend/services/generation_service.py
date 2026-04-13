@@ -18,7 +18,6 @@ from pathlib import Path
 from typing import Optional
 
 from core.config import (
-    ENABLE_COMPONENT_GEN,
     MERMAID_INTENT_TYPES,
     MANIM_INTENT_TYPES,
     SVG_INTENT_TYPES,
@@ -28,6 +27,7 @@ from services.Frame_generation.excalidraw_enhancer import enhance
 from services.Frame_generation.planner import (
     GenerationPlan,
     _vocab_plan_to_generation_plan,
+    classify_intent,
     create_vocab_plan,
     generate_all_frames,
     _log,
@@ -39,7 +39,6 @@ from services.Frame_generation.mermaid.mermaid_generator import (
 )
 from services.Frame_generation.manim.manim_generator import generate_manim_frames, manim_available
 from services.Frame_generation.svg.svg_generator import generate_svg_frames, svg_available
-from services.Frame_generation.svg.component_generator import generate_svg_components
 from services.Frame_generation.slide_generator import generate_slide, generate_summary_slide
 
 logger = logging.getLogger(__name__)
@@ -301,17 +300,16 @@ async def run_generation_pipeline(
     # ── Stage 1: Planning ─────────────────────────────────────────────────────
     _log({"event": "stage_start", "stage": "planning"})
 
-    vocab_plan = await create_vocab_plan(message, conversation_context)
+    # Call 1 — classify intent and frame count (fast, ~300 tokens)
+    intent_type, frame_count = await classify_intent(message, conversation_context)
+    _log({"event": "stage_complete", "stage": "planning_classify",
+          "intent_type": intent_type, "frame_count": frame_count})
+    logger.info("Intent classified  intent=%s  frames=%d", intent_type, frame_count)
+
+    # Call 2 — intent-specific planning
+    vocab_plan = await create_vocab_plan(message, conversation_context, intent_type, frame_count)
     _log({"event": "stage_complete", "stage": "planning_phase_a",
           "intent_type": vocab_plan.intent_type, "frame_count": vocab_plan.frame_count})
-
-    component_library: dict = {}
-
-    if ENABLE_COMPONENT_GEN and vocab_plan.intent_type in SVG_INTENT_TYPES and svg_available():
-        _log({"event": "stage_start", "stage": "component_gen"})
-        component_library, _ = await generate_svg_components(vocab_plan)
-        _log({"event": "stage_complete", "stage": "component_gen",
-              "entities": list(component_library.keys())})
 
     plan = _vocab_plan_to_generation_plan(vocab_plan)
 
@@ -341,7 +339,7 @@ async def run_generation_pipeline(
     # ── Stage 2: Frame generation ─────────────────────────────────────────────
     result_payload, ui_output_file = await _run_frame_generation(
         plan, session_id, output_dir, captions, frame_narrations,
-        suggested_followups, notes, component_library,
+        suggested_followups, notes,
     )
 
     # ── Save narration (includes slide narrations from interleaving) ──────────
@@ -365,14 +363,13 @@ async def run_generation_pipeline(
 
 
 async def _run_frame_generation(
-    plan:               GenerationPlan,
-    session_id:         str,
-    output_dir:         str,
-    captions:           list[str],
-    frame_narrations:   list[str],
+    plan:                GenerationPlan,
+    session_id:          str,
+    output_dir:          str,
+    captions:            list[str],
+    frame_narrations:    list[str],
     suggested_followups: list[str],
-    notes:              str,
-    component_library:  dict,
+    notes:               str,
 ) -> tuple[dict, Optional[str]]:
     """
     Dispatch to the correct frame renderer based on intent and availability.
@@ -435,7 +432,7 @@ async def _run_frame_generation(
               "frame_count": plan.frame_count})
 
         svg_dir   = os.path.join(output_dir, "svg")
-        png_paths = await generate_svg_frames(plan, _SVG_PROMPT_TEMPLATE, svg_dir, component_library)
+        png_paths = await generate_svg_frames(plan, _SVG_PROMPT_TEMPLATE, svg_dir)
         _log({"event": "stage_complete", "stage": "frame_generation", "path": "svg"})
 
         accent = plan.shared_style.backgroundColor
@@ -477,7 +474,7 @@ async def _run_frame_generation(
               "frame_count": plan.frame_count})
 
         svg_dir   = os.path.join(output_dir, "svg")
-        png_paths = await generate_svg_frames(plan, _SVG_PROMPT_TEMPLATE, svg_dir, component_library)
+        png_paths = await generate_svg_frames(plan, _SVG_PROMPT_TEMPLATE, svg_dir)
         _log({"event": "stage_complete", "stage": "frame_generation", "path": "svg_fallback"})
 
         accent = plan.shared_style.backgroundColor

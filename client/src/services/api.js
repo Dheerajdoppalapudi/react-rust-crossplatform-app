@@ -268,7 +268,7 @@ export const api = {
   // cancel the stream on component unmount. Pass controller.signal to abort.
   generateVideoStream: (sessionId, onEvent, signal) => {
     const token = getAccessToken()
-    return fetch(`${API_BASE}/api/generate_video/${sessionId}?use_openai_tts=true`, {
+    return fetch(`${API_BASE}/api/generate_video/${sessionId}?use_openai_tts=false`, {
       method: 'POST',
       credentials: 'include',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
