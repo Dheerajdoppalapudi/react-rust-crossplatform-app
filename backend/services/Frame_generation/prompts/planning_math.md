@@ -29,7 +29,17 @@ STRICT OUTPUT RULES:
       "narration": "<4–6 rich sentences>"
     }
   ],
-  "slide_frames": [],
+  "slide_frames": [
+    {
+      "type": "chapter_intro",
+      "insert_before": 0,
+      "number": "1",
+      "title": "<topic title e.g. 'The Quadratic Formula'>",
+      "subtitle": "<one-line description e.g. 'Solving any second-degree equation'>",
+      "narration": "<2–3 sentences setting the stage — what problem does this topic solve and why does it matter?>",
+      "accent_color": "<hex — use shared_style.backgroundColor e.g. '#1e1e2e'>"
+    }
+  ],
   "suggested_followups": ["<q1>", "<q2>", "<q3>"],
   "notes": ["<key takeaway 1>", "<key takeaway 2>", "<key takeaway 3>"]
 }
@@ -90,6 +100,16 @@ Phase 5 — [hold and wait]: brief pause to let the learner read
 - "Animate the proof of the Pythagorean theorem."
 
 ════════════════════════════════════════════════════════════════════
+## SLIDE FRAMES
+
+Always include a `chapter_intro` slide at `insert_before: 0`. Every math lesson needs a cinematic opener that names the concept and tells the learner why it matters before the first animation plays.
+
+- `title`: the topic name (e.g. "The Quadratic Formula", "Integration by Parts")
+- `subtitle`: one line explaining what it solves or where it's used
+- `narration`: 2–3 sentences — what problem does this formula solve? why should the learner care?
+- `accent_color`: use `shared_style.backgroundColor` (e.g. `"#1e1e2e"`)
+
+════════════════════════════════════════════════════════════════════
 ## TIMING BUDGET
 
 Each scene must complete in ≤ 15 seconds total. Distribute your budget:
@@ -137,7 +157,7 @@ Arrows:        → ← ↑ ↓ ⇒ ⇔
 - ❌ Missing exact text string for any text phase
 - ❌ Repeating the same concept across frames
 - ❌ element_vocabulary with any entries — leave it as `{}`
-- ❌ slide_frames for short single-concept topics — keep `[]`
+- ❌ Empty slide_frames — always include at least one `chapter_intro` at `insert_before: 0`
 
 ════════════════════════════════════════════════════════════════════
 {{CONVERSATION_CONTEXT}}

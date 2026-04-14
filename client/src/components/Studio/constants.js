@@ -30,6 +30,16 @@ export const FOLLOWUP_SUGGESTIONS = {
   timeline:        ['What happened between?','Key turning points',    "What's next?",            'The impact'],
 }
 
+// ─── Render mode override ─────────────────────────────────────────────────────
+export const RENDER_MODES = [
+  { id: 'auto',    label: 'Auto',    description: 'AI picks the best format',         color: null },
+  { id: 'manim',   label: 'Manim',   description: 'Math & physics animations',        color: '#1d4ed8', bg: '#dbeafe' },
+  { id: 'svg',     label: 'SVG',     description: 'Illustrated diagrams & analogies', color: '#be185d', bg: '#fce7f3' },
+  { id: 'mermaid', label: 'Mermaid', description: 'Flow & architecture diagrams',     color: '#6d28d9', bg: '#ede9fe' },
+]
+
+export const DEFAULT_RENDER_MODE = RENDER_MODES[0]
+
 // ─── Available models ─────────────────────────────────────────────────────────
 export const MODELS = [
   {

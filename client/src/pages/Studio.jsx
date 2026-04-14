@@ -12,7 +12,7 @@ import UserNotesPanel      from '../components/Studio/UserNotesPanel/index'
 
 import { api } from '../services/api'
 import { useToast } from '../contexts/ToastContext'
-import { DEFAULT_MODEL, FOLLOWUP_SUGGESTIONS } from '../components/Studio/constants'
+import { DEFAULT_MODEL, DEFAULT_RENDER_MODE, FOLLOWUP_SUGGESTIONS } from '../components/Studio/constants'
 
 // ─── Studio ────────────────────────────────────────────────────────────────────
 export default function Studio({ activeConvId, activeConvTitle, activeConvStarred, onActiveConvIdChange, onConversationsRefresh, onRenameConv, onStarConv, onDeleteConv }) {
@@ -47,8 +47,9 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
   }, [])
 
   // ── Prompt input ──────────────────────────────────────────────────────────────
-  const [prompt, setPrompt]               = useState('')
-  const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL)
+  const [prompt, setPrompt]                       = useState('')
+  const [selectedModel, setSelectedModel]         = useState(DEFAULT_MODEL)
+  const [selectedRenderMode, setSelectedRenderMode] = useState(DEFAULT_RENDER_MODE)
   const inputRef           = useRef(null)
   const threadBottomRef    = useRef(null)
   const contentScrollRef   = useRef(null)
@@ -332,6 +333,7 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
         submittedPrompt, activeConvId, capturedPauseContext,
         notesEnabled, selectedModel.provider, selectedModel.model,
         genController.signal,
+        selectedRenderMode?.id !== 'auto' ? selectedRenderMode.id : null,
       )
 
       // CRIT-8: If the user navigated away while we were awaiting the response,
@@ -399,7 +401,7 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
     }
   }, [
     prompt, isBootstrapping, turns, activeConvId, notesEnabled,
-    pauseContext, selectedModel, onActiveConvIdChange,
+    pauseContext, selectedModel, selectedRenderMode, onActiveConvIdChange,
     onConversationsRefresh, runVideoGenerationForTurn, scrollToTop, toast,
   ])
 
@@ -664,6 +666,8 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
           onClearPauseContext={() => setPauseContext(null)}
           selectedModel={selectedModel}
           onModelChange={setSelectedModel}
+          selectedRenderMode={selectedRenderMode}
+          onRenderModeChange={setSelectedRenderMode}
         />
       </Box>
 

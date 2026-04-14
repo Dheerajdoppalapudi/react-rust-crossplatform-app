@@ -68,6 +68,7 @@ async def image_generation(
     notes_enabled:       bool = Form(False),
     provider:            str  = Form("claude"),
     model:               Optional[str] = Form(None),
+    render_mode:         Optional[str] = Form(None),   # 'manim' | 'svg' | 'mermaid' | None
     current_user:        User = Depends(get_current_user),
 ):
     session_id = uuid.uuid4().hex
@@ -135,6 +136,7 @@ async def image_generation(
             output_dir=output_dir,
             conversation_context=conversation_context,
             notes_enabled=notes_enabled,
+            forced_render_mode=render_mode,
         )
 
         # ── Persist ──────────────────────────────────────────────────────────

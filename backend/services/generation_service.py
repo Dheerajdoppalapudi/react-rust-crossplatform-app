@@ -283,12 +283,21 @@ def build_conversation_context(
 
 # ── Main pipeline ─────────────────────────────────────────────────────────────
 
+# Maps frontend render_mode value → canonical intent_type for the planner
+_FORCED_INTENT: dict[str, str] = {
+    "manim":   "math",
+    "svg":     "illustration",
+    "mermaid": "process",
+}
+
+
 async def run_generation_pipeline(
     message:              str,
     session_id:           str,
     output_dir:           str,
     conversation_context: str,
     notes_enabled:        bool,
+    forced_render_mode:   Optional[str] = None,
 ) -> dict:
     """
     Runs the full generation pipeline: Planning → Frame generation → Save outputs.
@@ -302,9 +311,17 @@ async def run_generation_pipeline(
 
     # Call 1 — classify intent and frame count (fast, ~300 tokens)
     intent_type, frame_count = await classify_intent(message, conversation_context)
+
+    # Override intent if the user forced a render mode from the UI
+    if forced_render_mode and forced_render_mode in _FORCED_INTENT:
+        intent_type = _FORCED_INTENT[forced_render_mode]
+        logger.info("Intent overridden by user  render_mode=%s  intent=%s", forced_render_mode, intent_type)
+
     _log({"event": "stage_complete", "stage": "planning_classify",
-          "intent_type": intent_type, "frame_count": frame_count})
-    logger.info("Intent classified  intent=%s  frames=%d", intent_type, frame_count)
+          "intent_type": intent_type, "frame_count": frame_count,
+          "forced": forced_render_mode or "auto"})
+    logger.info("Intent classified  intent=%s  frames=%d  forced=%s",
+                intent_type, frame_count, forced_render_mode or "auto")
 
     # Call 2 — intent-specific planning
     vocab_plan = await create_vocab_plan(message, conversation_context, intent_type, frame_count)

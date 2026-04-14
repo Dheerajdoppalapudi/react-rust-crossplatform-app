@@ -147,13 +147,14 @@ export const api = {
 
   // signal: optional AbortSignal — pass controller.signal to cancel on navigation.
   // timeout: null — generation can run for 60-120+ seconds; no client-side timeout.
-  imageGeneration: async (message, conversationId = null, pauseContext = null, notesEnabled = false, provider = 'claude', model = null, signal = null) => {
+  imageGeneration: async (message, conversationId = null, pauseContext = null, notesEnabled = false, provider = 'claude', model = null, signal = null, renderMode = null) => {
     const formData = new FormData()
     formData.append('message', message)
     formData.append('notes_enabled', String(notesEnabled))
     formData.append('provider', provider)
     if (model)          formData.append('model', model)
     if (conversationId) formData.append('conversation_id', conversationId)
+    if (renderMode)     formData.append('render_mode', renderMode)
     if (pauseContext) {
       formData.append('pause_session_id',  pauseContext.sessionId)
       formData.append('pause_frame_index', String(pauseContext.frameIndex))

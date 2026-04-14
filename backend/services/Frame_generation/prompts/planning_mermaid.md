@@ -39,7 +39,30 @@ You do NOT own: Mermaid syntax, exact node IDs, classDef colors — those belong
       "narration": "<4–6 rich sentences: what the learner sees, the WHY behind it, a real-world example or analogy, the consequence or transition>"
     }
   ],
-  "slide_frames": [],
+  "slide_frames": [
+    {
+      "type": "chapter_intro",
+      "insert_before": 0,
+      "number": "1",
+      "title": "<section title>",
+      "subtitle": "<one-line description of what this section covers>",
+      "narration": "<2–3 sentences setting the stage for this section>",
+      "accent_color": "<hex — matches shared_style.backgroundColor>"
+    },
+    {
+      "type": "text_slide",
+      "layout": "standard",
+      "insert_before": 1,
+      "heading": "<slide heading>",
+      "bullets": [
+        "<bullet — wrap the key word/phrase in [[hl:...]] e.g. 'Results are [[hl:cached]] to avoid repeat lookups'>",
+        "<bullet>",
+        "<bullet>"
+      ],
+      "narration": "<2–4 sentences reading through the key facts on this slide>",
+      "accent_color": "<hex>"
+    }
+  ],
   "suggested_followups": ["<q1>", "<q2>", "<q3>"],
   "notes": ["<bullet 1>", "<bullet 2>", "<bullet 3>", "<bullet 4>", "<bullet 5>"]
 }
@@ -103,21 +126,20 @@ GOOD narration: "When you press Enter, your browser assembles an HTTP GET reques
 ════════════════════════════════════════════════════════════════════
 ## SLIDE FRAMES
 
-`slide_frames` is an optional list of 0–2 visual slides interleaved between diagram frames. For Mermaid topics, use these sparingly — the diagram frames are usually self-explanatory.
+`slide_frames` is a list of 0–2 visual slides interleaved between diagram frames.
 
-**When to add a `chapter_intro` slide:**
-- The topic has 2+ distinct phases (e.g. "client side" then "server side")
-- Add at `insert_before: 0` only
+**Always add a `chapter_intro` at `insert_before: 0`** — every video benefits from a cinematic opener that names the topic and sets context before the first diagram appears.
 
-**When to add a `text_slide layout:standard`:**
-- You have 3–5 key facts or definitions the learner needs before seeing the diagram
+**When to also add a `text_slide layout:standard`:**
+- You have 3–5 key facts, statistics, or definitions the learner needs before seeing the diagram
 - Skip if the diagram frames already cover the same information
 
 **[[hl:...]] markup rule:**
 - Wrap the single most important word/phrase per bullet with `[[hl:...]]`
 - One highlight per bullet only
+- Example: `"Requests are [[hl:load balanced]] across the server pool"`
 
-If the topic is simple and short, `slide_frames` can be an empty list `[]`.
+`slide_frames` may be `[]` only for extremely trivial 1-frame topics.
 
 ════════════════════════════════════════════════════════════════════
 ## INTENT-SPECIFIC GUIDANCE
