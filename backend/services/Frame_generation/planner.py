@@ -64,6 +64,7 @@ class SharedStyle(BaseModel):
     strokeColor: str = "#1e1e1e"
     backgroundColor: str = "#a5d8ff"
     strokeWidth: int = 2
+    palette: dict = {}   # math path: color-as-meaning map (primary, secondary, accent, …)
 
 
 class VocabEntry(BaseModel):
@@ -85,6 +86,9 @@ class VocabularyPlan(BaseModel):
     element_vocabulary: dict = {}   # entity_key → VocabEntry (or raw dict — both accepted)
     frames: list = []               # list of dicts with teaching_intent, entities_used, caption, narration
     slide_frames: list = []         # optional list of chapter_intro / text_slide specs
+    visual_objects: list = []       # math path: objects with persists_frames for cross-frame continuity
+    continuity_plan: dict = {}      # math path: persistent_objects + transition_strategy
+    visual_strategy: str = ""       # math path: e.g. "network_diagram", "equation_cascade"
     suggested_followups: List[str] = []
     notes: Union[str, List[str]] = ""
 
@@ -120,6 +124,9 @@ class GenerationPlan(BaseModel):
     element_vocabulary: dict = {}
     frames: List[FramePlan]
     slide_frames: list = []         # optional list of chapter_intro / text_slide specs
+    visual_objects: list = []       # math path: cross-frame persistent objects
+    continuity_plan: dict = {}      # math path: persistent_objects + transition_strategy
+    visual_strategy: str = ""       # math path: composition pattern
     suggested_followups: List[str] = []
     notes: Union[str, List[str]] = ""
 
@@ -286,8 +293,13 @@ def _vocab_plan_to_generation_plan(vocab_plan: VocabularyPlan) -> GenerationPlan
     for i, f in enumerate(vocab_plan.frames):
         entities = f.get("entities_used", [])
         entities_line = f"Entities present: {', '.join(entities)}\n" if entities else ""
+        # math path extras — included when present so Manim generator has full context
+        focus_line = f"Visual focus: {f['visual_focus']}\n" if f.get("visual_focus") else ""
+        builds_line = f"Builds on: {f['builds_on']}\n" if f.get("builds_on") and f.get("builds_on") != "none" else ""
         description = (
             f"{f.get('teaching_intent', '')}\n"
+            f"{focus_line}"
+            f"{builds_line}"
             f"{entities_line}"
             f"Narration: {f.get('narration', '')}"
         )
@@ -306,6 +318,9 @@ def _vocab_plan_to_generation_plan(vocab_plan: VocabularyPlan) -> GenerationPlan
         element_vocabulary=vocab_plan.element_vocabulary,
         frames=frames,
         slide_frames=vocab_plan.slide_frames,
+        visual_objects=vocab_plan.visual_objects,
+        continuity_plan=vocab_plan.continuity_plan,
+        visual_strategy=vocab_plan.visual_strategy,
         suggested_followups=vocab_plan.suggested_followups,
         notes=vocab_plan.notes,
     )

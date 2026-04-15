@@ -1,13 +1,24 @@
 import { useState } from 'react'
 import { Box, Typography, TextField, IconButton, Tooltip, CircularProgress, Divider,
-         Menu, MenuItem, ListSubheader } from '@mui/material'
+         Menu, MenuItem } from '@mui/material'
 import SendIcon from '@mui/icons-material/Send'
 import AddIcon from '@mui/icons-material/Add'
 import CloseIcon from '@mui/icons-material/Close'
 import PauseCircleOutlineIcon from '@mui/icons-material/PauseCircleOutline'
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown'
+import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined'
+import FunctionsOutlinedIcon from '@mui/icons-material/FunctionsOutlined'
+import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined'
+import AccountTreeOutlinedIcon from '@mui/icons-material/AccountTreeOutlined'
 import { useTheme } from '@mui/material'
 import { MODELS, RENDER_MODES } from './constants'
+
+const RENDER_MODE_ICONS = {
+  auto:    <AutoAwesomeOutlinedIcon sx={{ fontSize: 13 }} />,
+  manim:   <FunctionsOutlinedIcon  sx={{ fontSize: 13 }} />,
+  svg:     <BrushOutlinedIcon      sx={{ fontSize: 13 }} />,
+  mermaid: <AccountTreeOutlinedIcon sx={{ fontSize: 13 }} />,
+}
 
 export default function PromptBar({
   prompt,
@@ -190,14 +201,6 @@ export default function PromptBar({
                     },
                   }}
                 >
-                  <ListSubheader sx={{
-                    fontSize: 10, fontWeight: 700, letterSpacing: '0.08em',
-                    color: theme.palette.text.secondary, lineHeight: '30px',
-                    textTransform: 'uppercase', bgcolor: 'background.paper',
-                    px: 2,
-                  }}>
-                    Claude
-                  </ListSubheader>
                   {claudeModels.map((m) => (
                     <MenuItem
                       key={m.id}
@@ -212,16 +215,8 @@ export default function PromptBar({
                     </MenuItem>
                   ))}
 
-                  <Divider sx={{ my: 0.5 }} />
+                  <Divider sx={{ my: 0.5, mx: 1.5, borderColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)' }} />
 
-                  <ListSubheader sx={{
-                    fontSize: 10, fontWeight: 700, letterSpacing: '0.08em',
-                    color: theme.palette.text.secondary, lineHeight: '30px',
-                    textTransform: 'uppercase', bgcolor: 'background.paper',
-                    px: 2,
-                  }}>
-                    OpenAI
-                  </ListSubheader>
                   {openaiModels.map((m) => (
                     <MenuItem
                       key={m.id}
@@ -268,12 +263,12 @@ export default function PromptBar({
                     transition: 'all 0.15s',
                   }}
                 >
-                  {selectedRenderMode?.id !== 'auto' && (
-                    <Box sx={{
-                      width: 6, height: 6, borderRadius: '50%',
-                      bgcolor: selectedRenderMode?.color, flexShrink: 0,
-                    }} />
-                  )}
+                  <Box sx={{
+                    display: 'flex', alignItems: 'center', flexShrink: 0,
+                    color: selectedRenderMode?.id !== 'auto' ? selectedRenderMode?.color : theme.palette.text.secondary,
+                  }}>
+                    {RENDER_MODE_ICONS[selectedRenderMode?.id]}
+                  </Box>
                   <Typography sx={{ fontSize: 12, fontWeight: 500, lineHeight: 1 }}>
                     {selectedRenderMode?.id === 'auto' ? 'Auto' : selectedRenderMode?.label}
                   </Typography>
@@ -300,14 +295,6 @@ export default function PromptBar({
                     },
                   }}
                 >
-                  <ListSubheader sx={{
-                    fontSize: 10, fontWeight: 700, letterSpacing: '0.08em',
-                    color: theme.palette.text.secondary, lineHeight: '30px',
-                    textTransform: 'uppercase', bgcolor: 'background.paper',
-                    px: 2,
-                  }}>
-                    Render Mode
-                  </ListSubheader>
                   {RENDER_MODES.map((mode) => (
                     <MenuItem
                       key={mode.id}
@@ -316,14 +303,12 @@ export default function PromptBar({
                       sx={{ px: 2, py: 0.75, mx: 0.5, borderRadius: '8px' }}
                     >
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
-                        {mode.color ? (
-                          <Box sx={{
-                            width: 8, height: 8, borderRadius: '50%',
-                            bgcolor: mode.color, flexShrink: 0,
-                          }} />
-                        ) : (
-                          <Box sx={{ width: 8, height: 8, flexShrink: 0 }} />
-                        )}
+                        <Box sx={{
+                          color: mode.color || theme.palette.text.disabled,
+                          display: 'flex', alignItems: 'center', flexShrink: 0,
+                        }}>
+                          {RENDER_MODE_ICONS[mode.id]}
+                        </Box>
                         <Box>
                           <Typography sx={{ fontSize: 13, fontWeight: 500, lineHeight: 1.3 }}>
                             {mode.label}

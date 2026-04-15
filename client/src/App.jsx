@@ -48,6 +48,14 @@ const buildTheme = (mode) =>
             backgroundColor: mode === 'dark' ? '#111111' : '#f8fafc',
             fontFamily: '"Sora", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
           },
+          '::selection': {
+            backgroundColor: 'rgba(20, 184, 166, 0.35)',
+            color: 'inherit',
+          },
+          '::-moz-selection': {
+            backgroundColor: 'rgba(20, 184, 166, 0.35)',
+            color: 'inherit',
+          },
         },
       },
     },

@@ -269,7 +269,7 @@ export const api = {
   // cancel the stream on component unmount. Pass controller.signal to abort.
   generateVideoStream: (sessionId, onEvent, signal) => {
     const token = getAccessToken()
-    return fetch(`${API_BASE}/api/generate_video/${sessionId}?use_openai_tts=false`, {
+    return fetch(`${API_BASE}/api/generate_video/${sessionId}?use_openai_tts=true`, {
       method: 'POST',
       credentials: 'include',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -289,22 +289,46 @@ export const api = {
 
         const reader  = res.body.getReader()
         const decoder = new TextDecoder()
-        let buffer    = ''
+        let buffer       = ''
+        let terminalSeen = false  // tracks whether a 'done' or 'error' event arrived
+
+        const processLine = (line) => {
+          if (!line.startsWith('data: ')) return
+          try {
+            const event = JSON.parse(line.slice(6))
+            if (event.type === 'done' || event.type === 'error') terminalSeen = true
+            onEvent(event)
+          } catch {}
+        }
 
         try {
           while (true) {
             const { done, value } = await reader.read()
-            if (done) break
 
-            buffer += decoder.decode(value, { stream: true })
-            const lines = buffer.split('\n')
-            buffer = lines.pop() ?? ''
-
-            for (const line of lines) {
-              if (line.startsWith('data: ')) {
-                try { onEvent(JSON.parse(line.slice(6))) } catch {}
-              }
+            if (value) {
+              buffer += decoder.decode(value, { stream: !done })
+              const lines = buffer.split('\n')
+              // Keep the last (potentially incomplete) line in the buffer,
+              // unless the stream is ending — then flush everything.
+              buffer = done ? '' : (lines.pop() ?? '')
+              for (const line of lines) processLine(line)
             }
+
+            if (done) {
+              // Flush any remaining buffer content (handles the case where the
+              // final SSE event arrives in the last chunk without a trailing \n).
+              if (buffer) {
+                for (const line of buffer.split('\n')) processLine(line)
+                buffer = ''
+              }
+              break
+            }
+          }
+
+          // If the stream closed without a terminal event the video phase would
+          // stay as 'generating' forever — surface it as an error.
+          if (!terminalSeen) {
+            onEvent({ type: 'error', message: 'Stream ended unexpectedly. Please try again.' })
           }
         } catch (err) {
           // AbortError means the caller cancelled — not an error to surface.

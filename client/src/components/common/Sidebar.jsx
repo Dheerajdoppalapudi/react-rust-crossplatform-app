@@ -402,7 +402,7 @@ const Sidebar = ({
   const newChatShortcut = isMac ? '⇧⌘O' : 'Ctrl+Shift+O'
   const searchShortcut  = isMac ? '⌘K'  : 'Ctrl+K'
 
-  const sidebarBg = isDark ? '#161616' : '#fafafa'
+  const sidebarBg = isDark ? '#161616' : '#eef0f4'
 
   // ── Keyboard shortcuts ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -484,6 +484,7 @@ const Sidebar = ({
           px: open ? 0.75 : 0, height: 46,
           borderBottom: `1px solid ${theme.palette.divider}`,
           gap: 0.5,
+          margin: '6px',
         }}>
           <Tooltip title={open ? 'Collapse' : 'Expand'} placement="right" arrow>
             <Box
@@ -509,7 +510,7 @@ const Sidebar = ({
 
           {open && (
             <Typography sx={{
-              fontWeight: 700, fontSize: 13.5, letterSpacing: '-0.2px',
+              fontWeight: 600, fontSize: 26, letterSpacing: '-0.2px', marginLeft:'4px',
               color: theme.palette.text.primary, whiteSpace: 'nowrap', flex: 1,
             }}>
               Zenith

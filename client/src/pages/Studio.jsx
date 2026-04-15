@@ -254,24 +254,33 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
     // Always clear stale pause context when switching conversations
     setPauseContext(null)
 
-    // CRIT-7: Abort in-flight generation and conversation load on conv switch.
+    // Always abort in-flight generation and conversation loads.
     generationAbortRef.current?.abort()
     loadAbortRef.current?.abort()
-    for (const controller of videoAbortControllersRef.current.values()) {
-      controller.abort()
-    }
-    videoAbortControllersRef.current.clear()
 
     if (activeConvId && activeConvId !== loadedConvIdRef.current) {
+      // User switched to a different conversation — abort in-flight video streams.
+      for (const controller of videoAbortControllersRef.current.values()) {
+        controller.abort()
+      }
+      videoAbortControllersRef.current.clear()
       loadedConvIdRef.current = activeConvId
       loadConversationByIdRef.current(activeConvId)
     } else if (!activeConvId && loadedConvIdRef.current !== null) {
+      // User opened a new chat — abort in-flight video streams.
+      for (const controller of videoAbortControllersRef.current.values()) {
+        controller.abort()
+      }
+      videoAbortControllersRef.current.clear()
       loadedConvIdRef.current = null
       setTurns([])
       setPrompt('')
       setIsBootstrapping(false)
       scrollToTop()
     }
+    // If activeConvId === loadedConvIdRef.current: the URL updated to reflect our
+    // own handleGenerate navigation (we set the ref before calling navigate).
+    // Do NOT abort video controllers — the SSE stream was just started.
   }, [activeConvId, scrollToTop])
 
   // ── Submit handler ────────────────────────────────────────────────────────────

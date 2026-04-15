@@ -16,6 +16,7 @@ Fixes applied:
 import asyncio
 import json
 import logging
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -100,7 +101,7 @@ def get_media_token(
 @router.post("/api/generate_video/{session_id}")
 async def generate_video(
     session_id:     str,
-    use_openai_tts: bool = False,
+    use_openai_tts: bool = True,
     current_user:   User = Depends(get_current_user),
 ):
     """
@@ -150,7 +151,11 @@ async def generate_video(
     if not narration_path.exists():
         raise HTTPException(status_code=404, detail="narration.txt not found")
 
-    captions        = json.loads(frames_path.read_text()).get("captions", [])
+    try:
+        captions = json.loads(frames_path.read_text()).get("captions", [])
+    except (json.JSONDecodeError, OSError):
+        raise HTTPException(status_code=404, detail="frames.json is missing or corrupted — re-run image generation")
+
     narration_texts = parse_narration(narration_path.read_text())
 
     while len(narration_texts) < len(captions):
@@ -180,7 +185,6 @@ async def generate_video(
             )
 
     async def event_stream():
-        import time
         t_start = time.time()
 
         def elapsed() -> float:
