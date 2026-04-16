@@ -48,35 +48,6 @@ If any phase is ambiguous, fill the gap with good visual judgment while staying 
 - Scene background: `self.camera.background_color = "#1e1e2e"` at the start of construct
 
 ════════════════════════════════════════════════════════════════════
-## ⚠️ VISUAL GUARDRAILS — PREVENT OVERLAP AND CLIPPING
-
-### Canvas bounds (MEMORIZE)
-Manim's 16:9 canvas spans **x: −7.1 → +7.1** and **y: −4.0 → +4.0**.
-Safe zone: **x: −6.3 → +6.3** and **y: −3.5 → +3.5**. Stay inside.
-
-### Bounds checking — apply to EVERY text object
-After positioning any Text object, mentally verify:
-- Right edge fits: for Text at `move_to(RIGHT * X)` with N characters, ensure `X + (N * 0.18) < 6.3`
-- If a text string is longer than 20 characters, use `font_size ≤ 32`
-- If a text string is longer than 30 characters, use `font_size ≤ 28`
-
-### Max 6 visible text objects
-Never have more than 6 readable text objects on screen at the same time.
-Before adding text object #7, FadeOut or set_opacity(0.2) on the oldest/least relevant text.
-
-### Equation cascade y-floor
-When stacking equations downward, if the next equation would fall below `y = -2.5`:
-1. FadeOut all previous equations except the most recent one
-2. Move the most recent one to `UP * 2.0`
-3. Continue stacking from there
-
-### Computation text goes in dedicated zones ONLY
-Arithmetic strings like "1.0×0.4 + 0.5×0.3 = 0.55" NEVER overlap with diagram elements.
-Place them in:
-- The right panel (x ≥ 2.0 after diagram shrinks left), OR
-- Below the diagram (y ≤ -1.5)
-
-════════════════════════════════════════════════════════════════════
 ## ⚠️ LaTeX is NOT available — Text() ONLY
 
 **NEVER use** `MathTex`, `Tex`, `SingleStringMathTex`, or any LaTeX-based class.
@@ -139,6 +110,7 @@ body  = Text("Energy of motion", font_size=28, color=GRAY)
 rect  = Rectangle(width=3, height=2, color=BLUE, fill_opacity=0.3, fill_color=BLUE)
 circ  = Circle(radius=1, color=RED, fill_opacity=0.5, fill_color=RED)
 sq    = Square(side_length=2, color=GREEN)
+tri   = Triangle(color=YELLOW)
 arrow = Arrow(start=LEFT*2, end=RIGHT*2, color=WHITE)
 line  = Line(start=UP, end=DOWN, color=GRAY)
 dot   = Dot(point=ORIGIN, color=RED, radius=0.08)
@@ -211,6 +183,9 @@ self.wait(1)
 # Use run_time for pacing — longer = more dramatic
 self.play(Write(formula), run_time=1.5)
 
+# Use rate_func for easing
+self.play(obj.animate.shift(RIGHT*3), rate_func=smooth, run_time=1)
+
 # Simultaneous related animations feel connected
 self.play(
     obj1.animate.set_color(YELLOW),
@@ -234,7 +209,15 @@ self.play(
 ```
 
 ════════════════════════════════════════════════════════════════════
-## LAYOUT TEMPLATES — pick ONE based on the blueprint's LAYOUT header
+## LAYOUT TEMPLATES — pick ONE, copy the skeleton, fill in your content
+
+The planning blueprint tells you which template to use (`LAYOUT: <name>`). **Copy the skeleton exactly — do not invent your own coordinates.**
+
+### Canvas bounds (MEMORIZE)
+Manim's 16:9 canvas spans **x: −7.1 → +7.1** and **y: −4.0 → +4.0**.
+Anything past x=±6.5 or y=±3.8 is clipped. Always stay inside these bounds.
+
+---
 
 ### Template A — `eq_cascade_only` (pure equation derivation, NO axes or diagrams)
 ```python
@@ -253,172 +236,82 @@ for eq_str, note_str, color in steps:
     self.play(prev_objs.animate.set_opacity(0.3), Write(eq), run_time=0.8)
     prev_objs = VGroup(eq)
     y -= 0.85
-    # Y-FLOOR CHECK: if running out of space, clear old content and reset
-    if y < -2.0:
-        self.play(FadeOut(prev_objs), run_time=0.3)
-        prev_objs = VGroup()
-        y = 1.5
+    if y < -2.0:            # out of space — clear and reset
+        self.play(FadeOut(prev_objs)); prev_objs = VGroup(); y = 1.0
 ```
 
 ---
 
 ### Template B — `axes_left_eq_right` (graph + equations side-by-side)
 
-**USE THIS any time the scene has BOTH a graph/plot AND equations.**
+**USE THIS any time the scene has BOTH a graph/plot AND equations or step-by-step derivation.**
 
 ```python
-# ── LEFT PANEL: graph (x: -6 to 0) ──────────────────────────────
+# ── Graph: constrained to LEFT half ──────────────────────────────
 axes = Axes(
     x_range=..., y_range=...,
     x_length=5.5, y_length=4.0,          # never exceed these
     axis_config={"color": GRAY, "stroke_width": 1.5},
 )
-axes.shift(LEFT * 2.8 + DOWN * 0.3)      # center at x ≈ -2.8
+axes.shift(LEFT * 2.8 + DOWN * 0.3)      # center of graph is at x ≈ -2.8
+                                          # rightmost point of axes ≈ x = 0.0
+x_lbl = Text("x", font_size=20, color=GRAY).next_to(axes.x_axis.get_right(), RIGHT, buff=0.1)
+y_lbl = Text("y", font_size=20, color=GRAY).next_to(axes.y_axis.get_top(), UP, buff=0.1)
 
 # Tick labels — manual only, never numbers_to_include
 for val in range(...):
-    lbl = Text(str(val), font_size=16, color=GRAY)
-    lbl.next_to(axes.c2p(val, 0), DOWN, buff=0.15)
-    self.add(lbl)
+    Text(str(val), font_size=16, color=GRAY).next_to(axes.c2p(val, 0), DOWN, buff=0.15)
 
-# ── RIGHT PANEL: equations (x: 2.5 to 6.3) ──────────────────────
+# ── Equations: RIGHT half only (x ≥ 2.5) ─────────────────────────
+# First equation anchors the column; subsequent ones use next_to(prev, DOWN)
 eq1 = Text("...", font_size=36, color=WHITE).move_to(RIGHT * 3.8 + UP * 1.8)
 note1 = Text("...", font_size=24, color=GRAY).next_to(eq1, DOWN, buff=0.3)
 eq2 = Text("...", font_size=36, color=YELLOW).next_to(note1, DOWN, buff=0.3)
-# Chain with next_to — NEVER hardcode y positions after the anchor
+# Keep stacking downward with next_to — NEVER use move_to(RIGHT*3.8 + UP*X) for subsequent items
+# Stop when the bottom item reaches y = -2.5
 ```
 
 ---
 
-### Template C — `axes_center_eq_top` (wide graph, title floats above)
+### Template C — `axes_center_eq_top` (wide graph, title+equation float above)
 ```python
 axes = Axes(x_range=..., y_range=..., x_length=7.0, y_length=3.2)
-axes.shift(DOWN * 1.1)           # graph center at y ≈ -1.1
+axes.shift(DOWN * 1.1)           # graph center at y ≈ -1.1; top edge ≈ y = 0.5
 
-title = Text("...", font_size=40, color=BLUE).move_to(UP * 3.3)
-eq    = Text("...", font_size=34, color=WHITE).move_to(UP * 2.5)
+title = Text("...", font_size=40, color=BLUE).move_to(UP * 3.3)   # above graph
+eq    = Text("...", font_size=34, color=WHITE).move_to(UP * 2.5)  # gap between title and axes top
+# Nothing placed between y=0.5 and y=2.5 — that space is clear for the graph top
+x_lbl = Text("x", font_size=20, color=GRAY).next_to(axes.x_axis.get_right(), RIGHT, buff=0.1)
+y_lbl = Text("y", font_size=20, color=GRAY).next_to(axes.y_axis.get_top(), UP, buff=0.1)
 ```
 
 ---
 
-### Template D — `diagram_only` (pre-scaled diagram with static sidebar)
+### Template D — `diagram_only` (network / matrix / pipeline with sidebar annotations)
+
+**When the diagram has side annotations (loss value, output values, labels outside the diagram): shrink the diagram to 75-80% and shift it LEFT to free a right sidebar.**
 
 ```python
 title = Text("...", font_size=42, color=BLUE).to_edge(UP)
 
-# Build diagram, then scale+shift BEFORE animating
-diagram = VGroup(...)          # all diagram elements
-diagram.scale(0.80)
-diagram.shift(LEFT * 1.2)     # rightmost edge ≈ x = 3.5
+# Build the diagram (network / matrix / pipeline) first, then scale+shift it
+diagram = VGroup(...)          # all diagram elements grouped together
+diagram.scale(0.80)            # 80% scale — fits comfortably in left 2/3 of canvas
+diagram.shift(LEFT * 1.2)     # shift left — rightmost edge ≈ x = 3.5
 
-# Static sidebar (x ≥ 4.0)
-loss = Text("Loss = 2.4", font_size=34, color=RED).move_to(RIGHT * 5.0 + UP * 0.5)
-info = Text("η = 0.01", font_size=28, color=GRAY).move_to(RIGHT * 5.0 + DOWN * 0.5)
+# Sidebar annotations go in x ≥ 4.0 (right panel, clearly separated)
+loss_label = Text("Loss = 2.4", font_size=36, color=RED).move_to(RIGHT * 5.0 + UP * 0)
+output_val = Text("0.72", font_size=28, color=GREEN).move_to(RIGHT * 5.0 + UP * 1.0)
+# Always check: RIGHT * 5.0 + text_half_width < 6.5 — if text is long, use font_size=28 or smaller
+
+caption = Text("...", font_size=26, color=GRAY).to_edge(DOWN)
 ```
-
----
-
-### Template E — `diagram_shrink_right` (BUILD full → SHRINK left → WORK right)
-
-**This is the key pattern for frames that need both a diagram AND multi-step math.**
-
-```python
-title = Text("...", font_size=42, color=BLUE).to_edge(UP)
-
-# ── PHASE 1: Build diagram at FULL SIZE, centered ────────────────
-# Let the viewer see and understand the structure first
-
-def make_layer(n, x, color, radius=0.3):
-    neurons = VGroup(*[
-        Circle(radius=radius, color=color, fill_opacity=0.15, fill_color=color)
-        for _ in range(n)
-    ])
-    neurons.arrange(DOWN, buff=0.6)
-    neurons.move_to(RIGHT * x)
-    return neurons
-
-inp = make_layer(2, -3, BLUE)
-hid = make_layer(3, 0, TEAL)
-out = make_layer(1, 3, GREEN)
-
-# Build connections
-arrows_ih = VGroup()
-for n1 in inp:
-    for n2 in hid:
-        arrows_ih.add(Arrow(n1.get_right(), n2.get_left(), buff=0.05,
-                            color=GRAY, stroke_width=1.5, stroke_opacity=0.4,
-                            max_tip_length_to_length_ratio=0.08))
-arrows_ho = VGroup()
-for n1 in hid:
-    for n2 in out:
-        arrows_ho.add(Arrow(n1.get_right(), n2.get_left(), buff=0.05,
-                            color=GRAY, stroke_width=1.5, stroke_opacity=0.4,
-                            max_tip_length_to_length_ratio=0.08))
-
-# Layer labels
-inp_lbl = Text("Input", font_size=22, color=GRAY).next_to(inp, DOWN, buff=0.4)
-hid_lbl = Text("Hidden", font_size=22, color=GRAY).next_to(hid, DOWN, buff=0.4)
-out_lbl = Text("Output", font_size=22, color=GRAY).next_to(out, DOWN, buff=0.4)
-
-# Group EVERYTHING that is the diagram
-diagram_group = VGroup(inp, hid, out, arrows_ih, arrows_ho, inp_lbl, hid_lbl, out_lbl)
-
-# Animate construction
-self.play(LaggedStart(*[Create(n) for n in inp], lag_ratio=0.1), run_time=0.6)
-self.play(LaggedStart(*[Create(a) for a in arrows_ih], lag_ratio=0.01, run_time=0.6))
-self.play(LaggedStart(*[Create(n) for n in hid], lag_ratio=0.1), run_time=0.6)
-self.play(LaggedStart(*[Create(a) for a in arrows_ho], lag_ratio=0.02, run_time=0.4))
-self.play(LaggedStart(*[Create(n) for n in out], lag_ratio=0.1), run_time=0.4)
-self.play(FadeIn(inp_lbl), FadeIn(hid_lbl), FadeIn(out_lbl))
-self.wait(1.5)    # ← Let the viewer absorb the structure
-
-# ── PHASE 2: SHRINK and SLIDE left ───────────────────────────────
-# Smooth animated transition — diagram becomes a small reference on the left
-self.play(
-    diagram_group.animate.scale(0.55).move_to(LEFT * 3.8 + DOWN * 0.3),
-    run_time=0.8
-)
-self.wait(0.3)
-
-# ── PHASE 3: RIGHT PANEL — equations and computation ─────────────
-# Anchor the right column at this position:
-eq1 = Text("h = x₁·w₁ + x₂·w₂", font_size=36, color=WHITE)
-eq1.move_to(RIGHT * 2.8 + UP * 2.0)    # RIGHT PANEL ANCHOR
-self.play(Write(eq1), run_time=0.8)
-self.wait(0.4)
-
-eq2 = Text("= 1.0·0.4 + 0.5·0.3 = 0.55", font_size=34, color=YELLOW)
-eq2.next_to(eq1, DOWN, buff=0.4)        # chained from anchor
-self.play(Write(eq2), run_time=0.8)
-self.wait(0.4)
-
-eq3 = Text("ŷ = h·v = 0.55·0.5 = 0.275", font_size=34, color=GREEN)
-eq3.next_to(eq2, DOWN, buff=0.4)
-self.play(
-    eq1.animate.set_opacity(0.3),         # dim old, focus on new
-    Write(eq3),
-    run_time=0.8
-)
-self.wait(0.3)
-
-box = SurroundingRectangle(eq3, color=GOLD, buff=0.15)
-self.play(Create(box))
-self.wait(1.5)
-```
-
-**Template E rules:**
-- Diagram is built centered and shown at full size for ≥ 1.5 seconds
-- scale(0.5–0.6) + move_to(LEFT*3.5 to LEFT*4.0) in a single animate call
-- Right panel anchor: `RIGHT * 2.5 to RIGHT * 3.5` + `UP * 2.0`
-- Right panel equations: font_size=34–38, chain with next_to(prev, DOWN, buff=0.3–0.5)
-- Dim older equations (set_opacity 0.3) as new ones appear
-- Never place computation text on or near the shrunk diagram
 
 ---
 
 ### Axis tick labels — manual only
 ```python
-# NEVER use numbers_to_include= — it requires LaTeX and crashes
+# NEVER use numbers_to_include= in Axes or NumberLine — it requires LaTeX and crashes
 for x_val in range(-2, 4):
     lbl = Text(str(x_val), font_size=16, color=GRAY)
     lbl.next_to(axes.c2p(x_val, 0), DOWN, buff=0.15)
@@ -428,7 +321,7 @@ for x_val in range(-2, 4):
 ════════════════════════════════════════════════════════════════════
 ## REUSABLE VISUAL PATTERNS
 
-### Pattern 1 — Neural Network Layers
+### Pattern 1 — Neural Network Layer Diagram
 ```python
 def create_layer(n_neurons, x_pos, color=BLUE, radius=0.25):
     neurons = VGroup(*[
@@ -443,20 +336,22 @@ def connect_layers(layer1, layer2, color=GRAY):
     arrows = VGroup()
     for n1 in layer1:
         for n2 in layer2:
-            arr = Arrow(n1.get_right(), n2.get_left(), buff=0.05,
-                        color=color, stroke_width=1.5, stroke_opacity=0.4,
-                        max_tip_length_to_length_ratio=0.08)
+            arr = Arrow(
+                n1.get_right(), n2.get_left(),
+                buff=0.05, color=color, stroke_width=1.5, stroke_opacity=0.4,
+                max_tip_length_to_length_ratio=0.08
+            )
             arrows.add(arr)
     return arrows
 ```
 
-### Pattern 2 — Selective Weight Label (only 1-2 key edges)
+### Pattern 2 — Data Flow Pulse
 ```python
-# Label ONLY the specific edge being discussed — never all edges
-arrow_of_interest = arrows_ih[2]   # e.g. the arrow from inp[0] to hid[1]
-w_label = Text("w₁=0.4", font_size=18, color=ORANGE)
-w_label.move_to(arrow_of_interest.get_center() + UP * 0.2)
-self.play(FadeIn(w_label))
+def pulse_through(self, layers, arrow_groups, pulse_color=YELLOW, rt=0.4):
+    for i, layer in enumerate(layers):
+        self.play(*[n.animate.set_color(pulse_color) for n in layer], run_time=rt)
+        if i < len(arrow_groups):
+            self.play(*[a.animate.set_color(pulse_color) for a in arrow_groups[i]], run_time=rt*0.5)
 ```
 
 ### Pattern 3 — Matrix Grid
@@ -484,20 +379,12 @@ def create_matrix_display(values, x_pos, y_pos, cell_size=0.55, color=BLUE, labe
     return result, cells, texts
 ```
 
-### Pattern 4 — Equation Cascade with Y-Floor
+### Pattern 4 — Equation Cascade
 ```python
 def equation_cascade(self, steps, start_y=2.0, step_spacing=0.9):
     all_objs = []
     y = start_y
     for i, (eq_str, note_str, eq_color) in enumerate(steps):
-        # Y-FLOOR CHECK
-        if y < -2.0:
-            self.play(*[FadeOut(o) for o in all_objs[:-1]], run_time=0.3)
-            last = all_objs[-1]
-            self.play(last.animate.move_to(UP * 2.0), run_time=0.4)
-            all_objs = [last]
-            y = 1.0
-
         if all_objs:
             self.play(*[o.animate.set_opacity(0.35) for o in all_objs], run_time=0.3)
         if note_str:
@@ -593,8 +480,8 @@ class GeneratedScene(ThreeDScene):
 - Title `to_edge(UP)`, captions `to_edge(DOWN)`, diagram/graph in center
 - Minimum `buff=0.3` between elements — use `next_to()`, never stack at the same y
 - Fade or dim (`set_opacity(0.3)`) old content before adding new content at the same position
-- Maximum 5–6 text objects visible and readable at once
-- Font sizes: title=42-48, main equation=36-44, labels=26-32, annotations=20-26
+- Maximum 5–6 objects visible and readable at once
+- Font sizes: title=42-48, main equation=40-48, labels=26-32, annotations=20-26
 - Always `self.wait(0.3+)` between consecutive `self.play()` calls
 - Use `LaggedStart` for lists of similar objects (neurons, cells, steps)
 - Left → right = cause → effect; top → bottom = general → specific
@@ -603,30 +490,47 @@ class GeneratedScene(ThreeDScene):
 ## ANTI-PATTERNS (will cause hard failures)
 
 - `MathTex(...)`, `Tex(...)`, `SingleStringMathTex(...)` — **LaTeX not installed, crashes**
-- `Axes(axis_config={"numbers_to_include": [...]})` — **crashes**
-- `NumberLine(numbers_to_include=[...])` — **crashes**
-- `opacity=` as constructor kwarg — **TypeError**. Use `stroke_opacity=`, `fill_opacity=`, or `.set_opacity()`
-- `shininess=` or `shading=` anywhere — **removed from Manim CE, always crashes**
-- `direction=` on gradient/colorscale objects — **ValueError: Unsupported keyword argument**
-- `buff=` as a constructor kwarg on Circle, Square, Dot, Text, VGroup, etc. — **TypeError**. `buff=` only belongs in `.next_to(obj, DIR, buff=N)` and `.arrange(DIR, buff=N)`
-- `width=` on any shape other than `Rectangle` — **TypeError**. Use `stroke_width=` for line thickness
-- **Classes that do NOT exist** — `Tip3D`, `SurroundingCircle`, `GlowDot`, `GradientRectangle`, `FancyArrow`. Use `Arrow` (default tip), `Circle`, `Dot`, `Rectangle`, `SurroundingRectangle` instead
-- Inventing any kwarg or class name not explicitly in the Manim CE docs — it will crash
+- `Axes(axis_config={"numbers_to_include": [...]})` — **uses LaTeX for labels, crashes**
+- `NumberLine(numbers_to_include=[...])` — same crash
+- `opacity=` as constructor kwarg — **not valid, TypeError**. Use `stroke_opacity=`, `fill_opacity=`, or `.set_opacity()`
 - `ImageMobject(...)` — requires external files
 - `SVGMobject(...)` — requires external SVG files
 - Any import other than `from manim import *`
 - Using a variable after it's been FadedOut without re-creating it
 - `self.play()` with zero arguments
 - Forgetting `self.camera.background_color = "#1e1e2e"`
-- Placing computation text on top of diagram nodes or arrows
-- Text extending past x = ±6.3 (clipped off screen)
-- More than 6 text objects visible simultaneously
-- Stacking equations below y = -2.5 without clearing old content first
+- Placing text at same coordinates as a graph/diagram — use layout templates above
+
+### ⚠️ Text submobject errors (VMobjectFromSVGPath)
+
+When you index or iterate a `Text` object, each element is a raw SVG glyph (`VMobjectFromSVGPath`), NOT a `Text`. It has no `.text`, `.get_text()`, or string attributes.
+
+```python
+# ❌ WRONG — crashes with "VMobjectFromSVGPath has no attribute 'text'"
+label = Text("hello")
+for char in label:
+    do_something(char.text)     # VMobjectFromSVGPath has no .text
+label[0].text                   # same crash
+brace = Brace(label[0], DOWN)
+brace.get_text("letter")        # don't call get_text on a glyph brace
+
+# ✅ CORRECT — never index into Text; treat it as one atomic object
+label = Text("hello", font_size=36, color=BLUE)
+self.play(Write(label))
+
+# If you need a brace label, create a separate Text object:
+brace = Brace(label, DOWN, color=GRAY)
+brace_text = Text("equation", font_size=24, color=GRAY)
+brace_text.next_to(brace, DOWN, buff=0.1)
+self.play(Create(brace), Write(brace_text))
+```
+
+**Rule**: Always use `Text(...)` as a whole unit. Never index it, slice it, or call string methods on its children.
 
 ════════════════════════════════════════════════════════════════════
 ## COMPLETE REFERENCE EXAMPLES
 
-### Example 1 — Forward Pass with Shrink-and-Slide (Template E)
+### Example 1 — Neural Network (Template D: diagram_only with sidebar)
 ```python
 from manim import *
 
@@ -637,89 +541,79 @@ class GeneratedScene(Scene):
         title = Text("Forward Pass", font_size=42, color=BLUE)
         title.to_edge(UP)
         self.play(Write(title))
-        self.wait(0.3)
+        self.wait(0.5)
 
-        # ── BUILD NETWORK FULL SIZE ──
         def make_layer(n, x, color):
             neurons = VGroup(*[
-                Circle(radius=0.3, color=color, fill_opacity=0.15, fill_color=color)
+                Circle(radius=0.25, color=color, fill_opacity=0.15, fill_color=color)
                 for _ in range(n)
             ])
-            neurons.arrange(DOWN, buff=0.6)
+            neurons.arrange(DOWN, buff=0.5)
             neurons.move_to(RIGHT * x)
             return neurons
 
-        inp = make_layer(2, -3, BLUE)
-        hid = make_layer(3, 0, TEAL)
-        out = make_layer(1, 3, GREEN)
+        inp = make_layer(3, -4, BLUE)
+        hid = make_layer(4, 0, TEAL)
+        out = make_layer(2, 3, GREEN)
+
+        # Group, scale, shift left to make room for sidebar
+        network = VGroup(inp, hid, out)
+        network.scale(0.82)
+        network.shift(LEFT * 1.0)
+
+        self.play(LaggedStart(*[Create(n) for n in inp], lag_ratio=0.1), run_time=0.8)
+
+        inp_label = Text("Input", font_size=22, color=GRAY).next_to(inp, DOWN, buff=0.4)
+        hid_label = Text("Hidden", font_size=22, color=GRAY).next_to(hid, DOWN, buff=0.4)
+        out_label = Text("Output", font_size=22, color=GRAY).next_to(out, DOWN, buff=0.4)
+        self.play(FadeIn(inp_label))
 
         arrows1 = VGroup()
         for n1 in inp:
             for n2 in hid:
-                arrows1.add(Arrow(n1.get_right(), n2.get_left(), buff=0.05,
-                                  color=GRAY, stroke_width=1.5, stroke_opacity=0.4,
-                                  max_tip_length_to_length_ratio=0.08))
+                arr = Arrow(n1.get_right(), n2.get_left(), buff=0.05,
+                            color=GRAY, stroke_width=1, stroke_opacity=0.3,
+                            max_tip_length_to_length_ratio=0.06)
+                arrows1.add(arr)
+
+        self.play(
+            LaggedStart(*[Create(a) for a in arrows1], lag_ratio=0.01, run_time=0.8),
+            LaggedStart(*[Create(n) for n in hid], lag_ratio=0.1, run_time=0.8),
+        )
+        self.play(FadeIn(hid_label))
 
         arrows2 = VGroup()
         for n1 in hid:
             for n2 in out:
-                arrows2.add(Arrow(n1.get_right(), n2.get_left(), buff=0.05,
-                                  color=GRAY, stroke_width=1.5, stroke_opacity=0.4,
-                                  max_tip_length_to_length_ratio=0.08))
+                arr = Arrow(n1.get_right(), n2.get_left(), buff=0.05,
+                            color=GRAY, stroke_width=1, stroke_opacity=0.3,
+                            max_tip_length_to_length_ratio=0.06)
+                arrows2.add(arr)
 
-        inp_lbl = Text("Input", font_size=22, color=GRAY).next_to(inp, DOWN, buff=0.4)
-        hid_lbl = Text("Hidden", font_size=22, color=GRAY).next_to(hid, DOWN, buff=0.4)
-        out_lbl = Text("Output", font_size=22, color=GRAY).next_to(out, DOWN, buff=0.4)
-
-        diagram = VGroup(inp, hid, out, arrows1, arrows2, inp_lbl, hid_lbl, out_lbl)
-
-        # Animate construction
-        self.play(LaggedStart(*[Create(n) for n in inp], lag_ratio=0.1), run_time=0.5)
-        self.play(LaggedStart(*[Create(a) for a in arrows1], lag_ratio=0.01, run_time=0.5))
-        self.play(LaggedStart(*[Create(n) for n in hid], lag_ratio=0.1), run_time=0.5)
-        self.play(LaggedStart(*[Create(a) for a in arrows2], lag_ratio=0.02, run_time=0.4))
-        self.play(LaggedStart(*[Create(n) for n in out], lag_ratio=0.1), run_time=0.3)
-        self.play(FadeIn(inp_lbl), FadeIn(hid_lbl), FadeIn(out_lbl))
-        self.wait(1.5)    # let viewer absorb
-
-        # ── SHRINK AND SLIDE LEFT ──
         self.play(
-            diagram.animate.scale(0.55).move_to(LEFT * 3.8 + DOWN * 0.3),
-            run_time=0.8
+            LaggedStart(*[Create(a) for a in arrows2], lag_ratio=0.02, run_time=0.6),
+            LaggedStart(*[Create(n) for n in out], lag_ratio=0.1, run_time=0.6),
         )
-        self.wait(0.3)
+        self.play(FadeIn(out_label))
+        self.wait(0.5)
 
-        # ── RIGHT PANEL: computation ──
-        eq1 = Text("h = x₁·w₁ + x₂·w₂", font_size=36, color=WHITE)
-        eq1.move_to(RIGHT * 2.8 + UP * 1.8)
-        self.play(Write(eq1), run_time=0.8)
-        self.wait(0.4)
+        # Forward pulse
+        for layer, arrows in [(inp, arrows1), (hid, arrows2)]:
+            self.play(*[n.animate.set_color(YELLOW) for n in layer], run_time=0.3)
+            self.play(*[a.animate.set_color(YELLOW).set_opacity(0.8) for a in arrows], run_time=0.3)
+        self.play(*[n.animate.set_color(YELLOW) for n in out], run_time=0.3)
+        self.wait(0.5)
 
-        eq2 = Text("= 1.0·0.4 + 0.5·0.3", font_size=34, color=YELLOW)
-        eq2.next_to(eq1, DOWN, buff=0.4)
-        self.play(Write(eq2), run_time=0.6)
-
-        eq3 = Text("= 0.55", font_size=36, color=YELLOW)
-        eq3.next_to(eq2, DOWN, buff=0.3)
-        self.play(Write(eq3), run_time=0.4)
-        self.wait(0.3)
-
-        # Dim old, show output
-        eq4 = Text("ŷ = h·v = 0.275", font_size=36, color=GREEN)
-        eq4.next_to(eq3, DOWN, buff=0.5)
-        self.play(
-            VGroup(eq1, eq2).animate.set_opacity(0.3),
-            Write(eq4),
-            run_time=0.8
-        )
-        self.wait(0.3)
-
-        box = SurroundingRectangle(eq4, color=GOLD, buff=0.15)
-        self.play(Create(box))
+        # Sidebar — RIGHT panel (x ≥ 4.0)
+        val1 = Text("0.72", font_size=28, color=GREEN).move_to(RIGHT * 5.0 + UP * 0.5)
+        val2 = Text("0.28", font_size=28, color=GREEN).move_to(RIGHT * 5.0 + DOWN * 0.5)
+        loss = Text("Loss: 2.4", font_size=34, color=RED).move_to(RIGHT * 5.0 + DOWN * 1.5)
+        self.play(FadeIn(val1), FadeIn(val2))
+        self.play(FadeIn(loss))
         self.wait(1.5)
 ```
 
-### Example 2 — Quadratic with Graph (Template B)
+### Example 2 — Quadratic Derivation + Graph (Template B: axes_left_eq_right)
 ```python
 from manim import *
 
@@ -760,16 +654,16 @@ class GeneratedScene(Scene):
 
         # ── RIGHT PANEL: equations ──
         eq1 = Text("y = (x−2)(x−3)", font_size=34, color=WHITE)
-        eq1.move_to(RIGHT * 3.2 + UP * 1.5)
+        eq1.move_to(RIGHT * 3.2 + UP * 1.5)    # anchor point
         self.play(Write(eq1), run_time=0.8)
         self.wait(0.4)
 
         note = Text("Roots where y = 0", font_size=26, color=GRAY)
-        note.next_to(eq1, DOWN, buff=0.5)
+        note.next_to(eq1, DOWN, buff=0.5)        # chained from anchor
         self.play(FadeIn(note))
 
         eq2 = Text("x = 2  and  x = 3", font_size=36, color=GREEN)
-        eq2.next_to(note, DOWN, buff=0.4)
+        eq2.next_to(note, DOWN, buff=0.4)         # chained from previous
         self.play(Write(eq2), run_time=0.8)
         self.wait(0.3)
 

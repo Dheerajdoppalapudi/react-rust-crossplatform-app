@@ -1,19 +1,19 @@
 """
-improve.py — AutoResearch loop for SVG prompt self-improvement.
+improve.py — AutoResearch loop for Manim math prompt self-improvement.
 
 Run:
-    python improve.py
+    bash run.sh improve.py
 
 Each iteration:
   1. Snapshot both prompts → history/iter_N/
-  2. Run full pipeline on 3 test prompts
-  3. Vision judge (o4-mini) scores each frame → issues + attributions
+  2. Run full pipeline on 3 math test prompts
+  3. Vision judge (gpt-4o) scores each PNG thumbnail → issues + attributions
   4. Compute final score (hard + judge)
   5. Ratchet: keep prompt only if score improved, else restore
   6. Mutator (o3) rewrites the target prompt with targeted fixes
   7. Repeat
 
-After MAX_ITERATIONS, prompts/svg_prompt.md (and optionally planning_svg.md)
+After MAX_ITERATIONS, prompts/manim_prompt.md (and optionally planning_math.md)
 will have been improved by the best-scoring mutations.
 """
 
@@ -26,21 +26,20 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent / ".env")
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
-TARGET_PROMPT  = "svg"          # "svg" or "vocab" — which prompt to optimize
+TARGET_PROMPT  = "manim"        # "manim" or "planning" — which prompt to optimize
 MAX_ITERATIONS = 5              # start small; increase for overnight runs
 
-GEN_MODEL      = "gpt-4.1"     # must match MODEL in run.py — used for planning + SVG generation
+GEN_MODEL      = "gpt-4.1"     # must match MODEL in run.py — used for planning + Manim generation
 JUDGE_MODEL    = "gpt-4o"      # vision judge — reliable structured output, follows YES/NO format
 MUTATOR_MODEL  = "o3"          # prompt rewriter — strong reasoning for prompt engineering
 
 API_KEY = os.environ["OPENAI_API_KEY"]
 
-# All three prompts must be SVG-path intents (illustration / concept_analogy / comparison).
-# "process" routes to Mermaid in the backend — do not use it here.
+# All three prompts must be math-path intents — they must classify to "math".
 TEST_PROMPTS = [
-    ("illustration",   "explain how an electric mouse works using illustrations"),
-    ("concept_analogy","explain how recursion works using the analogy of mirrors facing each other"),
-    ("comparison",     "compare how TCP and UDP handle data differently"),
+    ("math", "explain gradient descent visually using a loss surface"),
+    ("math", "visualise how the fourier transform decomposes a square wave into sine components"),
+    ("math", "show how the chain rule works step by step with a concrete example"),
 ]
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -50,8 +49,8 @@ _HISTORY_DIR = _HERE / "history"
 _OUTPUT_ROOT = _HERE / "output"
 
 _PROMPT_FILES = {
-    "svg":   _PROMPTS_DIR / "svg_prompt.md",
-    "vocab": _PROMPTS_DIR / "planning_svg.md",   # planning_svg = the SVG-path vocab planner
+    "manim":    _PROMPTS_DIR / "manim_prompt.md",
+    "planning": _PROMPTS_DIR / "planning_math.md",   # math-path planner
 }
 
 client = OpenAI(api_key=API_KEY)
@@ -91,7 +90,7 @@ def _encode_png(png_path: str) -> str:
 
 def llm_judge(png_path: str | None, description: str) -> dict:
     """
-    Score one frame using the vision judge.
+    Score one Manim frame thumbnail using the vision judge.
 
     If png_path is None (render failed), returns score=0 with rendering attribution.
     Otherwise sends the PNG image + description to JUDGE_MODEL.
@@ -101,43 +100,49 @@ def llm_judge(png_path: str | None, description: str) -> dict:
     if png_path is None:
         return {
             "score": 0.0,
-            "issues": ["Frame failed to render — cairosvg error or invalid SVG"],
+            "issues": ["Frame failed to render — Manim error or LaTeX/attribute crash"],
             "attributions": ["rendering"],
         }
 
-    judge_prompt = f"""You are a strict visual quality judge evaluating an educational SVG diagram frame.
+    judge_prompt = f"""You are a strict visual quality judge evaluating a Manim math animation frame (a PNG thumbnail of the last frame).
 
 Frame description (what it should show):
 {description}
 
 ─── PART 1: Binary checks — answer YES or NO only, one per line ───
-1. Are all named entities from the description visually present and recognisable?
-2. Is all text readable and within canvas bounds (nothing clipped or overflowing)?
-3. Are arrows/connections drawn between the correct elements?
-4. Is the layout balanced — no overlapping shapes, adequate spacing between elements?
-5. Does the overall visual match the teaching intent described?
-6. Does the frame visually communicate at least 70% of the educational concept without needing audio — a student who sees only this frame should understand the core idea even without narration?
-7. Are all text labels free of collisions — no label overlaps another label, a shape it does not belong to, or an arrow line?
+1. Are all mathematical concepts mentioned in the description visually present and labelled?
+2. Is all text readable, within canvas bounds, and not overlapping other elements?
+3. Are arrows, axes, and curves drawn correctly and pointing/connecting the right things?
+4. Is the layout clean — no overlapping shapes, adequate spacing, elements not near edges?
+5. Does the visual match the teaching intent described — a student can follow the math story?
+6. Does the frame communicate at least 70% of the mathematical concept without audio — the core idea is clear from the visual alone?
+7. Are all text labels free of collisions — no label overlaps another label, a curve, or an axis?
 
 ─── PART 2: Deep analysis — be specific and ruthless ───
 After the 7 YES/NO lines, write: ISSUES:
 List every problem you see (no limit). For each issue:
-- Describe it precisely: which entity, which position, what is wrong
-- Include measurements if relevant: "text overflows ~40px beyond right edge"
-- Classify as [rendering] (SVG drawing/layout failure) or [planning] (missing/wrong concept)
+- Describe it precisely: which element, which position, what is wrong
+- Classify as [rendering] (Manim drawing/layout failure) or [planning] (missing/wrong concept)
 
 Cover these dimensions:
-SHAPE QUALITY: Do entities look like what they represent? (e.g. does a "server" look like a server — 3D rack appearance, horizontal stripes? Does a "database" look like a cylinder?)
-  - If a shape is just a plain rectangle with a label where it should be a recognisable icon, flag it.
-COMPONENT DETAIL: Are sub-components present and recognisable? (e.g. server should have rack lines, database should have elliptical top, mouse should have scroll wheel and button divider)
-COLOR: Are colors appropriate, distinct, and visually pleasing? Are arrow lines black (#1e1e1e)?
-LAYOUT MATH: Flag exact overlaps, insufficient spacing (< 20px between elements), elements near or outside canvas edges.
-ARROWS/CONNECTIONS: Are they pointing to the right place? Is the arrowhead visible and black? Is there a label where needed? Are bent/orthogonal paths used where appropriate?
-TEXT COLLISION: Are any labels overlapping each other, sitting inside a shape they don't belong to, or crossing an arrow line? For dense/small components, are leader lines used instead of direct placement?
-TEACHING CLARITY (the 70% rule): Does the visual tell the story without audio?
-  - Are key relationships (flow, sequence, cause→effect, A-vs-B contrast) visible — not just implied by labels?
-  - Is the most important concept the visual focal point?
-  - Are any concepts from the description completely absent from the visual?
+MATH CORRECTNESS: Are the shapes, curves, equations, axes and values mathematically accurate?
+  - e.g. does a parabola look like a parabola? Is the loss surface bowl-shaped? Are axis labels correct?
+  - Flag any wrong shape, wrong direction, or mis-labelled value.
+ANIMATION STATE: The thumbnail shows the LAST frame. Does it show the completed state of the animation?
+  - e.g. the final step of a derivation should show all intermediate lines, not just the start
+  - Flag if key intermediate elements seem absent from the final frame.
+TEXT QUALITY: Are all Text() objects readable? Are they placed logically (not inside a curve, not clipped)?
+  - LaTeX MathTex should not appear (LaTeX is not installed) — use only Text() with Unicode
+  - Flag any boxes/question marks in place of symbols — these indicate a font fallback failure
+AXES & CURVES: For Axes objects, are tick labels visible? Are plotted functions smooth and correct?
+  - Check that axis limits are appropriate for the concept being shown
+COLOR: Is the background dark (#1e1e2e or similar)? Are key objects using contrasting colors?
+  - Is the primary concept highlighted vs secondary elements shown dimmer?
+LAYOUT: Is the scene centered? Are elements using the full canvas without being clipped?
+  - Flag elements within 0.3 units of the canvas edge
+TEACHING CLARITY (the 70% rule): Does the visual alone tell the mathematical story?
+  - Are relationships (growth, convergence, decomposition, transformation) visually apparent?
+  - Are key steps or transitions labelled so a student can follow the reasoning?
   - Flag each missing concept as [planning] if never described, or [rendering] if described but not drawn.
 
 If no issues in a dimension, skip that dimension. If everything is perfect, write "- none".
@@ -151,10 +156,10 @@ YES
 YES
 YES
 ISSUES:
-- server icon is a plain rect with no rack stripes or 3D depth [rendering]
-- "Optical Sensor" and "Circuit Board" labels overlap each other — use leader lines [rendering]
-- arrow from browser to server has no arrowhead marker [rendering]
-- TCP ACK arrow (the core teaching concept) is missing [rendering]
+- loss surface shape is flat — should be bowl-shaped 3D paraboloid [rendering]
+- axis labels "x" and "y" overlap the axis lines [rendering]
+- gradient descent arrows are missing — core concept not visualised [planning]
+- text "∂L/∂w" renders as a box — Unicode glyph not supported by default font [rendering]
 """
 
     try:
@@ -180,7 +185,7 @@ ISSUES:
         print(f"    judge call failed: {e}", flush=True)
         return {"score": 0.5, "issues": [f"Judge error: {e}"], "attributions": ["rendering"]}
 
-    # Parse YES/NO answers — robust to o4-mini formatting:
+    # Parse YES/NO answers — robust to gpt-4o formatting:
     #   "1. YES", "YES — explanation", "**YES**", "Yes", numbered issues, etc.
     lines = [l.strip() for l in raw.splitlines() if l.strip()]
     answers = []
@@ -193,7 +198,6 @@ ISSUES:
             in_issues = True
             continue
         if in_issues:
-            # Accept "- text", "1. text", "1) text"
             if line.startswith("-") or re.match(r'^\d+[\.\)]\s', line):
                 issue_text = re.sub(r'^\d+[\.\)]\s*', '', line).lstrip("- ").strip()
                 if "[rendering]" in issue_text.lower():
@@ -207,14 +211,12 @@ ISSUES:
                 if issue_text.lower() not in ("none", ""):
                     issues.append(issue_text)
         else:
-            # Strip leading number/bullet and bold markers, then take first word
             clean = re.sub(r'^\*{0,2}\d+[\.\)]\s*\*{0,2}', '', line).strip()
             clean = re.sub(r'\*+', '', clean).strip()
             first_word = clean.split()[0].upper() if clean else ""
             if first_word in ("YES", "NO"):
                 answers.append(first_word == "YES")
 
-    # Log parse result — helps diagnose future format mismatches
     print(f"    judge parse: {len(answers)}/7 answers, {len(issues)} issues", flush=True)
     if len(answers) != 7:
         print(f"    [WARN] unexpected judge response format. Raw (first 400):\n{raw[:400]}", flush=True)
@@ -242,7 +244,7 @@ async def evaluate(test_prompts: list[tuple]) -> list[dict]:
             print(f"    pipeline failed: {e}", flush=True)
             result = {
                 "intent": intent, "prompt": prompt,
-                "png_paths": [], "retry_flags": [], "svg_texts": [],
+                "mp4_paths": [], "png_paths": [], "retry_flags": [],
                 "descriptions": [], "plan": {}, "run_dir": str(run_dir),
             }
         results.append(result)
@@ -288,9 +290,9 @@ def compute_score(eval_results: list[dict]) -> dict:
             all_attr.extend(judgment["attributions"])
 
         per_prompt.append({
-            "intent":      result.get("intent"),
-            "prompt":      result.get("prompt"),
-            "judge_avg":   sum(prompt_judge_scores) / len(prompt_judge_scores) if prompt_judge_scores else 0.0,
+            "intent":    result.get("intent"),
+            "prompt":    result.get("prompt"),
+            "judge_avg": sum(prompt_judge_scores) / len(prompt_judge_scores) if prompt_judge_scores else 0.0,
         })
 
     render_rate   = rendered / total_frames if total_frames else 0.0
@@ -315,7 +317,7 @@ def compute_score(eval_results: list[dict]) -> dict:
 # ── Switch-target heuristic ───────────────────────────────────────────────────
 
 def should_switch_target(score_history: list[dict]) -> bool:
-    """Switch from svg to vocab if last 3 iterations are mostly planning failures."""
+    """Switch from manim to planning if last 3 iterations are mostly planning failures."""
     if len(score_history) < 3:
         return False
     recent_attr = []
@@ -338,7 +340,7 @@ def mutate_prompt(target: str, issues: list[str], attributions: list[str],
     prompt_path = _PROMPT_FILES[target]
     current_text = prompt_path.read_text(encoding="utf-8")
 
-    issues_text = "\n".join(f"- {iss}" for iss in issues) if issues else "- No specific issues captured — improve overall shape recognisability and layout precision"
+    issues_text = "\n".join(f"- {iss}" for iss in issues) if issues else "- No specific issues captured — improve overall math clarity and layout precision"
     attr_summary = f"{attributions.count('rendering')} rendering failures, {attributions.count('planning')} planning failures"
 
     # Build per-intent breakdown
@@ -348,7 +350,7 @@ def mutate_prompt(target: str, issues: list[str], attributions: list[str],
         for pp in score_result.get("per_prompt", []):
             lines.append(f"  [{pp['intent']}] judge_avg={pp['judge_avg']:.2f}  prompt: {pp['prompt'][:55]}")
         if lines:
-            intent_breakdown = "Per-intent scores (focus fixes on the lowest):\n" + "\n".join(lines)
+            intent_breakdown = "Per-topic scores (focus fixes on the lowest):\n" + "\n".join(lines)
 
     # Build score trend context
     score_context = ""
@@ -357,18 +359,19 @@ def mutate_prompt(target: str, issues: list[str], attributions: list[str],
         best  = max(s["final"] for s in score_history)
         score_context = f"Score trend (recent): {trend}  |  Best so far: {best:.3f}\nCurrent score: {score_result['final']:.3f}" if score_result else ""
 
-    # Identify what's passing consistently — don't touch those sections
+    # Identify what's passing — don't touch those sections
     passing = []
     if score_result:
         if score_result.get("render_rate", 0) >= 1.0:
-            passing.append("render_rate=100% (generation working perfectly — don't change output format rules)")
+            passing.append("render_rate=100% (Manim code runs without errors — don't change safety rules)")
         if score_result.get("no_retry_rate", 0) >= 0.9:
-            passing.append("no_retry_rate≥90% (SVG validity is solid — don't over-restrict SVG syntax)")
+            passing.append("no_retry_rate≥90% (code validity is solid — don't over-restrict Manim API)")
 
     passing_text = ("What is already working well — DO NOT regress these:\n" +
                     "\n".join(f"  ✓ {p}" for p in passing)) if passing else ""
 
-    mutator_prompt = f"""You are an expert prompt engineer. Your job is to improve the SVG generation prompt below so that it produces better-looking educational diagrams.
+    target_label = "Manim animation" if target == "manim" else "math planning"
+    mutator_prompt = f"""You are an expert prompt engineer. Your job is to improve the {target_label} prompt below so that it produces better-quality educational math animations.
 
 {score_context}
 
@@ -381,19 +384,28 @@ Attribution summary: {attr_summary}
 
 {passing_text}
 
+KEY CONSTRAINTS FOR MANIM PROMPTS:
+- LaTeX is NOT installed in the render environment — NEVER suggest MathTex or Tex
+- Only Text() with Unicode math symbols is available: ², √, π, ∂, Σ, ±, ×, →, ∫, θ, α, β
+- Only index Text() objects with subscripts, NEVER index them like arrays (t[0], t[1] causes crashes)
+- Manim version is community edition — only standard Manim API, no plugins
+- background_color must always be set in construct()
+
 YOUR TASK: Rewrite the prompt to fix as many of the above failures as possible.
 
 FREEDOM — you may do any of the following:
 - Add new rules, sections, or examples
 - Remove rules that are vague, contradictory, or unhelpful
 - Restructure or reorder sections for clarity
-- Strengthen visual briefs for entity types that are failing (make them look more like the real thing)
-- Add layout patterns with worked examples (centering math, spacing formulas, column/row calculations)
-- Add color guidance (contrast rules, fill hierarchy, palette constraints)
+- Add concrete Manim code examples for patterns that keep failing
+- Add layout guidance (camera frame size is 8×4.5 units by default)
+- Add color guidance (dark background, bright primary objects, dimmer secondary)
 - Redesign any section from scratch if it is causing the failures
 
 CONSTRAINTS — you must not:
 - Change or remove the `{{{{DIAGRAM_DESCRIPTION}}}}` placeholder — it is the pipeline injection point
+- Change or remove the `{{{{PRIMARY_COLOR}}}}` placeholder — it is the pipeline injection point
+- Suggest MathTex, Tex, or any LaTeX-dependent Manim class
 - Regress anything listed in "what is already working well" above
 - Return anything other than the complete updated prompt text — no explanation, no markdown fences, no preamble
 
@@ -440,11 +452,11 @@ def save_mutation_log(iter_n: int, target: str, issues: list[str], kept: bool):
 async def main():
     target       = TARGET_PROMPT
     best_score   = 0.0
-    best_iter    = 0        # which iteration holds the best-scoring prompt snapshot
+    best_iter    = 0
     score_history: list[dict] = []
 
     print(f"\n{'='*60}")
-    print(f"AutoResearch Loop")
+    print(f"AutoResearch Loop — Manim Math Path")
     print(f"Target: {target}  |  Iterations: {MAX_ITERATIONS}")
     print(f"Test prompts: {len(TEST_PROMPTS)}")
     print(f"{'='*60}\n")
@@ -470,18 +482,18 @@ async def main():
               f"render={score_result['render_rate']:.0%}, no_retry={score_result['no_retry_rate']:.0%})")
 
         for pp in score_result["per_prompt"]:
-            print(f"    [{pp['intent']}] judge_avg={pp['judge_avg']:.3f}")
+            print(f"    [{pp['intent']}] judge_avg={pp['judge_avg']:.3f}  {pp['prompt'][:50]}")
 
         # 4. Ratchet — restore to best-known snapshot if no improvement
         improved = score_result["final"] > best_score
         if improved:
             print(f"  ✓ Improved: {best_score:.3f} → {score_result['final']:.3f} — keeping")
             best_score = score_result["final"]
-            best_iter  = i   # this snapshot is now the best baseline
+            best_iter  = i
         else:
             if best_iter > 0:
                 print(f"  ✗ No improvement ({score_result['final']:.3f} ≤ {best_score:.3f}) — restoring to iter {best_iter}")
-                restore(best_iter)   # ← restore to the BEST snapshot, not current
+                restore(best_iter)
             else:
                 print(f"  ✗ No improvement — restoring current snapshot")
                 restore(i)
@@ -489,14 +501,13 @@ async def main():
         save_mutation_log(i, target, score_result["all_issues"], improved)
 
         # 5. Check if should switch target
-        if target == "svg" and should_switch_target(score_history):
-            print(f"\n  → Switching target: svg_prompt → planning_svg (planning failures dominating)")
-            target = "vocab"
+        if target == "manim" and should_switch_target(score_history):
+            print(f"\n  → Switching target: manim_prompt → planning_math (planning failures dominating)")
+            target = "planning"
 
         # 6. Mutate for next iteration (skip on last iteration)
         if i < MAX_ITERATIONS:
             print(f"\n  Mutating {target} prompt...", flush=True)
-            # Cap at 10 most critical issues — prevents mutator from catastrophic rewrites
             top_issues = score_result["all_issues"][:10]
             top_attrs  = score_result["attributions"][:10]
             new_prompt = mutate_prompt(target, top_issues, top_attrs, score_result, score_history)

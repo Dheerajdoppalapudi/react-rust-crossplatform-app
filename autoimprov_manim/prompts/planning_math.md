@@ -21,8 +21,22 @@ Output ONLY valid JSON. No markdown, no explanation, no code fences. A single JS
 
 STRICT OUTPUT RULES:
 - Your entire response must be ONE valid JSON object — nothing before `{`, nothing after `}`
-- Every string value must use `\"` for quotes and `\n` for newlines — no raw newlines inside strings
 - No comments inside JSON (`//` or `/* */` are illegal)
+
+⚠️ THE MOST COMMON MISTAKE — READ CAREFULLY:
+`teaching_intent` spans multiple lines of content, but it must be a SINGLE JSON string.
+Use `\n` (backslash-n) to represent line breaks — NEVER press Enter inside a string value.
+
+✅ CORRECT — single line with \n escapes:
+  "teaching_intent": "PATTERN: equation_cascade\nLAYOUT: eq_cascade_only\n\nPhase 1 — title: Write 'Quadratic' in BLUE, to_edge(UP).\nPhase 2 — eq: Write 'ax² + bx + c = 0' in WHITE, move_to(UP*2)."
+
+❌ WRONG — literal newlines break JSON parsing:
+  "teaching_intent": "PATTERN: equation_cascade
+  LAYOUT: eq_cascade_only
+
+  Phase 1 — title: Write 'Quadratic' in BLUE"
+
+Apply this rule to ALL multi-line fields: teaching_intent, narration, notes, transition_strategy.
 
 ════════════════════════════════════════════════════════════════════
 ## OUTPUT SCHEMA
@@ -119,30 +133,6 @@ STRICT OUTPUT RULES:
 - Mathematically related things should be visually close
 
 ════════════════════════════════════════════════════════════════════
-## ⚠️ HARD VISUAL LIMITS — THESE PREVENT CLUTTER AND OVERLAP
-
-### Max 6 text objects visible at once
-Never have more than 6 readable text/label objects on screen simultaneously. If a frame needs more text:
-- FadeOut or set_opacity(0.2) on older text BEFORE adding new text
-- Or split the content into two frames
-Count everything: titles, equations, labels, annotations, weight labels. If you're at 6, something must go before anything new appears.
-
-### Computation text NEVER goes on top of diagrams
-Arithmetic steps (like "1.0×0.4 + 0.5×0.3 = 0.55") must go in a **dedicated computation zone**:
-- Below the diagram (y < -1.5), OR
-- In the right sidebar (x > 3.5 after diagram shrinks left)
-- NEVER overlapping with nodes, arrows, or edges of any diagram
-
-### Inline labels on diagrams must be tiny and selective
-- Weight labels on edges: font_size ≤ 18, only on 1-2 KEY edges being discussed — not every edge
-- Node labels ("h", "ŷ"): font_size ≤ 20, inside or directly adjacent to the node
-- NEVER place formulas, computation strings, or multi-word annotations inline on a diagram
-
-### Right-edge guard
-Every text object must fit within x = ±6.3. Long text (> 20 characters) must use font_size ≤ 32.
-If text + position would exceed x = 6.3 on the right, reduce font_size or shift left.
-
-════════════════════════════════════════════════════════════════════
 ## VISUAL STRATEGY PATTERNS
 
 Based on the `visual_strategy` from classification, follow these composition guides:
@@ -167,7 +157,7 @@ Based on the `visual_strategy` from classification, follow these composition gui
 - Draw nodes as Circles with fill_opacity=0.2
 - Connect with Arrows (shows directionality)
 - Animate data flow: successive color changes along the path
-- Weight labels: font_size=18, ONLY on the 1-2 edges being discussed in this frame — never label all edges
+- Label edges with weights using small Text at midpoints
 
 ### matrix_grid
 - Grids of Rectangle cells with Text values inside
@@ -243,7 +233,7 @@ Never repeat information across frames. Each frame teaches exactly one new thing
 
 ```
 PATTERN: <one of: equation_cascade | graph_plot | network_diagram | matrix_grid | data_flow | side_by_side | layered_build | coordinate_system | tree_structure | state_machine | venn_overlap | surface_3d>
-LAYOUT: <one of: eq_cascade_only | axes_left_eq_right | axes_center_eq_top | diagram_only | diagram_shrink_right>
+LAYOUT: <one of: eq_cascade_only | axes_left_eq_right | axes_center_eq_top | diagram_only>
 
 Phase 1 — [what appears first]: [exact text or shape description], [animation type], [color], [position hint], [timing]
 Phase 2 — [what appears next]: [exact text], [animation type], [color], [position]
@@ -255,34 +245,16 @@ Phase 2 — [what appears next]: [exact text], [animation type], [color], [posit
 
 ### Layout selection rules — follow these strictly:
 
-| Situation | Required LAYOUT | Description |
-|---|---|---|
-| Equations/derivation steps only — no graph or diagram | `eq_cascade_only` | Full-width equation stack |
-| Graph/plot AND equations in same frame | `axes_left_eq_right` | Graph left, equations right |
-| Graph/plot as main focus, brief label above | `axes_center_eq_top` | Wide graph, title floats above |
-| Diagram (network/matrix/pipeline) shown ONCE with static sidebar labels | `diagram_only` | Diagram pre-scaled 80%, sidebar right |
-| Diagram shown FIRST at full size, THEN shrunk left to reveal math/text on right | `diagram_shrink_right` | **Animated transition** — diagram builds centered, then scales down and slides left, freeing right half for equations |
+| Situation | Required LAYOUT |
+|---|---|
+| Equations/derivation steps only — no graph | `eq_cascade_only` |
+| Graph/plot AND equations/steps in same frame | `axes_left_eq_right` ← **always** |
+| Graph/plot as main focus, brief label above | `axes_center_eq_top` |
+| Network, matrix, pipeline, or any non-axes diagram | `diagram_only` |
 
-### When to use `diagram_shrink_right` (the shrink-and-slide pattern):
-Use this when:
-- The frame needs to show a diagram AND do multi-step math/computation
-- You want the viewer to first understand the visual structure, THEN see the math
-- There are more than 3 text annotations that would crowd the diagram if placed inline
+**Critical rule**: If the frame has both a graph/axes AND equation steps → **always** use `axes_left_eq_right`. Never use `eq_cascade_only` when axes are present. The equations will overlap the graph.
 
-How it works:
-1. Build the diagram centered at full size — let the viewer absorb the structure
-2. Animate `diagram_group.animate.scale(0.55).move_to(LEFT*3.5 + DOWN*0.3)` — smooth shrink-and-slide (0.8s)
-3. Now the right half (x = 0 to x = 6.3) is free for equations, computations, and annotations
-4. Stack equations in the right panel using next_to chaining from an anchor at `RIGHT*3.5 + UP*2.0`
-
-**Critical rules for `diagram_shrink_right`:**
-- The diagram must be fully built and visible for at least 1.5s BEFORE shrinking
-- After shrinking, the diagram stays visible as context — never FadeOut
-- Minimum scale = 0.5 (below this, diagram elements become unreadable)
-- Right panel anchor starts at `RIGHT*3.5 + UP*2.0`, equations chain downward with `next_to(prev, DOWN, buff=0.3)`
-- Right panel equations use font_size=34–38 (not 44+ like full-width cascades)
-
-**Critical rule**: If the frame has both a graph/axes AND equation steps → **always** use `axes_left_eq_right`. Never use `eq_cascade_only` when axes are present.
+**For `diagram_only`**: If the diagram has any text annotations outside its bounds (loss values, output numbers, callouts), the Manim generator will automatically shrink the diagram to 80% and shift it left to create a right sidebar. You do not need to specify this — just describe the sidebar content in the phase where it appears.
 
 ### What every phase MUST specify:
 1. **Exact content** — verbatim Unicode text string OR precise shape description with dimensions
@@ -293,21 +265,17 @@ How it works:
 
 ### Good teaching_intent examples:
 
-**Forward pass with computation (shrink-and-slide):**
-"PATTERN: network_diagram\nLAYOUT: diagram_shrink_right\n\nPhase 1 — title: Write 'Forward Pass' in BLUE, font_size=42, to_edge(UP). Normal wait.\nPhase 2 — network FULL SIZE: Create 3-layer network centered — input (2 nodes, BLUE) at LEFT*3, hidden (3 nodes, TEAL) at ORIGIN, output (1 node, GREEN) at RIGHT*3. Radius=0.3, vertical buff=0.6. Add layer labels 'Input'/'Hidden'/'Output' in GRAY, font_size=22 below each column. Slow wait.\nPhase 3 — weight labels (selective): FadeIn 'w₁=0.4' in ORANGE font_size=18 near the arrow from input[0] to hidden[1], and 'w₂=0.3' near input[1] to hidden[1]. Only these two — not all edges. Normal wait.\nPhase 4 — SHRINK LEFT: animate diagram_group.scale(0.55).move_to(LEFT*3.5 + DOWN*0.3), run_time=0.8. The network is now a small reference on the left.\nPhase 5 — computation RIGHT panel: Write 'h = x₁·w₁ + x₂·w₂' in WHITE, font_size=36, move_to(RIGHT*3.5 + UP*1.8) — this anchors the right column. Normal wait.\nPhase 6 — substitution: Write '= 1.0·0.4 + 0.5·0.3 = 0.55' in YELLOW, font_size=34, next_to eq above DOWN buff=0.3. Normal wait.\nPhase 7 — output: Write 'ŷ = h·v = 0.55·0.5 = 0.275' in GREEN, font_size=34, next_to substitution DOWN buff=0.4. Normal wait.\nPhase 8 — highlight: SurroundingRectangle around output equation in GOLD. Normal wait."
-
-**Backpropagation frame (static sidebar):**
-"PATTERN: network_diagram\nLAYOUT: diagram_only\n\nPhase 1 — network pre-scaled: Create 3 columns of circles — input (3, BLUE, radius=0.28), hidden (4, TEAL), output (2, GREEN). Group entire network, scale(0.80), shift(LEFT*1.2). Normal wait.\nPhase 2 — connections: Create Arrows between layers, GRAY, stroke_width=1.2, stroke_opacity=0.35. Fast wait.\nPhase 3 — title: Write 'Backward Pass' in RED, font_size=40, to_edge(UP). Normal wait.\nPhase 4 — backward flow: Animate set_color to RED — output nodes first, then arrows backward, then hidden nodes, then arrows backward. Slow wait.\nPhase 5 — loss sidebar: Write 'Loss = 2.4' in RED, font_size=34, move_to(RIGHT*5.0 + UP*0.5). Normal wait.\nPhase 6 — gradient sidebar: Write '∂Loss/∂w = −0.797' in ORANGE, font_size=30, move_to(RIGHT*5.0 + DOWN*0.5). Normal wait."
+**Backpropagation frame (network + gradient flow):**
+"PATTERN: network_diagram\nLAYOUT: diagram_only\n\nPhase 1 — network (scale+shift left first): Create 3 columns of circles — input (3, BLUE, radius=0.28) at LEFT*3.5, hidden (4, TEAL, radius=0.28) at LEFT*0.5, output (2, GREEN, radius=0.28) at RIGHT*2.5. Arrange each column vertically buff=0.55. Group the entire network, scale(0.82), shift(LEFT*1.0) so the network spans x=-5.5 to x=3.5, leaving x>4.0 free for sidebar. Normal wait.\nPhase 2 — connections: Create Arrows between layers, GRAY, stroke_width=1.2, stroke_opacity=0.35, max_tip_length_to_length_ratio=0.06. Fast wait.\nPhase 3 — title: Write 'Forward Pass' in BLUE, font_size=40, to_edge(UP). Normal wait.\nPhase 4 — forward flow: Animate set_color to YELLOW — input nodes (lag_ratio=0.2), arrows to hidden (lag_ratio=0.1), hidden nodes, arrows to output, output nodes. Slow wait.\nPhase 5 — loss sidebar: Write 'Loss = 2.4' in RED, font_size=36, move_to(RIGHT*5.2 + UP*0.3). This is the RIGHT sidebar — text must fit within x < 6.5. Normal wait.\nPhase 6 — labels: FadeIn Text 'Input' GRAY font_size=22 below input column, 'Hidden' below hidden, 'Output' below output. Fast wait."
 
 **Quadratic formula with graph (axes + equations):**
-"PATTERN: equation_cascade\nLAYOUT: axes_left_eq_right\n\nPhase 1 — axes LEFT panel: Create Axes x_range=[-1,5,1] y_range=[-3,6,1] x_length=5 y_length=4 shifted LEFT*2.8 + DOWN*0.3. Add manual tick labels. Normal wait.\nPhase 2 — parabola: Plot y=(x-2)(x-3) on axes, BLUE, stroke_width=3, run_time=1.5. Normal wait.\nPhase 3 — root dots: Create green Dots at axes.c2p(2,0) and axes.c2p(3,0). Normal wait.\nPhase 4 — equation RIGHT panel: Write 'ax² + bx + c = 0' in WHITE, font_size=36, move_to(RIGHT*3.8 + UP*1.8) — anchors right column. Slow wait.\nPhase 5 — step note: FadeIn '→ divide by a' in GRAY, font_size=24, next_to eq1 DOWN buff=0.3. Fast wait.\nPhase 6 — step result: Write 'x² + (b/a)x + c/a = 0' in YELLOW, font_size=34, next_to note DOWN buff=0.3. set_opacity(0.3) on eq1. Normal wait.\nPhase 7 — highlight: SurroundingRectangle around last equation in GOLD. Normal wait.\nNOTE: Right column starts at x=2.5, never exceeds x=6.3."
+"PATTERN: equation_cascade\nLAYOUT: axes_left_eq_right\n\nPhase 1 — axes LEFT panel: Create Axes x_range=[-1,5,1] y_range=[-3,6,1] x_length=5 y_length=4 shifted LEFT*2.8 + DOWN*0.3. Add manual tick labels. Normal wait.\nPhase 2 — parabola: Plot y=(x-2)(x-3) on axes, BLUE, stroke_width=3, run_time=1.5. Normal wait.\nPhase 3 — root dots: Create green Dots at axes.c2p(2,0) and axes.c2p(3,0). Normal wait.\nPhase 4 — equation RIGHT panel: Write 'ax² + bx + c = 0' in WHITE, font_size=36, move_to(RIGHT*3.8 + UP*1.8) — this anchors the right column. Slow wait.\nPhase 5 — step note: FadeIn '→ divide by a' in GRAY, font_size=24, next_to eq1 DOWN buff=0.3. Fast wait.\nPhase 6 — step result: Write 'x² + (b/a)x + c/a = 0' in YELLOW, font_size=34, next_to note DOWN buff=0.3. set_opacity(0.3) on eq1. Normal wait.\nPhase 7 — highlight: SurroundingRectangle around last equation in GOLD. Normal wait.\nNOTE: Right column starts at x=2.5, never exceeds x=6.5. All equations use next_to chaining — never hardcode y positions after the anchor."
 
-### Bad teaching_intent (REJECTED):
+### Bad teaching_intent (too vague — REJECTED):
 - "Show the neural network and explain backpropagation."
+- "Display the matrix multiplication process."
 - Any phase without an exact text string, animation type, or color.
 - Missing `PATTERN:` or `LAYOUT:` header lines.
-- Placing computation strings ("1.0×0.4 + 0.5×0.3") on top of diagram nodes or arrows.
-- More than 6 text objects visible simultaneously without FadeOut of older ones.
 
 ════════════════════════════════════════════════════════════════════
 ## VISUAL_OBJECTS — PERSISTENT SCENE ELEMENTS
@@ -325,8 +293,8 @@ Rules:
 - `transition_strategy`: HOW frames connect visually
 
 Good strategies:
-- "Frame 0 builds the network centered; Frame 1 shrinks it left and does forward-pass math on the right; Frame 2 shrinks it left again and does backward-pass math on the right"
-- "The axes persist left; each frame adds a new curve or annotation on the right"
+- "The neural network persists; each frame highlights a different pass"
+- "The axes stay; each frame adds a new curve"
 - "The equation dims; each frame expands a different term below"
 
 ════════════════════════════════════════════════════════════════════
@@ -383,10 +351,6 @@ Sets/Logic:    ∈ ∉ ∩ ∪ ⊂ ⊃ ∀ ∃ ¬ ∧ ∨
 - ❌ Empty slide_frames
 - ❌ Missing `PATTERN:` or `LAYOUT:` headers in teaching_intent
 - ❌ Using `eq_cascade_only` when axes/graph is present — use `axes_left_eq_right`
-- ❌ More than 6 text objects visible at once without FadeOut of older ones
-- ❌ Placing computation text (arithmetic, substitutions) on top of diagram elements
-- ❌ Labeling ALL edges in a network — label only 1-2 key edges per frame
-- ❌ Text that would extend past x = ±6.3 — reduce font_size or rephrase
 
 ════════════════════════════════════════════════════════════════════
 {{CONVERSATION_CONTEXT}}

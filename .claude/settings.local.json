@@ -57,7 +57,10 @@
       "Bash(brew list:*)",
       "Bash(gh api:*)",
       "WebFetch(domain:github.com)",
-      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); [print\\(f'- {i}'\\) for i in d['all_issues'][:15]]\")"
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); [print\\(f'- {i}'\\) for i in d['all_issues'][:15]]\")",
+      "Bash(grep -E \"^d|\\\\.py$|\\\\.jsx$\")",
+      "Bash(python3 -m py_compile run.py)",
+      "Bash(python3 -m manim --version)"
     ]
   }
 }

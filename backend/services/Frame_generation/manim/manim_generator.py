@@ -96,7 +96,46 @@ def _sanitize_manim_code(code: str) -> Tuple[str, list]:
         code = bare_opacity.sub(r'fill_opacity=\1', code)
         fixes.append("fixed bare opacity= → fill_opacity=")
 
-    # 3. Ensure background color is set (add it right after construct opening if missing)
+    # 3. Strip kwargs that are NEVER valid in any Manim constructor.
+    #    They end up in **kwargs and crash at Mobject.__init__().
+    _ALWAYS_BAD_KWARGS = ("shininess", "shading")
+    for kw in _ALWAYS_BAD_KWARGS:
+        pat = re.compile(rf',?\s*{kw}\s*=\s*[^,)\n]+')
+        if pat.search(code):
+            code = pat.sub("", code)
+            fixes.append(f"removed {kw}= kwarg (unsupported in Manim CE)")
+
+    # 4. Replace hallucinated class names the LLM commonly invents.
+    _CLASS_REPLACEMENTS = {
+        # tip_shape=Tip3D — 3D tip class doesn't exist in Manim CE
+        re.compile(r',?\s*tip_shape\s*=\s*Tip3D'): "",
+        # SurroundingCircle doesn't exist; use Circle or SurroundingRectangle
+        re.compile(r'\bSurroundingCircle\b'): "Circle",
+    }
+    for pat, replacement in _CLASS_REPLACEMENTS.items():
+        if pat.search(code):
+            code = pat.sub(replacement, code)
+            fixes.append(f"replaced hallucinated class ({pat.pattern} → {replacement!r})")
+
+    # 5. Remove buff= from shape constructors that don't accept it.
+    #    buff= is only valid in Arrow/Line constructors and positioning methods
+    #    (next_to, arrange, Brace). On other shapes it flows into **kwargs
+    #    and crashes in Mobject.__init__().
+    _BUFF_UNSAFE_SHAPES = (
+        "Circle", "Square", "Dot", "RoundedRectangle",
+        "Ellipse", "Arc", "Polygon", "Triangle", "Star",
+        "VGroup", "Text",
+    )
+    for shape in _BUFF_UNSAFE_SHAPES:
+        shape_buff = re.compile(
+            rf'({shape}\s*\([^)]*?),?\s*buff\s*=\s*[^,)\n]+([^)]*\))',
+            re.DOTALL,
+        )
+        if shape_buff.search(code):
+            code = shape_buff.sub(r'\1\2', code)
+            fixes.append(f"removed buff= from {shape}() constructor")
+
+    # 5. Ensure background color is set (add it right after construct opening if missing)
     if 'background_color' not in code and 'def construct' in code:
         code = code.replace(
             'def construct(self):',
@@ -116,6 +155,23 @@ def _has_latex_usage(code: str) -> bool:
     return bool(re.search(r'\b(MathTex|SingleStringMathTex)\s*\(', code))
 
 
+def _extract_bad_name(stderr: str) -> str:
+    """
+    Parse the offending name from a TypeError/ValueError/NameError message.
+    Returns the name string, or empty string if not found.
+    """
+    # TypeError: Mobject.__init__() got an unexpected keyword argument 'shading'
+    # ValueError: Unsupported keyword argument(s): direction
+    m = re.search(r"unexpected keyword argument[s]?\(?[s]?\)?: ['\"]?(\w+)", stderr)
+    if m:
+        return m.group(1)
+    # NameError: name 'Tip3D' is not defined
+    m = re.search(r"NameError: name '(\w+)' is not defined", stderr)
+    if m:
+        return m.group(1)
+    return ""
+
+
 def _classify_render_error(stderr: str) -> str:
     """
     Return a short error category string based on Manim's stderr output.
@@ -127,13 +183,22 @@ def _classify_render_error(stderr: str) -> str:
         return "latex"
     if "AttributeError" in stderr:
         return "attr_error"
-    if "TypeError" in stderr:
+    if "TypeError" in stderr or "ValueError" in stderr:
+        if "unexpected keyword argument" in stderr or "Unsupported keyword argument" in stderr:
+            return "constructor_kwargs"
         return "type_error"
+    if "NameError" in stderr and "is not defined" in stderr:
+        return "name_error"
     return "unknown"
 
 
-def _build_fallback_prompt(original_prompt: str, error_category: str = "unknown") -> str:
+def _build_fallback_prompt(
+    original_prompt: str,
+    error_category: str = "unknown",
+    bad_name: str = "",
+) -> str:
     """Prepend a targeted error hint before the original prompt for retry attempts."""
+    bad_label = f" ('{bad_name}' caused the crash)" if bad_name else ""
     hints = {
         "latex": (
             "⚠️ RETRY — previous attempt used MathTex/Tex (LaTeX not installed).\n"
@@ -156,6 +221,21 @@ def _build_fallback_prompt(original_prompt: str, error_category: str = "unknown"
             "⚠️ RETRY — previous attempt passed a wrong argument type.\n"
             "RULE: opacity must be fill_opacity= or stroke_opacity= (not opacity=).\n"
             "RULE: colors must be Manim constants (BLUE, RED, GREEN, etc.) or hex strings.\n\n"
+        ),
+        "constructor_kwargs": (
+            f"⚠️ RETRY — previous attempt passed an unsupported kwarg to a Manim constructor{bad_label}.\n"
+            "RULE: NEVER invent constructor kwargs — only use kwargs listed in the Manim CE docs.\n"
+            "RULE: shininess=, shading=, direction= are NOT valid kwargs anywhere in Manim CE.\n"
+            "RULE: buff= only belongs in .next_to(obj, DIR, buff=N) and .arrange(DIR, buff=N),\n"
+            "      NOT as a constructor kwarg on Circle, Square, Dot, Text, VGroup, etc.\n"
+            "RULE: stroke_width= controls line thickness; fill_opacity= controls fill — not width=.\n\n"
+        ),
+        "name_error": (
+            f"⚠️ RETRY — previous attempt used a class or name that does not exist{bad_label}.\n"
+            "RULE: NEVER invent Manim class names. Only use classes from 'from manim import *'.\n"
+            "RULE: Tip3D, SurroundingCircle, GlowDot, GradientRectangle do NOT exist.\n"
+            "      Use Arrow (default tip), Circle, Dot, Rectangle instead.\n"
+            "RULE: For a pulsing highlight effect use Indicate(obj) or SurroundingRectangle.\n\n"
         ),
         "unknown": (
             "⚠️ RETRY — previous attempt failed to render. Generate simpler, safer code.\n"
@@ -303,11 +383,28 @@ async def _generate_one_manim_frame(
     if mp4 is not None:
         return mp4
 
-    # Classify the error and build a targeted retry prompt
+    # Classify the error and extract the offending name for a targeted retry
     error_category = _classify_render_error(stderr)
-    logger.warning("Frame %d render failed (category=%s) — retrying with targeted prompt", frame_index, error_category)
+    bad_name = _extract_bad_name(stderr)
+    logger.warning(
+        "Frame %d render failed (category=%s%s) — retrying with targeted prompt",
+        frame_index, error_category, f", bad={bad_name!r}" if bad_name else "",
+    )
 
-    fallback_template = _build_fallback_prompt(prompt_template, error_category)
+    # Fast path for constructor-kwarg errors: strip the bad kwarg from the
+    # existing code and re-render without spending an LLM call.
+    if error_category == "constructor_kwargs" and bad_name:
+        stripped = re.sub(rf',?\s*{re.escape(bad_name)}\s*=\s*[^,)\n]+', "", code)
+        if stripped != code:
+            logger.info("Frame %d: stripping bad kwarg %r — fast re-render", frame_index, bad_name)
+            fast_dir = output_dir + "_kwfix"
+            mp4_fast, _ = await asyncio.to_thread(_render_frame, stripped, frame_index, fast_dir)
+            if mp4_fast is not None:
+                logger.info("Frame %d recovered via kwarg-strip (no LLM retry)", frame_index)
+                return mp4_fast
+            code = stripped  # carry the partial fix into the full LLM retry
+
+    fallback_template = _build_fallback_prompt(prompt_template, error_category, bad_name)
     raw2 = await asyncio.to_thread(_generate_manim_code, frame, plan, fallback_template)
     code2 = _extract_code(raw2)
     code2, fixes2 = _sanitize_manim_code(code2)

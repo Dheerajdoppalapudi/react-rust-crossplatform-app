@@ -1,4 +1,5 @@
 import asyncio, json, re, logging, os
+import xml.etree.ElementTree as ET
 from datetime import datetime
 from pathlib import Path
 from openai import OpenAI
@@ -45,10 +46,15 @@ def call_llm(prompt: str, max_tokens: int = 8192) -> str:
     return response.choices[0].message.content
 
 
-async def _call_llm_async(prompt: str, max_tokens: int = 8192) -> str:
+async def _call_llm_async(prompt: str, max_tokens: int = 8192, label: str = "") -> str:
     """Throttled async wrapper — only 1 LLM call in flight at a time."""
     async with _LLM_SEM:
-        return await asyncio.to_thread(call_llm, prompt, max_tokens)
+        if label:
+            print(f"  → LLM call: {label}", flush=True)
+        result = await asyncio.to_thread(call_llm, prompt, max_tokens)
+        if label:
+            print(f"  ✓ done: {label} ({len(result)} chars)", flush=True)
+        return result
 
 
 def _extract_json(text: str) -> dict:
@@ -65,14 +71,19 @@ def _extract_json(text: str) -> dict:
     return obj
 
 
-# ── Stage 1A: vocab plan ──────────────────────────────────────────────────────
+# ── Stage 1A: classify intent ────────────────────────────────────────────────
 
-async def run_vocab_plan() -> dict:
-    template = (_PROMPTS_DIR / "planning_vocab.md").read_text(encoding="utf-8")
-    prompt = template.replace("{{USER_PROMPT}}", PROMPT).replace("{{CONVERSATION_CONTEXT}}", "")
-    print("[1/2] Planning...", flush=True)
-    raw = await _call_llm_async(prompt, 8192)
-    return _extract_json(raw)
+async def run_classify(prompt: str) -> tuple[str, int]:
+    """Call planning_classify.md → intent_type, frame_count."""
+    template = (_PROMPTS_DIR / "planning_classify.md").read_text(encoding="utf-8")
+    p = (template
+         .replace("{{USER_PROMPT}}", prompt)
+         .replace("{{CONVERSATION_CONTEXT}}", ""))
+    raw = await _call_llm_async(p, 512, label="planning_classify")
+    data = _extract_json(raw)
+    intent_type = data.get("intent_type", "illustration")
+    frame_count = max(2, min(8, int(data.get("frame_count", 3))))
+    return intent_type, frame_count
 
 
 # ── Bridge: vocab → frame descriptions (no LLM) ──────────────────────────────
@@ -141,13 +152,125 @@ def _extract_svg(text: str) -> str:
     return raw.group(0).strip() if raw else text.strip()
 
 
+# ── Text collision resolver ───────────────────────────────────────────────────
+
+_SVG_NS   = "http://www.w3.org/2000/svg"
+_XLINK_NS = "http://www.w3.org/1999/xlink"
+
+
+def _text_bbox(elem: ET.Element) -> dict:
+    """Estimate the visual bounding box of a <text> SVG element."""
+    x = float(elem.get("x", 0) or 0)
+    y = float(elem.get("y", 0) or 0)   # SVG y = baseline
+
+    font_size = 18.0
+    fs = elem.get("font-size", "")
+    if fs:
+        try:
+            font_size = float(re.sub(r"[^\d.]", "", fs))
+        except ValueError:
+            pass
+    m = re.search(r"font-size\s*:\s*([\d.]+)", elem.get("style", ""))
+    if m:
+        font_size = float(m.group(1))
+
+    text    = "".join(elem.itertext()).strip()
+    width   = len(text) * font_size * 0.55
+
+    anchor = elem.get("text-anchor", elem.get("textAnchor", "start"))
+    if anchor == "middle":
+        x -= width / 2
+    elif anchor == "end":
+        x -= width
+
+    # top/bot relative to canvas (y is baseline)
+    top = y - font_size * 0.85
+    bot = y + font_size * 0.25
+
+    return {"elem": elem, "x": x, "w": width, "top": top, "bot": bot}
+
+
+def _boxes_overlap(a: dict, b: dict, pad: int = 4) -> bool:
+    h = a["x"] < b["x"] + b["w"] + pad and b["x"] < a["x"] + a["w"] + pad
+    v = a["top"] < b["bot"] + pad       and b["top"] < a["bot"] + pad
+    return h and v
+
+
+def resolve_text_collisions(svg: str) -> str:
+    """
+    Detect overlapping <text> elements and push the lower one down
+    until all pairs are clear. Expands canvas height if needed.
+    Falls back silently on any parse error.
+    """
+    ET.register_namespace("",      _SVG_NS)
+    ET.register_namespace("xlink", _XLINK_NS)
+    try:
+        root = ET.fromstring(svg)
+    except ET.ParseError as e:
+        log.warning("resolve_text_collisions: parse error — %s", e)
+        return svg
+
+    # Support both namespaced (<svg:text>) and plain (<text>) tags
+    tag = f"{{{_SVG_NS}}}text"
+    texts = list(root.iter(tag))
+    if not texts:
+        texts = list(root.iter("text"))
+
+    if len(texts) < 2:
+        return svg
+
+    boxes   = [_text_bbox(t) for t in texts]
+    changed = False
+
+    for _ in range(10):   # max 10 passes — enough for dense diagrams
+        hit = False
+        for i in range(len(boxes)):
+            for j in range(i + 1, len(boxes)):
+                if _boxes_overlap(boxes[i], boxes[j]):
+                    hit = True
+                    changed = True
+                    # Move the lower element down by the overlap + 8 px gap
+                    if boxes[i]["top"] >= boxes[j]["top"]:
+                        lower, upper = boxes[i], boxes[j]
+                    else:
+                        lower, upper = boxes[j], boxes[i]
+                    shift = upper["bot"] - lower["top"] + 8
+                    new_y = float(lower["elem"].get("y", 0)) + shift
+                    lower["elem"].set("y", str(round(new_y, 1)))
+                    lower["top"] += shift
+                    lower["bot"] += shift
+        if not hit:
+            break
+
+    if not changed:
+        return svg
+
+    # Grow canvas height if any label was pushed below the original bottom
+    try:
+        max_bot = max(b["bot"] for b in boxes) + 60
+        old_h   = float(re.sub(r"[^\d.]", "", root.get("height", "0") or "0"))
+        if max_bot > old_h:
+            new_h = str(int(max_bot))
+            root.set("height", new_h)
+            vb = root.get("viewBox", "")
+            if vb:
+                root.set("viewBox", re.sub(r"\d+\s*$", new_h, vb.strip()))
+    except Exception:
+        pass
+
+    return ET.tostring(root, encoding="unicode")
+
+
 def _render(svg_text: str, frame_index: int, run_dir: Path) -> tuple:
     import cairosvg
     frame_dir = run_dir / f"frame_{frame_index}"
     frame_dir.mkdir(parents=True, exist_ok=True)
-    svg_path = frame_dir / "frame.svg"
+    svg_path     = frame_dir / "frame.svg"
+    svg_raw_path = frame_dir / "frame_raw.svg"   # pre-fix, for comparison
     png_path = frame_dir / "frame.png"
     clean = _sanitize(svg_text)
+    svg_raw_path.write_text(clean, encoding="utf-8")  # save before collision fix
+    clean = resolve_text_collisions(clean)
     svg_path.write_text(clean, encoding="utf-8")
     h = int(m.group(1)) if (m := re.search(r'viewBox=["\']0 0 \d+ (\d+)["\']', clean)) else 900
     try:
@@ -157,70 +280,6 @@ def _render(svg_text: str, frame_index: int, run_dir: Path) -> tuple:
         log.error("cairosvg render error frame %d: %s", frame_index, e, exc_info=True)
         return None, str(e)
 
-
-# ── Stage 2: one frame (LLM → SVG → PNG, one retry on failure) ───────────────
-
-async def _generate_one_frame(frame: dict, svg_template: str, run_dir: Path) -> str | None:
-    idx    = frame["index"]
-    prompt = svg_template.replace("{{DIAGRAM_DESCRIPTION}}", frame["description"])
-
-    try:
-        raw = await _call_llm_async(prompt)
-    except Exception as e:
-        log.error("frame %d: LLM call failed: %s", idx, e, exc_info=True)
-        return None
-
-    log.info("frame %d: LLM response (first 300 chars): %s", idx, raw[:300])
-    svg = _extract_svg(raw)
-
-    if not svg.lower().startswith("<svg"):
-        log.warning("frame %d: no valid SVG in response — retrying. Got: %s", idx, raw[:300])
-        try:
-            raw = await _call_llm_async(
-                f"Your response had no valid SVG. Output ONLY raw SVG starting with <svg.\n\n{frame['description']}")
-        except Exception as e:
-            log.error("frame %d: retry LLM call failed: %s", idx, e, exc_info=True)
-            return None
-        svg = _extract_svg(raw)
-        if not svg.lower().startswith("<svg"):
-            log.error("frame %d: retry also produced no valid SVG. Response: %s", idx, raw[:300])
-            return None
-
-    png, err = await asyncio.to_thread(_render, svg, idx, run_dir)
-
-    if png is None:
-        log.warning("frame %d: render error: %s — retrying", idx, err)
-        try:
-            raw = await _call_llm_async(
-                f"Your SVG failed to render: {err}\nUse only flat fills and standard SVG primitives.\n\n{frame['description']}")
-        except Exception as e:
-            log.error("frame %d: retry LLM call failed: %s", idx, e, exc_info=True)
-            return None
-        svg = _extract_svg(raw)
-        if not svg.lower().startswith("<svg"):
-            log.error("frame %d: retry produced no valid SVG", idx)
-            return None
-        png, err2 = await asyncio.to_thread(_render, svg, idx, run_dir)
-        if png is None:
-            log.error("frame %d: render failed again: %s", idx, err2)
-
-    return png
-
-
-# ── Stage 2: all frames in parallel ──────────────────────────────────────────
-
-async def run_svg_frames(frames: list[dict], run_dir: Path) -> list:
-    svg_template = (_PROMPTS_DIR / "svg_prompt.md").read_text(encoding="utf-8")
-    print(f"[2/2] Generating {len(frames)} frame(s)...", flush=True)
-    results = await asyncio.gather(*[_generate_one_frame(f, svg_template, run_dir) for f in frames], return_exceptions=True)
-    paths = []
-    for i, r in enumerate(results):
-        if isinstance(r, Exception):
-            log.error("frame %d: unhandled exception: %s", i, r, exc_info=r)
-            paths.append(None)
-        else:
-            paths.append(r)
-    return paths
 
 
 # ── Pipeline entry point (importable by improve.py) ──────────────────────────
@@ -251,6 +310,8 @@ async def run_pipeline(prompt: str, run_dir: Path | None = None) -> dict:
     )
     for r in results:
         if isinstance(r, Exception):
+            print(f"  ✗ frame task raised: {r}", flush=True)
+            log.error("frame task raised unhandled exception: %s", r, exc_info=r)
             png_paths.append(None)
             retry_flags.append(False)
             svg_texts.append("")
@@ -275,21 +336,22 @@ async def _generate_one_frame_tracked(frame: dict, svg_template: str, run_dir: P
     prompt = svg_template.replace("{{DIAGRAM_DESCRIPTION}}", frame["description"])
     retried = False
 
+    print(f"  [svg frame {idx}] generating...", flush=True)
     try:
-        raw = await _call_llm_async(prompt)
+        raw = await _call_llm_async(prompt, label=f"svg_prompt frame={idx}")
     except Exception as e:
         log.error("frame %d: LLM call failed: %s", idx, e, exc_info=True)
         return {"png": None, "retried": False, "svg": ""}
 
-    log.info("frame %d: LLM response (first 300 chars): %s", idx, raw[:300])
     svg = _extract_svg(raw)
 
     if not svg.lower().startswith("<svg"):
         retried = True
-        log.warning("frame %d: no valid SVG — retrying", idx)
+        print(f"  [svg frame {idx}] no valid SVG — retrying", flush=True)
         try:
             raw = await _call_llm_async(
-                f"Your response had no valid SVG. Output ONLY raw SVG starting with <svg.\n\n{frame['description']}")
+                f"Your response had no valid SVG. Output ONLY raw SVG starting with <svg.\n\n{frame['description']}",
+                label=f"svg_prompt frame={idx} retry")
         except Exception as e:
             log.error("frame %d: retry LLM call failed: %s", idx, e, exc_info=True)
             return {"png": None, "retried": retried, "svg": ""}
@@ -298,32 +360,57 @@ async def _generate_one_frame_tracked(frame: dict, svg_template: str, run_dir: P
             log.error("frame %d: retry also produced no valid SVG", idx)
             return {"png": None, "retried": retried, "svg": ""}
 
-    png, err = await asyncio.to_thread(_render, svg, idx, run_dir)
+    print(f"  [svg frame {idx}] rendering...", flush=True)
+    try:
+        png, err = await asyncio.to_thread(_render, svg, idx, run_dir)
+    except Exception as e:
+        print(f"  [svg frame {idx}] render crashed: {e}", flush=True)
+        log.error("frame %d: render raised exception: %s", idx, e, exc_info=True)
+        return {"png": None, "retried": retried, "svg": svg}
 
     if png is None:
         retried = True
-        log.warning("frame %d: render error (%s) — retrying", idx, err)
+        print(f"  [svg frame {idx}] render failed ({err}) — retrying", flush=True)
         try:
             raw = await _call_llm_async(
-                f"Your SVG failed to render: {err}\nUse only flat fills and standard SVG primitives.\n\n{frame['description']}")
+                f"Your SVG failed to render: {err}\nUse only flat fills and standard SVG primitives.\n\n{frame['description']}",
+                label=f"svg_prompt frame={idx} render-retry")
         except Exception as e:
             log.error("frame %d: retry LLM call failed: %s", idx, e, exc_info=True)
             return {"png": None, "retried": retried, "svg": svg}
         svg = _extract_svg(raw)
         if not svg.lower().startswith("<svg"):
             return {"png": None, "retried": retried, "svg": ""}
-        png, _ = await asyncio.to_thread(_render, svg, idx, run_dir)
+        try:
+            png, _ = await asyncio.to_thread(_render, svg, idx, run_dir)
+        except Exception as e:
+            print(f"  [svg frame {idx}] render crashed on retry: {e}", flush=True)
+            log.error("frame %d: render raised exception on retry: %s", idx, e, exc_info=True)
+            return {"png": None, "retried": retried, "svg": svg}
+
+    if png:
+        print(f"  [svg frame {idx}] ✓ saved {png}", flush=True)
+    else:
+        print(f"  [svg frame {idx}] ✗ failed after retry", flush=True)
 
     return {"png": png, "retried": retried, "svg": svg}
 
 
 async def run_vocab_plan_with_prompt(prompt: str) -> dict:
-    """run_vocab_plan but accepts prompt as argument (for improve.py)."""
-    template = (_PROMPTS_DIR / "planning_vocab.md").read_text(encoding="utf-8")
-    p = template.replace("{{USER_PROMPT}}", prompt).replace("{{CONVERSATION_CONTEXT}}", "")
-    print(f"  [1/2] Planning: {prompt[:60]}...", flush=True)
-    raw = await _call_llm_async(p, 8192)
-    return _extract_json(raw)
+    """Two-step classify → planning_svg pipeline (called by improve.py)."""
+    intent_type, frame_count = await run_classify(prompt)
+    template = (_PROMPTS_DIR / "planning_svg.md").read_text(encoding="utf-8")
+    p = (template
+         .replace("{{USER_PROMPT}}", prompt)
+         .replace("{{CONVERSATION_CONTEXT}}", "")
+         .replace("{{INTENT_TYPE}}", intent_type)
+         .replace("{{FRAME_COUNT}}", str(frame_count)))
+    print(f"  [planning_svg] intent={intent_type}  frames={frame_count}  prompt: {prompt[:50]}...", flush=True)
+    raw = await _call_llm_async(p, 8192, label="planning_svg")
+    plan = _extract_json(raw)
+    plan["intent_type"] = intent_type
+    plan["frame_count"] = frame_count
+    return plan
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
