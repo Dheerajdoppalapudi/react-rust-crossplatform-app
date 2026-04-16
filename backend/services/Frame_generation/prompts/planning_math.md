@@ -16,6 +16,29 @@ Before writing any JSON, mentally work through these questions:
 Use this internal understanding to write **specific, concrete** `teaching_intent` blueprints and **rich** `narration`. A vague prompt like "quadratic formula" should produce a plan as detailed as if the prompt was "Show the geometric meaning of the quadratic formula: start with a parabola y=ax²+bx+c, highlight where it crosses the x-axis, then derive x=(-b±√(b²-4ac))/2a step-by-step by completing the square."
 
 ════════════════════════════════════════════════════════════════════
+## ⚠️ CRITICAL — FRAMES ARE INDEPENDENT MANIM SCENES
+
+Each frame is rendered as a **completely separate Python subprocess**. There is NO shared memory, no carry-over of objects, no actual persistence between frames. The `persists_frames` field in `visual_objects` is ONLY a semantic hint to the Manim code generator — it does NOT magically carry objects across frames.
+
+**What this means for your plan:**
+
+For frames 1+ that reference objects from earlier frames (e.g. "the network is still visible"):
+- The blueprint MUST start with a **Phase 0 — RESTORE CONTEXT** that tells Manim to add the background object silently via `self.add()` with no animation and 0 time cost
+- The blueprint must specify the exact scale and position to restore it at
+- It should NOT re-animate the construction (no `Create`, no `LaggedStart`) — just `self.add()`
+
+**Example of correct Phase 0 for frame 1:**
+```
+Phase 0 — RESTORE CONTEXT (0s, no animation): self.add() the 3-layer network already scaled to 0.55 at LEFT*3.5 + DOWN*0.3. No creation animation — it's already there when the frame starts.
+Phase 1 — [new content for this frame starts here]...
+```
+
+**Example of WRONG approach (wastes 2-3 seconds per frame):**
+```
+Phase 1 — rebuild network: Create 3-layer network... (WRONG — viewer sees the same network appear again)
+```
+
+════════════════════════════════════════════════════════════════════
 
 Output ONLY valid JSON. No markdown, no explanation, no code fences. A single JSON object.
 
@@ -144,6 +167,36 @@ If text + position would exceed x = 6.3 on the right, reduce font_size or shift 
 
 ════════════════════════════════════════════════════════════════════
 ## VISUAL STRATEGY PATTERNS
+
+### ⚠️ MANDATORY: Vary the visual strategy across frames
+
+**Never use the same PATTERN for more than 2 consecutive frames.** Each mathematical moment has a natural visual — use the right one:
+
+| What the frame is showing | Use this PATTERN | NOT this |
+|---|---|---|
+| Data flowing through a network | `network_diagram` | — |
+| A specific calculation / formula derivation | `equation_cascade` | `network_diagram` |
+| Loss, error, cost over training steps | `graph_plot` (loss curve) | `network_diagram` |
+| Gradient as slope on a curve | `graph_plot` (tangent line) | `equation_cascade` |
+| Weight before → after update | `side_by_side` | `network_diagram` |
+| Matrix multiplication / dot product | `matrix_grid` | `equation_cascade` |
+| Probability / distribution | `graph_plot` (area under curve) | — |
+| Decision boundary / vector space | `coordinate_system` | — |
+| Training pipeline stages | `data_flow` | `network_diagram` |
+| Geometric proof (Pythagoras, area) | `geometric_proof` | `equation_cascade` |
+| Gradient descent landscape | `surface_3d` | `graph_plot` |
+
+**Applied rule for this session:** After you pick `visual_strategy` for the overall lesson, look at each individual frame's content and ask "what is this frame actually SHOWING?" Then pick the PATTERN for that frame independently — not based on the overall topic.
+
+**Example — Backpropagation lesson (4 frames):**
+- Frame 0: network architecture → `network_diagram`
+- Frame 1: forward pass numbers → `network_diagram` + `diagram_shrink_right` (the one exception: same pattern is fine when frame 1 directly extends frame 0's diagram)
+- Frame 2: loss = (prediction − truth)² → `graph_plot` (parabola showing the error landscape)
+- Frame 3: gradient ∂L/∂w and weight update rule → `equation_cascade`
+
+This produces a lesson that FEELS like 3B1B — each frame looks different, each visual serves the math.
+
+---
 
 Based on the `visual_strategy` from classification, follow these composition guides:
 
@@ -375,7 +428,9 @@ Sets/Logic:    ∈ ∉ ∩ ∪ ⊂ ⊃ ∀ ∃ ¬ ∧ ∨
 - ❌ Vague phases ("show the formula", "explain the concept")
 - ❌ Missing animation type, text string, color, or position
 - ❌ Repeating the same concept across frames
-- ❌ Resetting the visual scene between frames
+- ❌ Re-animating context objects in frames 1+ — use `self.add()` in Phase 0, no creation animation
+- ❌ Using the same PATTERN for 3+ consecutive frames — vary the visual strategy per frame
+- ❌ Using `network_diagram` for frames that are about loss, gradients, or weight updates — use `graph_plot` or `equation_cascade` instead
 - ❌ Starting with formulas instead of intuition
 - ❌ Random decorative color — every color must MEAN something
 - ❌ Two insights in one frame

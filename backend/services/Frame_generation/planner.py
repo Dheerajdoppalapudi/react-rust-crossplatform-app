@@ -173,6 +173,11 @@ def call_llm(prompt: str, max_tokens: int = 8192, prompt_name: str = "") -> str:
 # JSON extraction
 # ---------------------------------------------------------------------------
 
+def _strip_trailing_commas(text: str) -> str:
+    """Remove trailing commas before ] or } — Claude often produces JSON5-style output."""
+    return re.sub(r",\s*([}\]])", r"\1", text)
+
+
 def _extract_json(text: str) -> dict:
     """
     Pull the top-level JSON object out of an LLM response.
@@ -186,7 +191,7 @@ def _extract_json(text: str) -> dict:
     # Try markdown fence content first
     fence = re.search(r"```(?:json)?\s*(\{.*?)\s*```", text, re.DOTALL)
     if fence:
-        candidate = fence.group(1).strip()
+        candidate = _strip_trailing_commas(fence.group(1).strip())
         try:
             obj, _ = decoder.raw_decode(candidate)
             return obj
@@ -198,13 +203,15 @@ def _extract_json(text: str) -> dict:
     if start == -1:
         raise ValueError(f"No JSON object found in LLM response:\n{text[:300]}")
 
+    cleaned = _strip_trailing_commas(text)
+    start = cleaned.find("{")
     try:
-        obj, _ = decoder.raw_decode(text, start)
+        obj, _ = decoder.raw_decode(cleaned, start)
         return obj
     except json.JSONDecodeError as e:
         raise ValueError(
             f"JSON parse error at char {e.pos}: {e.msg}\n"
-            f"Near: …{text[max(0, e.pos - 80):e.pos + 80]}…"
+            f"Near: …{cleaned[max(0, e.pos - 80):e.pos + 80]}…"
         ) from e
 
 

@@ -34,9 +34,10 @@ from services.video.tts_service import estimate_duration
 
 logger = logging.getLogger(__name__)
 
-VIDEO_W   = 1920
-VIDEO_H   = 1080
-VIDEO_FPS = 24
+VIDEO_W    = 1920
+VIDEO_H    = 1080
+VIDEO_FPS  = 60    # Manim -qh renders at 1080p60; match it to avoid frame duplication
+_FADE_DUR  = 0.3   # seconds — fade-through-black between frames
 
 # Font candidates for Manim subtitle drawtext (same list as frame_exporter)
 _FONT_CANDIDATES = [
@@ -163,14 +164,22 @@ def _build_png_clip(
     If no audio: inserts a silent AAC track so the clip has the same
     stream layout as audio clips — required for -c copy concat.
     """
+    # Fade-through-black: fade in at start, fade out at end
+    fade_out_start = max(0.0, duration - _FADE_DUR)
+    vf = (
+        f"scale={VIDEO_W}:{VIDEO_H},"
+        f"fade=t=in:st=0:d={_FADE_DUR},"
+        f"fade=t=out:st={fade_out_start:.3f}:d={_FADE_DUR}"
+    )
+
     if audio_path and os.path.exists(audio_path):
         _ffmpeg([
             "-loop", "1", "-t", str(duration), "-i", png_path,
             "-i", audio_path,
             "-map", "0:v", "-map", "1:a",
-            "-c:v", "libx264", "-preset", "ultrafast", "-tune", "stillimage",
+            "-c:v", "libx264", "-preset", "fast", "-tune", "stillimage",
             "-pix_fmt", "yuv420p",
-            "-vf", f"scale={VIDEO_W}:{VIDEO_H}",
+            "-vf", vf,
             "-r", str(VIDEO_FPS),
             "-c:a", "aac", "-b:a", "192k",
             "-shortest",
@@ -182,9 +191,9 @@ def _build_png_clip(
             "-loop", "1", "-t", str(duration), "-i", png_path,
             "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100",
             "-map", "0:v", "-map", "1:a",
-            "-c:v", "libx264", "-preset", "ultrafast", "-tune", "stillimage",
+            "-c:v", "libx264", "-preset", "fast", "-tune", "stillimage",
             "-pix_fmt", "yuv420p",
-            "-vf", f"scale={VIDEO_W}:{VIDEO_H}",
+            "-vf", vf,
             "-r", str(VIDEO_FPS),
             "-c:a", "aac", "-b:a", "192k",
             "-t", str(duration),
@@ -234,10 +243,15 @@ def _build_video_clip(
             f":x=(w-tw)/2:y={bar_y}+(90-th)/2"
         )
 
-    # tpad must be last in the chain (it pads in the time dimension)
+    # tpad must come before fade filters (pads in the time dimension first)
     if audio_dur and video_dur < audio_dur:
         freeze = round(audio_dur - video_dur, 3)
         vf_parts.append(f"tpad=stop_mode=clone:stop_duration={freeze}")
+
+    # Fade-through-black: in at start, out at end (matching PNG clip behaviour)
+    fade_out_start = max(0.0, target_dur - _FADE_DUR)
+    vf_parts.append(f"fade=t=in:st=0:d={_FADE_DUR}")
+    vf_parts.append(f"fade=t=out:st={fade_out_start:.3f}:d={_FADE_DUR}")
 
     vf = ",".join(vf_parts)
 
@@ -247,7 +261,7 @@ def _build_video_clip(
             "-i", audio_path,
             "-map", "0:v", "-map", "1:a",
             "-vf", vf,
-            "-c:v", "libx264", "-preset", "ultrafast",
+            "-c:v", "libx264", "-preset", "fast",
             "-pix_fmt", "yuv420p",
             "-r", str(VIDEO_FPS),
             "-c:a", "aac", "-b:a", "192k",
@@ -260,7 +274,7 @@ def _build_video_clip(
             "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100",
             "-map", "0:v", "-map", "1:a",
             "-vf", vf,
-            "-c:v", "libx264", "-preset", "ultrafast",
+            "-c:v", "libx264", "-preset", "fast",
             "-pix_fmt", "yuv420p",
             "-r", str(VIDEO_FPS),
             "-c:a", "aac", "-b:a", "192k",

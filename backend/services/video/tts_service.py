@@ -1,9 +1,9 @@
 """
 TTS Service — converts per-frame narration text into audio files.
 
-Supports two backends, selected via the USE_OPENAI_TTS env variable:
-  - gTTS (default, free):  pip install gtts
-  - OpenAI TTS (quality):  pip install openai  +  OPENAI_API_KEY env var
+Supports two backends:
+  - OpenAI TTS (default, quality):  pip install openai  +  OPENAI_API_KEY env var
+  - gTTS (free fallback, opt-in):   pip install gtts  +  pass use_openai=False
 
 narration.txt format (written by main.py):
     Frame 1: Step 1: DNS Lookup
@@ -23,6 +23,7 @@ import asyncio
 import logging
 import os
 import re
+import time
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -89,24 +90,56 @@ def _gtts_generate(text: str, out_path: str) -> bool:
 # OpenAI TTS backend
 # ---------------------------------------------------------------------------
 
+_TTS_MAX_RETRIES = 4          # total attempts (1 initial + 3 retries)
+_TTS_RETRY_BASE_DELAY = 1.0   # seconds — doubles each retry (1, 2, 4, 8)
+
+
 def _openai_tts_generate(text: str, out_path: str) -> bool:
-    """Generate speech with OpenAI TTS (tts-1 model). Returns True on success."""
+    """
+    Generate speech with OpenAI TTS (tts-1 model). Returns True on success.
+
+    Retries up to _TTS_MAX_RETRIES times with exponential backoff on rate
+    limit errors (HTTP 429 / RateLimitError).  All other exceptions are
+    logged and return False immediately.
+    """
     try:
-        from openai import OpenAI  # type: ignore
-        client = OpenAI(timeout=30.0)
-        response = client.audio.speech.create(
-            model="tts-1",
-            voice="alloy",   # clear, neutral voice — good for education
-            input=text,
-        )
-        response.stream_to_file(out_path)
-        return True
+        from openai import OpenAI, RateLimitError  # type: ignore
     except ImportError:
         logger.error("openai not installed — run: pip install openai")
         return False
-    except Exception as e:
-        logger.error("OpenAI TTS error: %s", e, exc_info=True)
-        return False
+
+    client = OpenAI(timeout=30.0)
+
+    for attempt in range(_TTS_MAX_RETRIES):
+        try:
+            response = client.audio.speech.create(
+                model="tts-1",
+                voice="alloy",   # clear, neutral voice — good for education
+                input=text,
+            )
+            response.stream_to_file(out_path)
+            return True
+
+        except RateLimitError as e:
+            delay = _TTS_RETRY_BASE_DELAY * (2 ** attempt)
+            if attempt < _TTS_MAX_RETRIES - 1:
+                logger.warning(
+                    "OpenAI TTS rate limit on attempt %d/%d — retrying in %.1fs  error=%s",
+                    attempt + 1, _TTS_MAX_RETRIES, delay, e,
+                )
+                time.sleep(delay)
+            else:
+                logger.error(
+                    "OpenAI TTS rate limit after %d attempts — giving up  error=%s",
+                    _TTS_MAX_RETRIES, e,
+                )
+                return False
+
+        except Exception as e:
+            logger.error("OpenAI TTS error: %s", e, exc_info=True)
+            return False
+
+    return False  # unreachable, but satisfies type checker
 
 
 # ---------------------------------------------------------------------------

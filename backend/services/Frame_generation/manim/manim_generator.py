@@ -98,7 +98,7 @@ def _sanitize_manim_code(code: str) -> Tuple[str, list]:
 
     # 3. Strip kwargs that are NEVER valid in any Manim constructor.
     #    They end up in **kwargs and crash at Mobject.__init__().
-    _ALWAYS_BAD_KWARGS = ("shininess", "shading")
+    _ALWAYS_BAD_KWARGS = ("shininess", "shading", "dashed_ratio")
     for kw in _ALWAYS_BAD_KWARGS:
         pat = re.compile(rf',?\s*{kw}\s*=\s*[^,)\n]+')
         if pat.search(code):
@@ -225,7 +225,8 @@ def _build_fallback_prompt(
         "constructor_kwargs": (
             f"⚠️ RETRY — previous attempt passed an unsupported kwarg to a Manim constructor{bad_label}.\n"
             "RULE: NEVER invent constructor kwargs — only use kwargs listed in the Manim CE docs.\n"
-            "RULE: shininess=, shading=, direction= are NOT valid kwargs anywhere in Manim CE.\n"
+            "RULE: shininess=, shading=, direction=, dashed_ratio= are NOT valid kwargs anywhere in Manim CE.\n"
+            "RULE: For dashed lines use DashedLine() with no extra kwargs — never pass dashed_ratio= to any class.\n"
             "RULE: buff= only belongs in .next_to(obj, DIR, buff=N) and .arrange(DIR, buff=N),\n"
             "      NOT as a constructor kwarg on Circle, Square, Dot, Text, VGroup, etc.\n"
             "RULE: stroke_width= controls line thickness; fill_opacity= controls fill — not width=.\n\n"
@@ -259,7 +260,8 @@ def _generate_manim_code(
 
     all_captions = [f.caption for f in plan.frames]
 
-    # Continuity context — tell each frame what objects persist across frames
+    # Continuity context — tell each frame what objects persist across frames.
+    # Frame 0 creates them; frames 1+ restore them silently via self.add().
     continuity_block = ""
     if plan.visual_objects:
         persistent = [
@@ -272,7 +274,26 @@ def _generate_manim_code(
                 f'[color: {obj.get("style", {}).get("color", "WHITE")}]'
                 for obj in persistent
             )
-            continuity_block = f"\nPersistent visual objects on screen this frame:\n{obj_lines}\n"
+            if frame.index == 0:
+                # Frame 0 builds these objects for the first time
+                continuity_block = (
+                    f"\nObjects to CREATE in this frame (animate their construction):\n"
+                    f"{obj_lines}\n"
+                )
+            else:
+                # Frames 1+ must NOT re-animate context objects.
+                # Each frame is an independent Manim scene starting from blank.
+                # The LLM must restore context via self.add() with zero time cost.
+                continuity_block = (
+                    f"\n⚠️ RESTORE CONTEXT (no animation, 0 seconds):\n"
+                    f"These objects already exist from a previous frame. At the very\n"
+                    f"start of construct(), add them with self.add() — do NOT use\n"
+                    f"Create(), Write(), FadeIn(), or LaggedStart() on these objects.\n"
+                    f"They must appear instantly so the full 15s budget goes to new content.\n"
+                    f"Objects to restore with self.add():\n"
+                    f"{obj_lines}\n"
+                    f"Once restored, proceed directly to the new content for this frame.\n"
+                )
 
     transition_block = ""
     if plan.continuity_plan.get("transition_strategy"):

@@ -558,10 +558,24 @@ def create_pipeline(stage_names, colors, y_pos=0):
     return stages, arrows
 ```
 
-### Pattern 7 — 3D Scene with Surface
+### Pattern 7 — 3D Scenes
+Use `ThreeDScene` whenever the content benefits from depth, rotation, or 3D geometry. You have full creative freedom — build what best communicates the idea.
+
+**Available 3D mobjects** (all from `from manim import *`):
+- Geometry: `Sphere`, `Cube`, `Cylinder`, `Cone`, `Torus`, `Prism`, `Dodecahedron`, `Icosahedron`
+- Axes/surfaces: `ThreeDAxes`, `Surface`, `NumberPlane`
+- Arrows/lines: `Arrow3D`, `Line3D`
+- Camera: `self.set_camera_orientation(phi=..., theta=...)`, `self.move_camera(phi=..., theta=..., run_time=...)`, `self.begin_ambient_camera_rotation(rate=0.2)`, `self.stop_ambient_camera_rotation()`
+
+**3D-specific rules:**
+- Always `self.set_camera_orientation(phi=70*DEGREES, theta=-45*DEGREES)` early in construct
+- `Surface` takes `fill_opacity=`, `fill_color=`, `stroke_color=`, `stroke_width=`, `resolution=(m,n)` — nothing else
+- `Sphere`, `Cube`, etc. take `color=`, `fill_opacity=`, `stroke_color=`, `stroke_width=` — no `dashed_ratio=`, no `shininess=`, no `shading=`
+- Use `import numpy as np` inside construct if you need math for surface lambdas
+
 ```python
-# Use ThreeDScene ONLY when blueprint says "USE ThreeDScene"
 import numpy as np
+from manim import *
 
 class GeneratedScene(ThreeDScene):
     def construct(self):
@@ -575,6 +589,9 @@ class GeneratedScene(ThreeDScene):
         )
         self.play(Create(axes), run_time=1)
 
+        sphere = Sphere(radius=1.2, color=BLUE, fill_opacity=0.6)
+        self.play(Create(sphere), run_time=1.5)
+
         surface = Surface(
             lambda u, v: axes.c2p(u, v, np.sin(u) * np.cos(v)),
             u_range=[-3, 3], v_range=[-3, 3],
@@ -583,6 +600,9 @@ class GeneratedScene(ThreeDScene):
             stroke_color=BLUE_E, stroke_width=0.5,
         )
         self.play(Create(surface), run_time=2)
+        self.begin_ambient_camera_rotation(rate=0.2)
+        self.wait(3)
+        self.stop_ambient_camera_rotation()
         self.move_camera(phi=50 * DEGREES, theta=30 * DEGREES, run_time=2)
         self.wait(1)
 ```
@@ -607,7 +627,10 @@ class GeneratedScene(ThreeDScene):
 - `NumberLine(numbers_to_include=[...])` — **crashes**
 - `opacity=` as constructor kwarg — **TypeError**. Use `stroke_opacity=`, `fill_opacity=`, or `.set_opacity()`
 - `shininess=` or `shading=` anywhere — **removed from Manim CE, always crashes**
+- `dashed_ratio=` on any class — **not a valid constructor kwarg anywhere; use DashedLine() with no extra kwargs**
 - `direction=` on gradient/colorscale objects — **ValueError: Unsupported keyword argument**
+- 3D: passing `dashed_ratio=`, `shininess=`, `shading=` to `Sphere`, `Cube`, `Cylinder`, `Surface`, etc. — **all crash**
+- 3D: `get_right()`, `get_left()`, `get_top()` on 3D mobjects in a `ThreeDScene` — **unreliable; use `.get_center()` or explicit coordinates**
 - `buff=` as a constructor kwarg on Circle, Square, Dot, Text, VGroup, etc. — **TypeError**. `buff=` only belongs in `.next_to(obj, DIR, buff=N)` and `.arrange(DIR, buff=N)`
 - `width=` on any shape other than `Rectangle` — **TypeError**. Use `stroke_width=` for line thickness
 - **Classes that do NOT exist** — `Tip3D`, `SurroundingCircle`, `GlowDot`, `GradientRectangle`, `FancyArrow`. Use `Arrow` (default tip), `Circle`, `Dot`, `Rectangle`, `SurroundingRectangle` instead
