@@ -15,11 +15,16 @@ backend/uploads/*
 backend/outputs/*
 backend/logs/*
 backend/.env
-autoimprov/output/
-autoimprov/outputs/
-autoimprov/history/
-autoimprov/*.log
-autoimprov/.env
+AutoImprov/autoimprov_svg/output/
+AutoImprov/autoimprov_svg/outputs/
+AutoImprov/autoimprov_svg/history/
+AutoImprov/autoimprov_svg/*.log
+AutoImprov/autoimprov_svg/.env
+AutoImprov/autoimprov_manim/output/
+AutoImprov/autoimprov_manim/outputs/
+AutoImprov/autoimprov_manim/history/
+AutoImprov/autoimprov_manim/*.log
+AutoImprov/autoimprov_manim/.env
 !backend/uploads/.gitkeep
 
 # OS
