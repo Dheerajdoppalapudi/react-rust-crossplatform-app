@@ -16,6 +16,7 @@ anthropic>=0.25
 # Frame generation
 manim
 cairosvg
+lxml
 requests
 
 # Video pipeline

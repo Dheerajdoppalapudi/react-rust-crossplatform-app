@@ -33,6 +33,12 @@ try:
 except (ImportError, OSError):
     _CAIROSVG_AVAILABLE = False
 
+try:
+    from lxml import etree as _lxml_etree
+    _LXML_AVAILABLE = True
+except ImportError:
+    _LXML_AVAILABLE = False
+
 from services.Frame_generation.planner import GenerationPlan, FramePlan, call_llm
 
 
@@ -95,7 +101,7 @@ def _sanitize_svg(svg: str) -> str:
     """
     Fix common LLM mistakes that cause cairosvg XML parse errors.
 
-    Three classes of fix, applied in order:
+    Four classes of fix, applied in order:
 
     1. Strip empty presentation attributes  (e.g. stroke-dasharray="")
        cairosvg tries to parse the empty string as a value and raises
@@ -109,6 +115,11 @@ def _sanitize_svg(svg: str) -> str:
     3. Escape bare < and > inside text nodes  (e.g. a < b → a &lt; b)
        < is never legal outside a tag; > is legal but flagged as an error
        by strict XML parsers like cairosvg.
+
+    4. lxml recovery pass — re-parse and re-serialise with lxml's recover=True
+       parser, which auto-closes unclosed tags, drops invalid tokens, and fixes
+       structural issues that the regex passes above can't catch. This eliminates
+       most "unclosed token" and "not well-formed" errors without needing a retry.
 
     Runs on every SVG before cairosvg, so the LLM does not need to be
     perfectly compliant — we catch the most common mistakes here.
@@ -127,6 +138,22 @@ def _sanitize_svg(svg: str) -> str:
 
     # Step 3 — fix bare < > in text nodes
     svg = _fix_text_nodes(svg)
+
+    # Step 4 — lxml structural repair (unclosed tags, invalid tokens, etc.)
+    if _LXML_AVAILABLE:
+        try:
+            parser = _lxml_etree.XMLParser(
+                recover=True,
+                remove_blank_text=False,
+                resolve_entities=False,
+            )
+            tree = _lxml_etree.fromstring(svg.encode("utf-8"), parser)
+            repaired = _lxml_etree.tostring(tree, encoding="unicode", xml_declaration=False)
+            if repaired and repaired.strip().startswith("<"):
+                svg = repaired
+                logger.debug("svg_sanitizer: lxml repair applied")
+        except Exception as e:
+            logger.debug("svg_sanitizer: lxml repair failed (%s) — using pre-lxml output", e)
 
     return svg
 
@@ -211,7 +238,7 @@ def _generate_svg_code(
     cache_prefix = prompt_template[:split_idx] if split_idx != -1 else ""
 
     return call_llm(
-        prompt, 4000,
+        prompt, 8000,
         prompt_name=f"svg_prompt.md (frame {frame_index})",
         cache_prefix=cache_prefix,
     )
@@ -293,14 +320,20 @@ def _generate_svg_code_retry(
         f'- fill="{bg}" as the primary fill for key shapes\n'
         f'- Canvas background fill="white"\n\n'
         f"Please regenerate a corrected SVG. Critical rules:\n"
-        f"- Output ONLY raw SVG starting with <svg and ending with </svg>\n"
+        f"- Output ONLY raw SVG starting with <svg and ending with </svg>. Nothing after </svg>.\n"
         f"- No gradients, no filters, no CSS style blocks, no external resources\n"
         f"- Every filled shape must be emitted BEFORE the text that appears on or near it\n"
         f"- Pair each shape immediately with its label — never batch all shapes then all labels\n"
         f"- Flat fills only (no opacity, no semi-transparent overlaps)\n"
         f"- All text within x: 40–1160, y: 30–860\n"
+        f"XML VALIDITY — the previous failure was an XML parse error. Follow strictly:\n"
+        f"- Self-close every empty element: <rect .../> <line .../> <circle .../>\n"
+        f"- Close every container: <g>...</g> <text>...</text> <defs>...</defs>\n"
+        f"- Escape ALL special chars in text/attributes: & → &amp;  < → &lt;  > → &gt;\n"
+        f"- Never use HTML entities (&nbsp; &copy; &rarr; etc) — use the Unicode character directly\n"
+        f"- If complexity risks truncation, simplify shapes — a complete simple SVG beats an incomplete complex one\n"
     )
-    return call_llm(correction_prompt, 4000, prompt_name=f"svg_prompt.md (frame {frame.index} retry)")
+    return call_llm(correction_prompt, 8000, prompt_name=f"svg_prompt.md (frame {frame.index} retry)")
 
 
 # ---------------------------------------------------------------------------

@@ -5,6 +5,33 @@ You do NOT compute layout. You do NOT reposition elements. You do NOT derive gri
 Output ONLY raw SVG markup. No markdown fences, no commentary. Your response must start with `<svg` and end with `</svg>`.
 
 ════════════════════════════════════════════════════════════════════
+## CRITICAL — XML VALIDITY (violations cause the entire frame to fail and cost a retry)
+
+These are hard rules. One violation breaks the XML parser and discards the whole frame.
+
+**1. Close every tag.**
+- Empty elements MUST be self-closed: `<rect ... />` `<line ... />` `<circle ... />`
+- Container elements MUST have explicit closing tags: `<g>...</g>` `<defs>...</defs>` `<text>...</text>`
+- Never leave a tag open: `<rect x="10" y="10"` with no closing `/>` is fatal.
+
+**2. Escape special characters inside text content and attribute values.**
+```
+&   →  &amp;     (e.g. "AT&T" must be "AT&amp;T")
+<   →  &lt;      (e.g. "x < y" must be "x &lt; y")
+>   →  &gt;      (e.g. "x > y" must be "x &gt; y")
+"   →  &quot;    (only inside double-quoted attribute values)
+```
+Never write a bare `&`, `<`, or `>` inside a `<text>` element or attribute value.
+
+**3. Do NOT use HTML entities.** Only XML entities are valid: `&amp;` `&lt;` `&gt;` `&quot;` `&apos;`. Never use `&nbsp;` `&copy;` `&rarr;` `&mdash;` or any other HTML entity — the XML parser rejects them. Use the actual Unicode character instead (e.g. `→` not `&rarr;`).
+
+**4. Complete the SVG before stopping.** If the diagram is complex, simplify elements rather than stopping mid-tag. A simpler complete SVG is always better than a detailed incomplete one. Never output a half-written tag like `<rect x="10"` at the end of your response.
+
+**5. Nothing after `</svg>`.** Your response must end exactly at `</svg>`. No trailing text, no comments, no newlines with content after the closing tag.
+
+**6. Attribute values must be double-quoted.** `fill="blue"` not `fill=blue` or `fill='blue'`.
+
+════════════════════════════════════════════════════════════════════
 ## PHASE 0 — READ AND VERIFY BEFORE WRITING ANYTHING
 
 Read the full description. Then answer these questions in your head before emitting the first `<svg`:

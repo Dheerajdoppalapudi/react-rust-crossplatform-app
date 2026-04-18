@@ -92,7 +92,10 @@ def _ffmpeg(args: list[str]) -> None:
     if not _FFMPEG_EXE:
         raise RuntimeError("ffmpeg not found — install ffmpeg or pip install imageio-ffmpeg")
     cmd = [_FFMPEG_EXE, "-y", "-hide_banner", "-loglevel", "error"] + args
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(f"ffmpeg timed out after 120s — cmd: {' '.join(args[:6])}")
     if result.returncode != 0:
         raise RuntimeError(f"ffmpeg failed (exit {result.returncode}):\n{result.stderr.strip()}")
 
@@ -291,7 +294,7 @@ def _build_video_clip(
 # Max number of ffmpeg processes running simultaneously.
 # Each ffmpeg process spawns its own threads internally; keeping this at 4
 # avoids saturating CPU/IO while still cutting wall-clock time by 3-4×.
-_MAX_CLIP_WORKERS = 4
+_MAX_CLIP_WORKERS = 2
 
 
 def _build_one_clip(

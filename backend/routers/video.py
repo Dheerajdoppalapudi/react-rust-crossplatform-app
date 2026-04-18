@@ -39,6 +39,10 @@ router = APIRouter()
 
 _OUTPUTS_DIR_RESOLVED = Path(OUTPUTS_DIR).resolve()
 
+# Sessions currently being assembled — prevents duplicate ffmpeg runs if the
+# user clicks "Generate video" twice before the first assembly completes.
+_assembly_in_progress: set[str] = set()
+
 # Used by media download endpoints that accept ?token= without Authorization header.
 _bearer = HTTPBearer(auto_error=False)
 
@@ -279,22 +283,36 @@ async def generate_video(
                 "message": "Assembling video", "elapsed_s": elapsed(),
             })
 
+            if session_id in _assembly_in_progress:
+                logger.warning("assembly_duplicate_blocked  session=%s", session_id)
+                yield _sse({
+                    "type":    "error",
+                    "message": "Video assembly already in progress — please wait.",
+                    "elapsed_s": elapsed(),
+                })
+                return
+
+            _assembly_in_progress.add(session_id)
             t3 = time.time()
-            # HIGH-2: blocking subprocess (ffmpeg) — run in thread pool
-            assemble_task = asyncio.create_task(
-                asyncio.to_thread(
-                    assemble, normalized_pngs, audio_paths,
-                    narration_texts, video_path, captions,
+            try:
+                # HIGH-2: blocking subprocess (ffmpeg) — run in thread pool
+                assemble_task = asyncio.create_task(
+                    asyncio.to_thread(
+                        assemble, normalized_pngs, audio_paths,
+                        narration_texts, video_path, captions,
+                    )
                 )
-            )
 
-            while not assemble_task.done():
-                try:
-                    await asyncio.wait_for(asyncio.shield(assemble_task), timeout=20.0)
-                except asyncio.TimeoutError:
-                    yield _sse({"type": "heartbeat", "elapsed_s": elapsed()})
+                while not assemble_task.done():
+                    try:
+                        await asyncio.wait_for(asyncio.shield(assemble_task), timeout=20.0)
+                    except asyncio.TimeoutError:
+                        yield _sse({"type": "heartbeat", "elapsed_s": elapsed()})
 
-            await assemble_task
+                await assemble_task
+            finally:
+                _assembly_in_progress.discard(session_id)
+
             d3 = round(time.time() - t3, 1)
             logger.info(
                 "video_stage_assemble_done  session=%s  path=%s  duration=%.1fs",

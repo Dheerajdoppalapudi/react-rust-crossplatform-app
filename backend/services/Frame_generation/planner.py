@@ -47,9 +47,9 @@ _classify_service = LLMService(provider=ClaudeProvider(model=CLASSIFY_MODEL))
 # lower than 8192 reduces billing for unused token budget.
 _VOCAB_PLAN_MAX_TOKENS: dict[str, int] = {
     "math":           4000,   # continuity + visual_objects fields are verbose
-    "illustration":   3000,
-    "concept_analogy":3000,
-    "comparison":     3000,
+    "illustration":   3500,
+    "concept_analogy":3500,
+    "comparison":     3500,
     # Mermaid-routed intents
     "process":        2500,
     "architecture":   2500,
@@ -169,6 +169,8 @@ def call_llm(
     prompt_name: str = "",
     cache_prefix: str = "",
     override_service: LLMService = None,
+    tool_schema: dict = None,
+    json_mode: bool = False,
 ) -> str:
     """
     Single entry point for all LLM calls in the pipeline.
@@ -182,12 +184,23 @@ def call_llm(
 
     override_service: use this LLMService instead of the per-request context
         var. Used by classify_intent() which always runs on Haiku.
+
+    json_mode: if True, tells OpenAI to return guaranteed-valid JSON
+        (response_format=json_object). No-op for Claude.
+
+    tool_schema: reserved for future use. Adds tool_use forcing in Claude
+        at the cost of ~500 extra uncacheable input tokens — leave None
+        unless a specific call is known to fail JSON parsing.
     """
     label = prompt_name or "unknown"
     logger.info("LLM call  prompt=%s  chars=%d", label, len(prompt))
     svc = override_service or request_llm_service.get() or default_llm_service
     result, usage = svc.make_single_prompt_request(
-        prompt, cache_prefix=cache_prefix, max_tokens=max_tokens
+        prompt,
+        cache_prefix=cache_prefix,
+        max_tokens=max_tokens,
+        tool_schema=tool_schema,
+        json_mode=json_mode,
     )
     if result is None:
         raise RuntimeError("LLM service returned None — check server connectivity and credentials.")
@@ -348,6 +361,7 @@ async def create_vocab_plan(
         call_llm, prompt, max_tokens,
         prompt_name=prompt_file,
         cache_prefix=cache_prefix,
+        json_mode=True,   # OpenAI: guarantees valid JSON; Claude: no-op (prompt already asks for JSON)
     )
 
     plan_dict = _extract_json(raw)

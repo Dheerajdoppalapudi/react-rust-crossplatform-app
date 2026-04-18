@@ -22,6 +22,7 @@ Prompt caching (Anthropic only):
   Requires PROMPT_CACHE_ENABLED=true (default) in config.py.
 """
 
+import json
 import logging
 import re
 import time
@@ -78,8 +79,13 @@ class OpenAIProvider(LLMProvider):
         from openai import OpenAI, RateLimitError
         client = OpenAI()  # reads OPENAI_API_KEY from env automatically
 
-        # cache_prefix is a Claude-only concept — discard it silently for OpenAI
+        # These are Claude-only concepts — discard them silently for OpenAI
         kwargs.pop("cache_prefix", None)
+        kwargs.pop("tool_schema", None)
+        json_mode: bool = kwargs.pop("json_mode", False)
+
+        if json_mode:
+            kwargs["response_format"] = {"type": "json_object"}
 
         for attempt in range(_MAX_RETRIES):
             try:
@@ -140,6 +146,8 @@ class ClaudeProvider(LLMProvider):
         from core.config import PROMPT_CACHE_ENABLED
 
         cache_prefix: str = kwargs.pop("cache_prefix", "")
+        tool_schema: Optional[dict] = kwargs.pop("tool_schema", None)
+        kwargs.pop("json_mode", None)  # Claude uses tool_schema instead
 
         client = anthropic.Anthropic()
 
@@ -182,6 +190,9 @@ class ClaudeProvider(LLMProvider):
         }
         if system:
             create_kwargs["system"] = system
+        if tool_schema:
+            create_kwargs["tools"]       = [tool_schema]
+            create_kwargs["tool_choice"] = {"type": "tool", "name": tool_schema["name"]}
 
         for attempt in range(_MAX_RETRIES):
             try:
@@ -194,6 +205,19 @@ class ClaudeProvider(LLMProvider):
                     "cache_creation_input_tokens": getattr(usage, "cache_creation_input_tokens", 0),
                     "cache_read_input_tokens":     getattr(usage, "cache_read_input_tokens", 0),
                 } if usage else {}
+
+                # When tool_use is forced, Claude returns the structured data
+                # inside a tool_use content block instead of a text block.
+                # Extract the input dict and re-serialise to JSON string so
+                # the caller always receives a string (guaranteed valid JSON).
+                if tool_schema:
+                    for block in response.content:
+                        if block.type == "tool_use":
+                            return json.dumps(block.input), usage_dict
+                    # Fallback: no tool_use block found (should not happen with tool_choice forced)
+                    logger.warning("ClaudeProvider: tool_schema set but no tool_use block in response")
+                    return response.content[0].text, usage_dict
+
                 return response.content[0].text, usage_dict
 
             except anthropic.RateLimitError as e:
@@ -270,6 +294,8 @@ class LLMService:
         self,
         prompt: str,
         cache_prefix: str = "",
+        tool_schema: Optional[dict] = None,
+        json_mode: bool = False,
         **kwargs,
     ) -> tuple[Optional[Any], dict]:
         """
@@ -279,9 +305,21 @@ class LLMService:
         cached static block (the prefix) and a dynamic block (the remainder).
         This dramatically reduces cost when the same large template is sent
         multiple times (e.g., once per frame in a multi-frame video).
+
+        tool_schema: if provided (Claude only), forces tool_use with the given
+        schema — guarantees the response is valid JSON matching the schema.
+
+        json_mode: if True (OpenAI only), adds response_format=json_object so
+        the response is guaranteed to be valid JSON.
         """
         messages = [{"role": "user", "content": prompt}]
-        return self.provider.complete(messages, cache_prefix=cache_prefix, **kwargs)
+        return self.provider.complete(
+            messages,
+            cache_prefix=cache_prefix,
+            tool_schema=tool_schema,
+            json_mode=json_mode,
+            **kwargs,
+        )
 
     def make_system_user_request(
         self,
