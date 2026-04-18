@@ -315,7 +315,19 @@ def _generate_manim_code(
         .replace("{{DIAGRAM_DESCRIPTION}}", frame_context)
         .replace("{{PRIMARY_COLOR}}", primary_color)
     )
-    return call_llm(prompt, prompt_name=f"manim_prompt.md (frame {frame.index})")
+
+    # Cache the static instruction block of the template (before {{DIAGRAM_DESCRIPTION}}).
+    split_idx = prompt_template.find("{{DIAGRAM_DESCRIPTION}}")
+    cache_prefix = prompt_template[:split_idx] if split_idx != -1 else ""
+    # PRIMARY_COLOR substitution happens before the split point — update the prefix.
+    if cache_prefix:
+        cache_prefix = cache_prefix.replace("{{PRIMARY_COLOR}}", primary_color)
+
+    return call_llm(
+        prompt, 5000,
+        prompt_name=f"manim_prompt.md (frame {frame.index})",
+        cache_prefix=cache_prefix,
+    )
 
 
 # ---------------------------------------------------------------------------

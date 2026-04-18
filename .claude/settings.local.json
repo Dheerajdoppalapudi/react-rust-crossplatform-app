@@ -60,7 +60,10 @@
       "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); [print\\(f'- {i}'\\) for i in d['all_issues'][:15]]\")",
       "Bash(grep -E \"^d|\\\\.py$|\\\\.jsx$\")",
       "Bash(python3 -m py_compile run.py)",
-      "Bash(python3 -m manim --version)"
+      "Bash(python3 -m manim --version)",
+      "Bash(cp autoimprov_manim/.env autoimprov_parent/autoimprov_manim/.env)",
+      "Bash(rm -rf autoimprov autoimprov_manim)",
+      "Bash(mv autoimprov_parent AutoImprov)"
     ]
   }
 }

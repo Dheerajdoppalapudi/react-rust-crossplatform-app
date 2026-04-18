@@ -191,23 +191,46 @@ async def generate_video(
             return round(time.time() - t_start, 1)
 
         try:
-            # Stage 1: normalize frames to 1920×1080 PNGs
+            total_frames = len(narration_texts)
+
+            # Stage 1 + Stage 2 run concurrently:
+            #   - export_frames normalises PNGs (CPU/disk bound)
+            #   - generate_audio_parallel calls TTS API (network bound)
+            # Neither depends on the other, so starting both at once
+            # reduces the combined wall-clock time to max(export, tts).
             logger.info(
                 "video_stage_export_start  session=%s  frames=%d",
                 session_id, len(captions),
+            )
+            logger.info(
+                "video_stage_tts_start  session=%s  backend=%s  frames=%d",
+                session_id, tts_backend, total_frames,
             )
             yield _sse({
                 "type": "stage", "stage": "export_frames",
                 "message": "Exporting frames", "elapsed_s": elapsed(),
             })
+            yield _sse({
+                "type": "stage", "stage": "tts",
+                "message": "Generating audio", "total": total_frames, "elapsed_s": elapsed(),
+            })
 
             t1 = time.time()
-            # HIGH-2: blocking I/O — run in thread pool
-            normalized_pngs = await asyncio.to_thread(
-                export_frames, str(safe_output_dir), captions
-            )
-            d1 = round(time.time() - t1, 1)
+            progress_queue: asyncio.Queue[int] = asyncio.Queue()
 
+            # Fire both tasks simultaneously
+            export_task = asyncio.create_task(
+                asyncio.to_thread(export_frames, str(safe_output_dir), captions)
+            )
+            tts_task = asyncio.create_task(
+                generate_audio_parallel(
+                    narration_texts, str(safe_output_dir), use_openai_tts, progress_queue
+                )
+            )
+
+            # Await export first (usually faster — ~3s vs ~20s for TTS)
+            normalized_pngs = await export_task
+            d1 = round(time.time() - t1, 1)
             logger.info(
                 "video_stage_export_done  session=%s  exported=%d  duration=%.1fs",
                 session_id, len(normalized_pngs), d1,
@@ -217,30 +240,21 @@ async def generate_video(
                 "count": len(normalized_pngs), "duration_s": d1, "elapsed_s": elapsed(),
             })
 
-            # Stage 2: parallel TTS with per-frame progress
-            total_frames = len(narration_texts)
-            logger.info(
-                "video_stage_tts_start  session=%s  backend=%s  frames=%d",
-                session_id, tts_backend, total_frames,
-            )
-            yield _sse({
-                "type": "stage", "stage": "tts",
-                "message": "Generating audio", "total": total_frames, "elapsed_s": elapsed(),
-            })
-
-            progress_queue: asyncio.Queue[int] = asyncio.Queue()
+            # Drain TTS progress events that arrived while export was running,
+            # then await the remaining TTS work (may already be done).
             t2 = time.time()
-            tts_task = asyncio.create_task(
-                generate_audio_parallel(
-                    narration_texts, str(safe_output_dir), use_openai_tts, progress_queue
-                )
-            )
-            for _ in range(total_frames):
-                frame_idx = await progress_queue.get()
-                yield _sse({
-                    "type": "tts_progress",
-                    "frame": frame_idx + 1, "total": total_frames, "elapsed_s": elapsed(),
-                })
+            while not tts_task.done() or not progress_queue.empty():
+                try:
+                    frame_idx = progress_queue.get_nowait()
+                    yield _sse({
+                        "type": "tts_progress",
+                        "frame": frame_idx + 1, "total": total_frames, "elapsed_s": elapsed(),
+                    })
+                except asyncio.QueueEmpty:
+                    if tts_task.done():
+                        break
+                    # TTS still running — yield control briefly so it can make progress
+                    await asyncio.sleep(0.05)
 
             audio_paths = await tts_task
             d2 = round(time.time() - t2, 1)

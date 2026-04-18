@@ -24,18 +24,37 @@ from typing import List, Union
 
 from pydantic import BaseModel, field_validator
 
-from services.llm_service import LLMService, default_llm_service
+from core.config import CLASSIFY_MODEL
+from services.llm_service import LLMService, ClaudeProvider, default_llm_service
 
 # Per-request lifecycle log. main.py sets this before each pipeline run.
 request_log: ContextVar[list | None] = ContextVar("request_log", default=None)
 
 # Per-request token accumulator. main.py resets this before each pipeline run.
-# Holds {"prompt_tokens": int, "completion_tokens": int, "total_tokens": int}
+# Holds prompt/completion/total token counts + Anthropic cache token counts.
 token_usage: ContextVar[dict | None] = ContextVar("token_usage", default=None)
 
 # Per-request LLM service override. When set, call_llm() uses this instead of
 # default_llm_service — allows the UI to choose Claude vs OpenAI per request.
 request_llm_service: ContextVar[LLMService | None] = ContextVar("request_llm_service", default=None)
+
+# Fixed Haiku service used ONLY for classify_intent — cheap/fast, always Claude.
+# Bypasses the per-request service so the user's model choice doesn't affect it.
+_classify_service = LLMService(provider=ClaudeProvider(model=CLASSIFY_MODEL))
+
+# Calibrated max_tokens per planning call type.
+# These are generous upper bounds based on observed output sizes; setting them
+# lower than 8192 reduces billing for unused token budget.
+_VOCAB_PLAN_MAX_TOKENS: dict[str, int] = {
+    "math":           4000,   # continuity + visual_objects fields are verbose
+    "illustration":   3000,
+    "concept_analogy":3000,
+    "comparison":     3000,
+    # Mermaid-routed intents
+    "process":        2500,
+    "architecture":   2500,
+    "timeline":       2500,
+}
 
 
 def _accumulate_tokens(usage: dict):
@@ -43,9 +62,11 @@ def _accumulate_tokens(usage: dict):
     acc = token_usage.get()
     if acc is None or not usage:
         return
-    acc["prompt_tokens"]     += usage.get("prompt_tokens", 0)
-    acc["completion_tokens"] += usage.get("completion_tokens", 0)
-    acc["total_tokens"]      += usage.get("total_tokens", 0)
+    acc["prompt_tokens"]              += usage.get("prompt_tokens", 0)
+    acc["completion_tokens"]          += usage.get("completion_tokens", 0)
+    acc["total_tokens"]               += usage.get("total_tokens", 0)
+    acc["cache_creation_input_tokens"] += usage.get("cache_creation_input_tokens", 0)
+    acc["cache_read_input_tokens"]     += usage.get("cache_read_input_tokens", 0)
 
 
 def _log(entry: dict):
@@ -142,21 +163,42 @@ class GenerationPlan(BaseModel):
 # LLM call
 # ---------------------------------------------------------------------------
 
-def call_llm(prompt: str, max_tokens: int = 8192, prompt_name: str = "") -> str:
+def call_llm(
+    prompt: str,
+    max_tokens: int = 8192,
+    prompt_name: str = "",
+    cache_prefix: str = "",
+    override_service: LLMService = None,
+) -> str:
     """
     Single entry point for all LLM calls in the pipeline.
-    max_tokens defaults to 8192 — Phase B and component gen produce large JSON
-    that easily exceeds the old 4096 default, causing mid-JSON truncation.
+
+    max_tokens: calibrated per call-type — see _VOCAB_PLAN_MAX_TOKENS and
+        per-generator constants. Default 8192 kept for backwards compat.
+
+    cache_prefix: static portion of the prompt template (Anthropic only).
+        When set, the message is split into a cached block + dynamic block,
+        reducing cost by ~90% on the static tokens for repeated calls.
+
+    override_service: use this LLMService instead of the per-request context
+        var. Used by classify_intent() which always runs on Haiku.
     """
     label = prompt_name or "unknown"
     logger.info("LLM call  prompt=%s  chars=%d", label, len(prompt))
-    svc = request_llm_service.get() or default_llm_service
-    result, usage = svc.make_single_prompt_request(prompt, max_tokens=max_tokens)
+    svc = override_service or request_llm_service.get() or default_llm_service
+    result, usage = svc.make_single_prompt_request(
+        prompt, cache_prefix=cache_prefix, max_tokens=max_tokens
+    )
     if result is None:
         raise RuntimeError("LLM service returned None — check server connectivity and credentials.")
     _accumulate_tokens(usage)
     total_tokens = (usage or {}).get("total_tokens", 0)
-    logger.info("LLM done  prompt=%s  tokens=%d", label, total_tokens)
+    cache_read   = (usage or {}).get("cache_read_input_tokens", 0)
+    cache_create = (usage or {}).get("cache_creation_input_tokens", 0)
+    logger.info(
+        "LLM done  prompt=%s  tokens=%d  cache_read=%d  cache_create=%d",
+        label, total_tokens, cache_read, cache_create,
+    )
     _log({
         "event": "llm_call",
         "prompt_name": label,
@@ -223,6 +265,7 @@ async def classify_intent(user_prompt: str, conversation_context: str = "") -> t
     """
     Call 1 — tiny classification call.
     Returns (intent_type, frame_count). Fast and cheap (~300 tokens).
+    Always uses Haiku (_classify_service) regardless of the per-request model.
     """
     _prompts_dir = os.path.join(os.path.dirname(__file__), "prompts")
     with open(os.path.join(_prompts_dir, "planning_classify.md")) as f:
@@ -235,7 +278,11 @@ async def classify_intent(user_prompt: str, conversation_context: str = "") -> t
         .replace("{{CONVERSATION_CONTEXT}}", context_block)
     )
 
-    raw = await asyncio.to_thread(call_llm, prompt, 512, prompt_name="planning_classify.md")
+    raw = await asyncio.to_thread(
+        call_llm, prompt, 512,
+        prompt_name="planning_classify.md",
+        override_service=_classify_service,
+    )
     data = _extract_json(raw)
     intent_type = data.get("intent_type", "process")
     frame_count = max(2, min(8, int(data.get("frame_count", 3))))
@@ -267,6 +314,7 @@ async def create_vocab_plan(
 
     with open(os.path.join(_prompts_dir, prompt_file)) as f:
         template = f.read()
+
     prompt = (
         template
         .replace("{{USER_PROMPT}}", user_prompt)
@@ -274,7 +322,33 @@ async def create_vocab_plan(
         .replace("{{INTENT_TYPE}}", intent_type)
         .replace("{{FRAME_COUNT}}", str(frame_count))
     )
-    raw = await asyncio.to_thread(call_llm, prompt, prompt_name=prompt_file)
+
+    # Cache prefix: the large static instruction block of the template.
+    # Split at {{CONVERSATION_CONTEXT}} (or {{USER_PROMPT}}) — everything
+    # before these markers is pure instructions that never changes between
+    # requests, so Anthropic can reuse it at 10% of normal token cost.
+    _split_markers = ("{{CONVERSATION_CONTEXT}}", "{{USER_PROMPT}}")
+    cache_prefix = ""
+    for marker in _split_markers:
+        split_idx = template.find(marker)
+        if split_idx != -1:
+            # Substitute the small header tokens (INTENT_TYPE, FRAME_COUNT)
+            # that appear before the split point, so the cached text matches
+            # the assembled prompt exactly.
+            static_raw = template[:split_idx]
+            cache_prefix = (
+                static_raw
+                .replace("{{INTENT_TYPE}}", intent_type)
+                .replace("{{FRAME_COUNT}}", str(frame_count))
+            )
+            break
+
+    max_tokens = _VOCAB_PLAN_MAX_TOKENS.get(intent_type, 2500)
+    raw = await asyncio.to_thread(
+        call_llm, prompt, max_tokens,
+        prompt_name=prompt_file,
+        cache_prefix=cache_prefix,
+    )
 
     plan_dict = _extract_json(raw)
     # Always enforce Call 1's classification — never let Call 2 override it
@@ -362,7 +436,15 @@ async def _generate_one_frame(
     description = frame.description + style_note + vocab_note
     prompt = prompt_template.replace("{{DIAGRAM_DESCRIPTION}}", description)
 
-    raw = await asyncio.to_thread(call_llm, prompt, prompt_name=f"prompt_template.md (frame {frame.index})")
+    # Cache the static template text; only the frame description is dynamic.
+    split_idx = prompt_template.find("{{DIAGRAM_DESCRIPTION}}")
+    cache_prefix = prompt_template[:split_idx] if split_idx != -1 else ""
+
+    raw = await asyncio.to_thread(
+        call_llm, prompt, 8192,
+        prompt_name=f"prompt_template.md (frame {frame.index})",
+        cache_prefix=cache_prefix,
+    )
     return _extract_json(raw)
 
 

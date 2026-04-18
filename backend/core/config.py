@@ -29,8 +29,16 @@ UPLOAD_DIR: Path  = BASE_DIR / "uploads"
 OUTPUTS_DIR: Path = BASE_DIR / "outputs"
 
 # ── LLM models ────────────────────────────────────────────────────────────────
-OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4.1")
-CLAUDE_MODEL: str = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-6")
+OPENAI_MODEL: str  = os.getenv("OPENAI_MODEL",  "gpt-4.1")
+CLAUDE_MODEL: str  = os.getenv("CLAUDE_MODEL",  "claude-sonnet-4-6")
+# Cheap/fast model used only for intent classification (~300 tokens, simple task).
+# Always uses Haiku regardless of the user's chosen model.
+CLASSIFY_MODEL: str = os.getenv("CLASSIFY_MODEL", "claude-haiku-4-5-20251001")
+
+# ── Cost optimisation flags ───────────────────────────────────────────────────
+# Anthropic prompt caching — marks large static prompt templates with
+# cache_control so repeated calls reuse cached tokens at 10% of normal cost.
+PROMPT_CACHE_ENABLED: bool = os.getenv("PROMPT_CACHE_ENABLED", "true").lower() != "false"
 
 # ── External services ─────────────────────────────────────────────────────────
 MERMAID_SIDECAR_URL: str = os.getenv("MERMAID_SIDECAR_URL", "http://localhost:3001")

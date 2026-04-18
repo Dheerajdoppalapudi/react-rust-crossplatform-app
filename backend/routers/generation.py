@@ -115,7 +115,10 @@ async def image_generation(
     # ── Set up per-request context vars ───────────────────────────────────────
     lifecycle_log: list = []
     log_token   = request_log.set(lifecycle_log)
-    usage_acc   = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+    usage_acc   = {
+        "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0,
+        "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0,
+    }
     usage_token = token_usage.set(usage_acc)
 
     _llm_provider = (
@@ -146,8 +149,12 @@ async def image_generation(
 
         _log({"event": "request_complete", "duration_ms": duration_ms, "session_id": session_id})
         logger.info(
-            "Request complete  session=%s  render_path=%s  duration_ms=%d  llm_calls=%d",
+            "Request complete  session=%s  render_path=%s  duration_ms=%d  llm_calls=%d"
+            "  tokens=%d  cache_read=%d  cache_create=%d",
             session_id, result_payload.get("render_path"), duration_ms, api_call_count,
+            final_usage.get("total_tokens", 0),
+            final_usage.get("cache_read_input_tokens", 0),
+            final_usage.get("cache_creation_input_tokens", 0),
         )
 
         # HIGH-2: write to disk in thread pool — don't block the event loop

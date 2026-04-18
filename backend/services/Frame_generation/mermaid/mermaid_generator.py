@@ -81,7 +81,16 @@ async def _generate_one_mermaid_frame(
     4. Returns {"elements": [...]} — identical shape to a slim JSON dict.
     """
     prompt = mermaid_prompt_template.replace("{{DIAGRAM_DESCRIPTION}}", frame.description)
-    raw = await asyncio.to_thread(call_llm, prompt, prompt_name=f"mermaid_prompt.md (frame {frame.index})")
+
+    # Cache the static instruction block (before {{DIAGRAM_DESCRIPTION}}).
+    split_idx = mermaid_prompt_template.find("{{DIAGRAM_DESCRIPTION}}")
+    cache_prefix = mermaid_prompt_template[:split_idx] if split_idx != -1 else ""
+
+    raw = await asyncio.to_thread(
+        call_llm, prompt, 1500,
+        prompt_name=f"mermaid_prompt.md (frame {frame.index})",
+        cache_prefix=cache_prefix,
+    )
     mermaid_text = _extract_mermaid(raw)
 
     def _call_sidecar():

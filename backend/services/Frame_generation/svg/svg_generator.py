@@ -205,7 +205,16 @@ def _generate_svg_code(
 
     description = frame.description + style_note + vocab_note
     prompt = prompt_template.replace("{{DIAGRAM_DESCRIPTION}}", description)
-    return call_llm(prompt, prompt_name=f"svg_prompt.md (frame {frame_index})")
+
+    # Cache the large static instruction block; only the frame description is dynamic.
+    split_idx = prompt_template.find("{{DIAGRAM_DESCRIPTION}}")
+    cache_prefix = prompt_template[:split_idx] if split_idx != -1 else ""
+
+    return call_llm(
+        prompt, 4000,
+        prompt_name=f"svg_prompt.md (frame {frame_index})",
+        cache_prefix=cache_prefix,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -291,7 +300,7 @@ def _generate_svg_code_retry(
         f"- Flat fills only (no opacity, no semi-transparent overlaps)\n"
         f"- All text within x: 40–1160, y: 30–860\n"
     )
-    return call_llm(correction_prompt, prompt_name=f"svg_prompt.md (frame {frame.index} retry)")
+    return call_llm(correction_prompt, 4000, prompt_name=f"svg_prompt.md (frame {frame.index} retry)")
 
 
 # ---------------------------------------------------------------------------
