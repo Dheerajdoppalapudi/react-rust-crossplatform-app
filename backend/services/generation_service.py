@@ -309,34 +309,27 @@ async def run_generation_pipeline(
     # ── Stage 1: Planning ─────────────────────────────────────────────────────
     _log({"event": "stage_start", "stage": "planning"})
 
-    # Call 1 — classify intent and frame count (fast, ~300 tokens)
-    intent_type, frame_count = await classify_intent(message, conversation_context)
-
-    # Override intent if the user forced a render mode from the UI
+    # If the user picked a render mode from the UI, skip classify entirely —
+    # we already know the intent. Use 4 frames as the default; create_vocab_plan
+    # can adjust this freely based on content complexity.
     if forced_render_mode and forced_render_mode in _FORCED_INTENT:
         intent_type = _FORCED_INTENT[forced_render_mode]
-        logger.info("Intent overridden by user  render_mode=%s  intent=%s", forced_render_mode, intent_type)
+        frame_count = 4
+        logger.info("Intent forced  render_mode=%s  intent=%s  frames=%d", forced_render_mode, intent_type, frame_count)
+    else:
+        intent_type, frame_count = await classify_intent(message, conversation_context)
+        logger.info("Intent classified  intent=%s  frames=%d", intent_type, frame_count)
 
     _log({"event": "stage_complete", "stage": "planning_classify",
           "intent_type": intent_type, "frame_count": frame_count,
           "forced": forced_render_mode or "auto"})
-    logger.info("Intent classified  intent=%s  frames=%d  forced=%s",
-                intent_type, frame_count, forced_render_mode or "auto")
 
     # Call 2 — intent-specific planning
     vocab_plan = await create_vocab_plan(message, conversation_context, intent_type, frame_count)
-    _log({"event": "stage_complete", "stage": "planning_phase_a",
-          "intent_type": vocab_plan.intent_type, "frame_count": vocab_plan.frame_count})
-
     plan = _vocab_plan_to_generation_plan(vocab_plan)
 
-    _log({
-        "event": "stage_complete",
-        "stage": "planning",
-        "intent_type": plan.intent_type,
-        "frame_count": plan.frame_count,
-        "layout": plan.layout,
-    })
+    _log({"event": "stage_complete", "stage": "planning",
+          "intent_type": plan.intent_type, "frame_count": plan.frame_count, "layout": plan.layout})
     logger.info(
         "Planning complete  session=%s  intent=%s  frames=%d  layout=%s",
         session_id, plan.intent_type, plan.frame_count, plan.layout,
@@ -396,7 +389,7 @@ async def _run_frame_generation(
 
     # ── Manim ─────────────────────────────────────────────────────────────────
     if plan.intent_type in MANIM_INTENT_TYPES and manim_available():
-        logger.info("Render path → manim  session=%s  intent=%s", session_id, plan.intent_type)
+        logger.info("Render path → manim  session=%s  frames=%d", session_id, plan.frame_count)
         _log({"event": "stage_start", "stage": "frame_generation", "path": "manim",
               "frame_count": plan.frame_count})
 
@@ -444,7 +437,7 @@ async def _run_frame_generation(
 
     # ── SVG ───────────────────────────────────────────────────────────────────
     if plan.intent_type in SVG_INTENT_TYPES and svg_available():
-        logger.info("Render path → svg  session=%s  intent=%s", session_id, plan.intent_type)
+        logger.info("Render path → svg  session=%s  frames=%d", session_id, plan.frame_count)
         _log({"event": "stage_start", "stage": "frame_generation", "path": "svg",
               "frame_count": plan.frame_count})
 
@@ -482,11 +475,7 @@ async def _run_frame_generation(
 
     # ── Mermaid sidecar down → fall back to SVG ───────────────────────────────
     if plan.intent_type in MERMAID_INTENT_TYPES and not _sidecar_available() and svg_available():
-        logger.warning(
-            "Mermaid sidecar unavailable — falling back to svg  session=%s  intent=%s",
-            session_id, plan.intent_type,
-        )
-        _log({"event": "info", "message": "Mermaid sidecar unavailable — falling back to SVG"})
+        logger.warning("Mermaid sidecar unavailable — falling back to svg  session=%s", session_id)
         _log({"event": "stage_start", "stage": "frame_generation", "path": "svg_fallback",
               "frame_count": plan.frame_count})
 
@@ -531,11 +520,10 @@ async def _run_frame_generation(
             logger.warning("Manim not available — falling back to slim_json  session=%s", session_id)
         elif plan.intent_type in SVG_INTENT_TYPES:
             logger.warning("cairosvg unavailable — falling back to slim_json  session=%s", session_id)
-            _log({"event": "info", "message": "cairosvg unavailable — falling back to slim JSON"})
         else:
-            logger.info("Render path → slim_json  session=%s  intent=%s", session_id, plan.intent_type)
+            logger.info("Render path → slim_json  session=%s  frames=%d", session_id, plan.frame_count)
     else:
-        logger.info("Render path → mermaid  session=%s  intent=%s", session_id, plan.intent_type)
+        logger.info("Render path → mermaid  session=%s  frames=%d", session_id, plan.frame_count)
 
     _log({"event": "stage_start", "stage": "frame_generation", "path": path_label,
           "frame_count": plan.frame_count})

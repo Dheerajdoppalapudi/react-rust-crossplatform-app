@@ -410,18 +410,37 @@ async def generate_svg_frames(
     output_dir: str,
 ) -> list[Optional[str]]:
     """
-    Generate one PNG per frame using SVG. All frames run in parallel.
+    Generate one PNG per frame using SVG.
+
+    Two-phase to maximise Anthropic prompt cache hits:
+      Phase 1 — fire frame 0 alone and await it. This writes the cache entry
+                 for the 36KB static prompt template (cache_write at 1.25×).
+      Phase 2 — fire remaining frames in parallel. They all hit cache_read
+                 (0.1× input token rate) instead of paying cache_write again.
+    Trade-off: ~10s sequential latency on frame 0 vs ~$0.12 saved per video.
+
     Returns a list of absolute PNG paths (None = failed frame).
     """
-    tasks = [
+    if not plan.frames:
+        return []
+
+    # Phase 1 — warm the cache with frame 0
+    first = await _generate_one_svg_frame(
+        plan.frames[0], 0, plan, prompt_template, output_dir
+    )
+
+    if len(plan.frames) == 1:
+        return [first]
+
+    # Phase 2 — remaining frames in parallel (cache entry now exists)
+    rest_tasks = [
         _generate_one_svg_frame(frame, i, plan, prompt_template, output_dir)
-        for i, frame in enumerate(plan.frames)
+        for i, frame in enumerate(plan.frames[1:], start=1)
     ]
+    rest_results = await asyncio.gather(*rest_tasks, return_exceptions=True)
 
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-
-    paths: list[Optional[str]] = []
-    for i, result in enumerate(results):
+    paths: list[Optional[str]] = [first]
+    for i, result in enumerate(rest_results, start=1):
         if isinstance(result, Exception):
             logger.error("svg_generator frame %d exception: %s", i, result)
             paths.append(None)

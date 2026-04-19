@@ -193,8 +193,12 @@ def call_llm(
         unless a specific call is known to fail JSON parsing.
     """
     label = prompt_name or "unknown"
-    logger.info("LLM call  prompt=%s  chars=%d", label, len(prompt))
     svc = override_service or request_llm_service.get() or default_llm_service
+    model = getattr(svc.provider, "model", "unknown")
+    logger.info(
+        "LLM call  prompt=%s  model=%s  chars=%d  cache=%s",
+        label, model, len(prompt), "yes" if cache_prefix else "no",
+    )
     result, usage = svc.make_single_prompt_request(
         prompt,
         cache_prefix=cache_prefix,
@@ -209,8 +213,8 @@ def call_llm(
     cache_read   = (usage or {}).get("cache_read_input_tokens", 0)
     cache_create = (usage or {}).get("cache_creation_input_tokens", 0)
     logger.info(
-        "LLM done  prompt=%s  tokens=%d  cache_read=%d  cache_create=%d",
-        label, total_tokens, cache_read, cache_create,
+        "LLM done  prompt=%s  model=%s  tokens=%d  cache_read=%d  cache_create=%d",
+        label, model, total_tokens, cache_read, cache_create,
     )
     _log({
         "event": "llm_call",

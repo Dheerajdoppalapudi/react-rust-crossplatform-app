@@ -149,6 +149,14 @@ class ClaudeProvider(LLMProvider):
         tool_schema: Optional[dict] = kwargs.pop("tool_schema", None)
         kwargs.pop("json_mode", None)  # Claude uses tool_schema instead
 
+        cache_active = bool(cache_prefix) and PROMPT_CACHE_ENABLED
+        logger.debug(
+            "ClaudeProvider  model=%s  prompt_cache=%s  cache_prefix_chars=%d",
+            self.model,
+            "enabled" if cache_active else "disabled",
+            len(cache_prefix),
+        )
+
         client = anthropic.Anthropic()
 
         # Separate system prompt from user/assistant messages
@@ -344,3 +352,15 @@ class LLMService:
 # ---------------------------------------------------------------------------
 
 default_llm_service = LLMService(provider=ClaudeProvider())
+
+# ── Startup diagnostic ────────────────────────────────────────────────────────
+def _log_startup() -> None:
+    from core.config import PROMPT_CACHE_ENABLED, CLAUDE_MODEL, CLASSIFY_MODEL
+    logger.info(
+        "LLMService ready  default_model=%s  classify_model=%s  prompt_cache=%s",
+        CLAUDE_MODEL,
+        CLASSIFY_MODEL,
+        "ENABLED" if PROMPT_CACHE_ENABLED else "DISABLED",
+    )
+
+_log_startup()

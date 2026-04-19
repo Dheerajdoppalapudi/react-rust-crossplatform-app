@@ -28,7 +28,6 @@ import os
 import shutil
 import subprocess
 import tempfile
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
 
 from services.video.tts_service import estimate_duration
@@ -288,48 +287,6 @@ def _build_video_clip(
 
 
 # ---------------------------------------------------------------------------
-# Per-clip builder (called in parallel by assemble())
-# ---------------------------------------------------------------------------
-
-# Max number of ffmpeg processes running simultaneously.
-# Each ffmpeg process spawns its own threads internally; keeping this at 4
-# avoids saturating CPU/IO while still cutting wall-clock time by 3-4×.
-_MAX_CLIP_WORKERS = 2
-
-
-def _build_one_clip(
-    index: int,
-    frame_path: str,
-    audio_path: Optional[str],
-    narration: str,
-    caption: str,
-    temp_dir: str,
-) -> tuple[int, str]:
-    """
-    Build one intermediate clip (.mp4) for a single frame.
-    Returns (index, clip_out_path) on success; raises on failure.
-    Called from a ThreadPoolExecutor — must be fully thread-safe (it is,
-    since each call writes to a unique path and spawns its own subprocess).
-    """
-    clip_out     = os.path.join(temp_dir, f"clip_{index:03d}.mp4")
-    fallback_dur = estimate_duration(narration)
-
-    if frame_path.lower().endswith(".mp4"):
-        logger.debug("Building video clip %d  path=%s", index, frame_path)
-        _build_video_clip(frame_path, audio_path, fallback_dur, caption, clip_out)
-    else:
-        logger.debug("Building image clip %d  path=%s", index, frame_path)
-        audio_dur = (
-            _probe_duration(audio_path)
-            if audio_path and os.path.exists(audio_path)
-            else None
-        )
-        _build_png_clip(frame_path, audio_path, audio_dur or fallback_dur, clip_out)
-
-    return index, clip_out
-
-
-# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -374,40 +331,31 @@ def assemble(
     logger.info("Assembly temp dir: %s", temp_dir)
 
     try:
-        # ── Step 1: build one clip per frame (in parallel) ────────────────────
-        # Filter out missing frames first so we don't submit no-op futures.
-        valid_frames = [
-            (i, fp, ap, nr, cap)
-            for i, (fp, ap, nr, cap) in enumerate(
-                zip(frame_paths, audio_paths, narration_texts, captions)
-            )
-            if fp and os.path.exists(fp)
-        ]
-        skipped = len(frame_paths) - len(valid_frames)
-        if skipped:
-            logger.warning("%d frame path(s) missing — skipping", skipped)
-
-        # clip_results maps index → clip_path so we can reassemble in order
-        # after parallel execution completes.
-        clip_results: dict[int, str] = {}
-        workers = min(_MAX_CLIP_WORKERS, len(valid_frames)) if valid_frames else 1
-
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            future_to_idx = {
-                pool.submit(_build_one_clip, i, fp, ap, nr, cap, temp_dir): i
-                for i, fp, ap, nr, cap in valid_frames
-            }
-            for future in as_completed(future_to_idx):
-                i = future_to_idx[future]
-                try:
-                    idx, clip_out = future.result()
-                    clip_results[idx] = clip_out
-                    logger.debug("Clip %d ready  path=%s", idx, clip_out)
-                except Exception:
-                    logger.error("Failed to build clip %d — skipping", i, exc_info=True)
-
-        # Reconstruct clip list in original frame order
-        clip_paths = [clip_results[i] for i in sorted(clip_results)]
+        # ── Step 1: build one clip per frame (sequential) ────────────────────
+        clip_paths: list[str] = []
+        for i, (fp, ap, nr, cap) in enumerate(
+            zip(frame_paths, audio_paths, narration_texts, captions)
+        ):
+            if not fp or not os.path.exists(fp):
+                logger.warning("Frame %d path missing — skipping", i)
+                continue
+            clip_out     = os.path.join(temp_dir, f"clip_{i:03d}.mp4")
+            fallback_dur = estimate_duration(nr)
+            try:
+                if fp.lower().endswith(".mp4"):
+                    logger.debug("Building video clip %d  path=%s", i, fp)
+                    _build_video_clip(fp, ap, fallback_dur, cap, clip_out)
+                else:
+                    logger.debug("Building image clip %d  path=%s", i, fp)
+                    audio_dur = (
+                        _probe_duration(ap)
+                        if ap and os.path.exists(ap)
+                        else None
+                    )
+                    _build_png_clip(fp, ap, audio_dur or fallback_dur, clip_out)
+                clip_paths.append(clip_out)
+            except Exception:
+                logger.error("Failed to build clip %d — skipping", i, exc_info=True)
 
         if not clip_paths:
             raise ValueError("All frames failed — no clips to concat")
