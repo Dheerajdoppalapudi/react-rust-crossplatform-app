@@ -2,7 +2,7 @@ import asyncio, json, re, logging, os
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from pathlib import Path
-from openai import OpenAI
+import anthropic
 from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent / ".env")
@@ -15,43 +15,67 @@ logging.basicConfig(
         logging.FileHandler(Path(__file__).parent / "run.log", mode="w", encoding="utf-8"),
     ],
 )
-# Suppress httpx/openai transport noise (HTTP headers, base64 bodies)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
-logging.getLogger("openai").setLevel(logging.WARNING)
+logging.getLogger("anthropic").setLevel(logging.WARNING)
 log = logging.getLogger(__name__)
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
-PROMPT    = "explain how photosynthesis works using illustrations"
-API_KEY   = os.environ["OPENAI_API_KEY"]
-MODEL     = "gpt-4.1"
+PROMPT         = "Explain how neural networks learn through backpropagation using illustrations"
+PLANNING_MODEL = "claude-sonnet-4-6"   # classify + vocab plan
+RENDER_MODEL   = "claude-haiku-4-5-20251001"  # per-frame SVG generation
 # ─────────────────────────────────────────────────────────────────────────────
 
 _HERE        = Path(__file__).parent
 _PROMPTS_DIR = _HERE / "prompts"
 _OUTPUT_ROOT = _HERE / "output"
 
-client = OpenAI(api_key=API_KEY)
+_claude = anthropic.Anthropic()
 
-# Serialize all LLM calls — prevents 429s on 30k TPM accounts
+# Serialize all LLM calls — prevents TPM rate limits
 _LLM_SEM = asyncio.Semaphore(1)
 
 
-def call_llm(prompt: str, max_tokens: int = 8192) -> str:
-    response = client.chat.completions.create(
-        model=MODEL,
-        messages=[{"role": "user", "content": prompt}],
+def call_llm(prompt: str, max_tokens: int = 8192, model: str = PLANNING_MODEL,
+             cache_prefix: str = "") -> str:
+    """
+    Call Claude. When cache_prefix is set (Haiku SVG frames), the message is
+    split into two content blocks:
+      - Static block (the prompt template) → marked cache_control=ephemeral
+      - Dynamic block (the frame description) → plain text
+    Frame 0 writes the cache entry; frames 1-N pay cache_read (10% cost).
+    """
+    if cache_prefix and prompt.startswith(cache_prefix):
+        dynamic = prompt[len(cache_prefix):]
+        content = [
+            {"type": "text", "text": cache_prefix,
+             "cache_control": {"type": "ephemeral"}},
+        ]
+        if dynamic:
+            content.append({"type": "text", "text": dynamic})
+    else:
+        content = prompt
+
+    response = _claude.messages.create(
+        model=model,
         max_tokens=max_tokens,
+        messages=[{"role": "user", "content": content}],
     )
-    return response.choices[0].message.content
+    usage = response.usage
+    cache_read   = getattr(usage, "cache_read_input_tokens", 0)
+    cache_create = getattr(usage, "cache_creation_input_tokens", 0)
+    log.info("tokens  in=%d  out=%d  cache_read=%d  cache_create=%d  model=%s",
+             usage.input_tokens, usage.output_tokens, cache_read, cache_create, model)
+    return response.content[0].text
 
 
-async def _call_llm_async(prompt: str, max_tokens: int = 8192, label: str = "") -> str:
+async def _call_llm_async(prompt: str, max_tokens: int = 8192, label: str = "",
+                          model: str = PLANNING_MODEL, cache_prefix: str = "") -> str:
     """Throttled async wrapper — only 1 LLM call in flight at a time."""
     async with _LLM_SEM:
         if label:
-            print(f"  → LLM call: {label}", flush=True)
-        result = await asyncio.to_thread(call_llm, prompt, max_tokens)
+            print(f"  → LLM call: {label}  model={model}  cache={'yes' if cache_prefix else 'no'}", flush=True)
+        result = await asyncio.to_thread(call_llm, prompt, max_tokens, model, cache_prefix)
         if label:
             print(f"  ✓ done: {label} ({len(result)} chars)", flush=True)
         return result
@@ -86,41 +110,52 @@ async def run_classify(prompt: str) -> tuple[str, int]:
     return intent_type, frame_count
 
 
-# ── Bridge: vocab → frame descriptions (no LLM) ──────────────────────────────
+# ── Bridge: plan → frame descriptions ────────────────────────────────────────
 
 def _build_frame_descriptions(plan: dict) -> list[dict]:
-    style  = plan.get("shared_style", {})
-    stroke = style.get("strokeColor", "#1e1e1e")
-    bg     = style.get("backgroundColor", "#a5d8ff")
-    vocab  = plan.get("element_vocabulary", {})
+    """
+    Convert the planning output into per-frame description strings for the SVG renderer.
 
-    style_note = (
-        f'\n\nStyle: stroke="{stroke}" on all outlines, fill="{bg}" for key shapes, '
-        f'canvas background always fill="white", font-family="Arial, Helvetica, sans-serif".'
-    )
+    The planning_svg.md prompt produces a full spatial spec (viewBox + elements +
+    arrows with pixel coordinates). Pass the entire frame spec as JSON — that is
+    exactly what the svg_prompt expects: 'pre-computed coordinates, arrow endpoints,
+    and viewBox height'.
 
-    vocab_note = ""
-    if vocab:
-        lines = []
-        for k, v in vocab.items():
-            parts = []
-            if isinstance(v, dict):
-                if "entity_type" in v: parts.append(f'type={v["entity_type"]}')
-                if "visual"      in v: parts.append(f'visual="{v["visual"]}"')
-                if "fill"        in v: parts.append(f'fill={v["fill"]}')
-                if "label"       in v: parts.append(f'label=\'{v["label"]}\'')
-            lines.append(f'  - "{k}": {", ".join(parts)}')
-        vocab_note = "\n\nElement vocabulary:\n" + "\n".join(lines)
+    Fallback: if the frame has no elements/viewBox (older vocab-only plan format),
+    reconstruct a description from teaching_intent + narration as before.
+    """
+    style = plan.get("shared_style", {})
+    stroke = style.get("strokeColor", style.get("stroke_color", "#1e1e1e"))
 
     frames = []
     for f in plan["frames"]:
-        description = (
-            f"{f.get('teaching_intent', '')}\n"
-            f"Entities: {', '.join(f.get('entities_used', []))}\n"
-            f"Narration: {f.get('narration', '')}"
-            + style_note + vocab_note
-        )
-        frames.append({"index": f.get("index", 0), "description": description, "caption": f.get("caption", "")})
+        has_spatial = bool(f.get("elements") or f.get("viewBox"))
+
+        if has_spatial:
+            # Full spatial spec — serialise the whole frame so the SVG renderer
+            # can use the pre-computed coordinates directly.
+            spec = {k: v for k, v in f.items() if k != "narration"}
+            spec.setdefault("shared_style", {"strokeColor": stroke})
+            description = json.dumps(spec, indent=2)
+        else:
+            # Vocab-only fallback (teaching_intent + entities + style note)
+            bg = style.get("backgroundColor", "#a5d8ff")
+            style_note = (
+                f'\n\nStyle: stroke="{stroke}" on all outlines, fill="{bg}" for key shapes, '
+                f'canvas background always fill="white", font-family="Arial, Helvetica, sans-serif".'
+            )
+            description = (
+                f"{f.get('teaching_intent', '')}\n"
+                f"Entities: {', '.join(f.get('entities_used', []))}\n"
+                f"Narration: {f.get('narration', '')}"
+                + style_note
+            )
+
+        frames.append({
+            "index":   f.get("index", 0),
+            "description": description,
+            "caption": f.get("caption", ""),
+        })
     return frames
 
 
@@ -294,7 +329,7 @@ async def run_pipeline(prompt: str, run_dir: Path | None = None) -> dict:
         run_dir = _OUTPUT_ROOT / datetime.now().strftime("%Y%m%d_%H%M%S")
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    plan   = await run_vocab_plan_with_prompt(prompt)
+    plan   = await run_vocab_plan_with_prompt(prompt, run_dir)
     frames = _build_frame_descriptions(plan)
 
     # Track retry flags and svg texts alongside png paths
@@ -304,10 +339,30 @@ async def run_pipeline(prompt: str, run_dir: Path | None = None) -> dict:
     svg_texts     = []   # raw SVG string per frame (for text-based judge fallback)
     descriptions  = [f["description"] for f in frames]
 
-    results = await asyncio.gather(
-        *[_generate_one_frame_tracked(f, svg_template, run_dir) for f in frames],
-        return_exceptions=True,
-    )
+    # Compute cache_prefix — everything before {{FRAME_JSON}} is static
+    # and can be cached by Anthropic at 10% of normal input token cost.
+    split_idx    = svg_template.find("{{FRAME_JSON}}")
+    cache_prefix = svg_template[:split_idx] if split_idx != -1 else ""
+
+    # Two-phase dispatch to maximise cache hits:
+    #   Phase 1 — frame 0 alone: writes the cache entry for the static template.
+    #   Phase 2 — frames 1-N in parallel: all hit cache_read (0.1× cost).
+    if not frames:
+        results = []
+    else:
+        print(f"\n  [Phase 1] frame 0 — warming cache...", flush=True)
+        first = await _generate_one_frame_tracked(frames[0], svg_template, run_dir, cache_prefix)
+
+        rest_results = []
+        if len(frames) > 1:
+            print(f"  [Phase 2] frames 1-{len(frames)-1} in parallel — cache warm", flush=True)
+            rest_results = await asyncio.gather(
+                *[_generate_one_frame_tracked(f, svg_template, run_dir, cache_prefix)
+                  for f in frames[1:]],
+                return_exceptions=True,
+            )
+        results = [first] + list(rest_results)
+
     for r in results:
         if isinstance(r, Exception):
             print(f"  ✗ frame task raised: {r}", flush=True)
@@ -330,15 +385,17 @@ async def run_pipeline(prompt: str, run_dir: Path | None = None) -> dict:
     }
 
 
-async def _generate_one_frame_tracked(frame: dict, svg_template: str, run_dir: Path) -> dict:
+async def _generate_one_frame_tracked(frame: dict, svg_template: str, run_dir: Path,
+                                      cache_prefix: str = "") -> dict:
     """Like _generate_one_frame but returns {png, retried, svg} for scoring."""
     idx    = frame["index"]
-    prompt = svg_template.replace("{{DIAGRAM_DESCRIPTION}}", frame["description"])
+    prompt = svg_template.replace("{{FRAME_JSON}}", frame["description"])
     retried = False
 
     print(f"  [svg frame {idx}] generating...", flush=True)
     try:
-        raw = await _call_llm_async(prompt, label=f"svg_prompt frame={idx}")
+        raw = await _call_llm_async(prompt, label=f"svg_prompt frame={idx}",
+                                    model=RENDER_MODEL, cache_prefix=cache_prefix)
     except Exception as e:
         log.error("frame %d: LLM call failed: %s", idx, e, exc_info=True)
         return {"png": None, "retried": False, "svg": ""}
@@ -351,7 +408,7 @@ async def _generate_one_frame_tracked(frame: dict, svg_template: str, run_dir: P
         try:
             raw = await _call_llm_async(
                 f"Your response had no valid SVG. Output ONLY raw SVG starting with <svg.\n\n{frame['description']}",
-                label=f"svg_prompt frame={idx} retry")
+                label=f"svg_prompt frame={idx} retry", model=RENDER_MODEL)
         except Exception as e:
             log.error("frame %d: retry LLM call failed: %s", idx, e, exc_info=True)
             return {"png": None, "retried": retried, "svg": ""}
@@ -374,7 +431,7 @@ async def _generate_one_frame_tracked(frame: dict, svg_template: str, run_dir: P
         try:
             raw = await _call_llm_async(
                 f"Your SVG failed to render: {err}\nUse only flat fills and standard SVG primitives.\n\n{frame['description']}",
-                label=f"svg_prompt frame={idx} render-retry")
+                label=f"svg_prompt frame={idx} render-retry", model=RENDER_MODEL)
         except Exception as e:
             log.error("frame %d: retry LLM call failed: %s", idx, e, exc_info=True)
             return {"png": None, "retried": retried, "svg": svg}
@@ -396,7 +453,7 @@ async def _generate_one_frame_tracked(frame: dict, svg_template: str, run_dir: P
     return {"png": png, "retried": retried, "svg": svg}
 
 
-async def run_vocab_plan_with_prompt(prompt: str) -> dict:
+async def run_vocab_plan_with_prompt(prompt: str, run_dir: Path | None = None) -> dict:
     """Two-step classify → planning_svg pipeline (called by improve.py)."""
     intent_type, frame_count = await run_classify(prompt)
     template = (_PROMPTS_DIR / "planning_svg.md").read_text(encoding="utf-8")
@@ -406,10 +463,21 @@ async def run_vocab_plan_with_prompt(prompt: str) -> dict:
          .replace("{{INTENT_TYPE}}", intent_type)
          .replace("{{FRAME_COUNT}}", str(frame_count)))
     print(f"  [planning_svg] intent={intent_type}  frames={frame_count}  prompt: {prompt[:50]}...", flush=True)
-    raw = await _call_llm_async(p, 8192, label="planning_svg")
+    raw = await _call_llm_async(p, 16000, label="planning_svg")
+
+    # Save raw planning response for inspection
+    if run_dir:
+        (run_dir / "plan_raw.txt").write_text(raw, encoding="utf-8")
+
     plan = _extract_json(raw)
     plan["intent_type"] = intent_type
     plan["frame_count"] = frame_count
+
+    # Save parsed plan as JSON
+    if run_dir:
+        with open(run_dir / "plan.json", "w", encoding="utf-8") as f:
+            json.dump(plan, f, indent=2)
+
     return plan
 
 
