@@ -9,49 +9,62 @@ import { Box, useTheme } from '@mui/material'
 import { useFlowData } from './useFlowData'
 import SessionNode from './SessionNode'
 import FlowEdge    from './FlowEdge'
+import AskNode     from './AskNode'
 
-const nodeTypes = { sessionNode: SessionNode }
+const nodeTypes = { sessionNode: SessionNode, askNode: AskNode }
 const edgeTypes = { flowEdge: FlowEdge }
 
-export default function Canvas({ turns, onNodeClick }) {
+export default function Canvas({ turns, onNodeClick, onAsk }) {
   const theme   = useTheme()
   const isDark  = theme.palette.mode === 'dark'
   const primary = theme.palette.primary.main
 
-  const { nodes: layoutNodes, edges: layoutEdges } = useFlowData(turns)
+  const { nodes: layoutNodes, edges: layoutEdges } = useFlowData(turns, onAsk)
 
   const [nodes, setNodes, onNodesChange] = useNodesState(layoutNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
 
   // Sync when layout changes — preserve dragged positions for existing nodes,
   // use dagre positions for new nodes, refresh data (framesData, videoPhase) always.
+  // Ghost nodes/edges (ask_ghost_ / ask_edge_ prefix) are preserved across syncs.
   useEffect(() => {
     setNodes((prev) => {
-      const prevById = Object.fromEntries(prev.map((n) => [n.id, n]))
-      return layoutNodes.map((ln) => {
-        const existing = prevById[ln.id]
-        return existing
-          ? { ...existing, data: ln.data }       // keep position, refresh data
-          : ln                                    // new node — use dagre position
-      })
+      const prevById   = Object.fromEntries(prev.map((n) => [n.id, n]))
+      const ghostNodes = prev.filter((n) => n.id.startsWith('ask_ghost_'))
+      return [
+        ...layoutNodes.map((ln) => {
+          const existing = prevById[ln.id]
+          return existing
+            ? { ...existing, data: ln.data }   // keep position, refresh data
+            : ln                               // new node — use dagre position
+        }),
+        ...ghostNodes,                         // keep any open ask-input nodes
+      ]
     })
 
-    // Apply theme colours to edges
-    setEdges(layoutEdges.map((e) => ({
-      ...e,
-      style: {
-        stroke:          e.data?.isFrame ? primary : 'rgba(150,150,150,0.4)',
-        strokeWidth:     e.data?.isFrame ? 2       : 1.5,
-        strokeDasharray: e.data?.isFrame ? undefined : '5 4',
-      },
-      markerEnd: {
-        type:  'arrowclosed',
-        color: e.data?.isFrame ? primary : 'rgba(150,150,150,0.5)',
-      },
-    })))
+    // Apply theme colours to edges, preserving ghost edges
+    setEdges((prev) => {
+      const ghostEdges = prev.filter((e) => e.id.startsWith('ask_edge_'))
+      return [
+        ...layoutEdges.map((e) => ({
+          ...e,
+          style: {
+            stroke:          e.data?.isFrame ? primary : 'rgba(150,150,150,0.4)',
+            strokeWidth:     e.data?.isFrame ? 2       : 1.5,
+            strokeDasharray: e.data?.isFrame ? undefined : '5 4',
+          },
+          markerEnd: {
+            type:  'arrowclosed',
+            color: e.data?.isFrame ? primary : 'rgba(150,150,150,0.5)',
+          },
+        })),
+        ...ghostEdges,
+      ]
+    })
   }, [layoutNodes, layoutEdges, primary])   // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleNodeClick = (_, rfNode) => {
+    if (rfNode.type === 'askNode') return   // ghost input node — don't open modal
     const turn = turns.find((t) => t.id === rfNode.id) || rfNode.data.turn
     onNodeClick?.(turn)
   }

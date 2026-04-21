@@ -468,6 +468,92 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
     setTimeout(() => inputRef.current?.focus(), 120)
   }, [])
 
+  // Direct generation from the canvas "+" handle — stays in learn mode,
+  // creates a new child node immediately with loading state.
+  const handleLearnGenerate = useCallback(async ({ question, sessionId }) => {
+    if (!activeConvId || !question.trim()) return
+
+    const thisGenId = ++generationIdRef.current
+    const isStale   = () => generationIdRef.current !== thisGenId
+
+    generationAbortRef.current?.abort()
+    const genController = new AbortController()
+    generationAbortRef.current = genController
+
+    const tempId           = `temp_${Date.now()}`
+    const capturedPauseCtx = { sessionId, frameIndex: null, caption: null }
+
+    setTurns((prev) => [...prev, {
+      tempId,
+      id:               null,
+      prompt:           question,
+      intent_type:      null,
+      render_path:      null,
+      frame_count:      null,
+      isLoading:        true,
+      stage:            'planning',
+      framesData:       null,
+      videoPhase:       'generating',
+      parentSessionId:  sessionId  ?? null,
+      parentFrameIndex: null,
+    }])
+
+    const it1 = setTimeout(() =>
+      setTurns((p) => p.map((t) => t.tempId === tempId ? { ...t, stage: 'generating' } : t)), 2500)
+    const it2 = setTimeout(() =>
+      setTurns((p) => p.map((t) => t.tempId === tempId ? { ...t, stage: 'rendering'  } : t)), 6000)
+
+    try {
+      const data = await api.imageGeneration(
+        question, activeConvId, capturedPauseCtx,
+        notesEnabled, selectedModel.provider, selectedModel.model,
+        genController.signal,
+        selectedRenderMode?.id !== 'auto' ? selectedRenderMode.id : null,
+      )
+
+      if (isStale()) return
+
+      const framesData = {
+        render_path:         data.render_path,
+        images:              data.images              || [],
+        captions:            data.captions            || [],
+        suggested_followups: data.suggested_followups || [],
+        notes:               data.notes               || '',
+      }
+      const realTurn = {
+        tempId,
+        id:               data.session_id,
+        conversation_id:  data.conversation_id,
+        turn_index:       data.turn_index,
+        prompt:           question,
+        intent_type:      data.intent_type,
+        render_path:      data.render_path,
+        frame_count:      data.frame_count,
+        isLoading:        false,
+        stage:            null,
+        framesData,
+        videoPhase:       'generating',
+        parentSessionId:  capturedPauseCtx.sessionId ?? null,
+        parentFrameIndex: null,
+      }
+
+      setTurns((prev) => prev.map((t) => t.tempId === tempId ? realTurn : t))
+      await onConversationsRefresh()
+      runVideoGenerationForTurn(tempId, data.session_id)
+    } catch (err) {
+      if (err?.name !== 'AbortError') {
+        toast.error('Generation failed. Please try again.')
+        setTurns((prev) => prev.map((t) =>
+          t.tempId === tempId ? { ...t, isLoading: false, videoPhase: 'error' } : t
+        ))
+      }
+    } finally {
+      clearTimeout(it1)
+      clearTimeout(it2)
+    }
+  }, [activeConvId, notesEnabled, selectedModel, selectedRenderMode,
+      onConversationsRefresh, runVideoGenerationForTurn, toast])
+
   // ── Learning view — full-screen focus mode ────────────────────────────────────
   if (viewMode === 'learn') {
     return (
@@ -476,6 +562,7 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
         conversationId={activeConvId}
         onExit={() => setViewMode('chat')}
         onAskFromLearn={handleLearnAsk}
+        onGenerateFromCanvas={handleLearnGenerate}
       />
     )
   }

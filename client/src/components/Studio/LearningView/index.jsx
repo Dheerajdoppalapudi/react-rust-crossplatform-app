@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { Box, IconButton, Typography, Tooltip, useTheme, Button, CircularProgress } from '@mui/material'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import MergeIcon from '@mui/icons-material/MergeType'
@@ -20,7 +20,7 @@ const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
  *   onExit         — switch back to chat mode
  *   onAskFromLearn — ({ question, sessionId, frameIndex, caption }) → handled by Studio
  */
-export default function LearningView({ turns, conversationId, onExit, onAskFromLearn }) {
+export default function LearningView({ turns, conversationId, onExit, onAskFromLearn, onGenerateFromCanvas }) {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
 
@@ -40,6 +40,10 @@ export default function LearningView({ turns, conversationId, onExit, onAskFromL
     setSelectedNode(null)
     onAskFromLearn?.({ question, sessionId, frameIndex, caption })
   }
+
+  const handleCanvasAsk = useCallback(({ question, sessionId }) => {
+    onGenerateFromCanvas?.({ question, sessionId })
+  }, [onGenerateFromCanvas])
 
   const handleMerge = async () => {
     setMerging(true)
@@ -145,7 +149,7 @@ export default function LearningView({ turns, conversationId, onExit, onAskFromL
       </Box>
 
       {/* ── Canvas ─────────────────────────────────────────────────────────── */}
-      <Canvas turns={turns} onNodeClick={handleNodeClick} />
+      <Canvas turns={turns} onNodeClick={handleNodeClick} onAsk={handleCanvasAsk} />
 
       {/* ── Node detail modal ──────────────────────────────────────────────── */}
       {selectedNode && (
