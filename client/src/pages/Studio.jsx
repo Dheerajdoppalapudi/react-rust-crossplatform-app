@@ -481,7 +481,7 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
     generationAbortRef.current = genController
 
     const tempId           = `temp_${Date.now()}`
-    const capturedPauseCtx = { sessionId, frameIndex: null, caption: null }
+    const capturedPauseCtx = { sessionId, frameIndex: undefined, caption: undefined }
 
     setTurns((prev) => [...prev, {
       tempId,
@@ -542,6 +542,7 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
       runVideoGenerationForTurn(tempId, data.session_id)
     } catch (err) {
       if (err?.name !== 'AbortError') {
+        console.error('[Studio] handleLearnGenerate:', err)
         toast.error('Generation failed. Please try again.')
         setTurns((prev) => prev.map((t) =>
           t.tempId === tempId ? { ...t, isLoading: false, videoPhase: 'error' } : t

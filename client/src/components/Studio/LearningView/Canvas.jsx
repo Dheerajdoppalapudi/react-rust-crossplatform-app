@@ -64,7 +64,8 @@ export default function Canvas({ turns, onNodeClick, onAsk }) {
   }, [layoutNodes, layoutEdges, primary])   // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleNodeClick = (_, rfNode) => {
-    if (rfNode.type === 'askNode') return   // ghost input node — don't open modal
+    if (rfNode.type === 'askNode') return          // ghost input node — don't open modal
+    if (rfNode.data?.turn?.isLoading) return       // still generating — nothing to show
     const turn = turns.find((t) => t.id === rfNode.id) || rfNode.data.turn
     onNodeClick?.(turn)
   }

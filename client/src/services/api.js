@@ -156,8 +156,10 @@ export const api = {
     if (conversationId) formData.append('conversation_id', conversationId)
     if (renderMode)     formData.append('render_mode', renderMode)
     if (pauseContext) {
-      formData.append('pause_session_id',  pauseContext.sessionId)
-      formData.append('pause_frame_index', String(pauseContext.frameIndex))
+      formData.append('pause_session_id', pauseContext.sessionId)
+      if (pauseContext.frameIndex != null) {
+        formData.append('pause_frame_index', String(pauseContext.frameIndex))
+      }
       if (pauseContext.caption) formData.append('pause_caption', pauseContext.caption)
       formData.append('parent_session_id', pauseContext.sessionId)
       if (pauseContext.frameIndex != null) {

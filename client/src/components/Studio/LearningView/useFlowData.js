@@ -25,13 +25,17 @@ function layoutWithDagre(nodes, edges) {
  */
 export function useFlowData(turns, onAsk) {
   return useMemo(() => {
-    const valid = turns.filter((t) => t.id)
+    // Include loading turns (id: null) using tempId as a placeholder node ID
+    const valid = turns.filter((t) => t.id || t.isLoading)
     if (!valid.length) return { nodes: [], edges: [] }
 
-    const byId = Object.fromEntries(valid.map((t) => [t.id, t]))
+    const nodeId = (t) => t.id || t.tempId
+    const byId   = Object.fromEntries(valid.map((t) => [nodeId(t), t]))
+    // Also index by real id so parent lookups work for loading turns
+    valid.forEach((t) => { if (t.id) byId[t.id] = t })
 
     const nodes = valid.map((turn) => ({
-      id:       turn.id,
+      id:       nodeId(turn),
       type:     'sessionNode',
       position: { x: 0, y: 0 },   // dagre fills this in
       data:     { turn, onAsk },
@@ -40,9 +44,9 @@ export function useFlowData(turns, onAsk) {
     const edges = valid
       .filter((t) => t.parentSessionId && byId[t.parentSessionId])
       .map((turn) => ({
-        id:     `${turn.parentSessionId}→${turn.id}`,
+        id:     `${turn.parentSessionId}→${nodeId(turn)}`,
         source: turn.parentSessionId,
-        target: turn.id,
+        target: nodeId(turn),
         type:   'flowEdge',
         data:   { isFrame: turn.parentFrameIndex != null },
       }))

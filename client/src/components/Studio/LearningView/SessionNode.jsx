@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Handle, Position, useReactFlow } from 'reactflow'
-import { Box, Typography, Tooltip, useTheme } from '@mui/material'
+import { Box, Typography, Tooltip, useTheme, CircularProgress } from '@mui/material'
 import MovieOutlinedIcon     from '@mui/icons-material/MovieOutlined'
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline'
 import AddIcon               from '@mui/icons-material/Add'
@@ -103,6 +103,59 @@ export default function SessionNode({ data }) {
       <Typography sx={{ fontSize: 10, opacity: 0.6, mt: 0.5 }}>Click to view</Typography>
     </Box>
   )
+
+  // ── Loading skeleton ──────────────────────────────────────────────────────
+  if (turn.isLoading) {
+    const stageLabel = turn.stage === 'planning' ? 'Planning…'
+      : turn.stage === 'generating' ? 'Generating…'
+      : turn.stage === 'rendering'  ? 'Rendering…'
+      : 'Processing…'
+    return (
+      <>
+        <Handle type="target" position={Position.Top}    style={{ opacity: 0 }} />
+        <Handle type="source" position={Position.Bottom} style={{ opacity: 0 }} />
+        <Box sx={{
+          width:        NODE_W,
+          height:       NODE_H,
+          borderRadius: '10px',
+          border:       `1.5px solid ${isDark ? 'rgba(255,255,255,0.09)' : '#e8ecf2'}`,
+          bgcolor:      isDark ? '#1a1a1a' : '#ffffff',
+          overflow:     'hidden',
+          display:      'flex',
+          flexDirection:'column',
+          alignItems:   'center',
+          justifyContent: 'center',
+          gap:          1.5,
+          boxShadow:    isDark
+            ? '0 2px 8px rgba(0,0,0,0.4)'
+            : '0 1px 3px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.08)',
+        }}>
+          {/* Shimmer thumbnail placeholder */}
+          <Box sx={{
+            position: 'absolute', inset: 0,
+            background: isDark
+              ? 'linear-gradient(135deg, rgba(255,255,255,0.02) 25%, rgba(255,255,255,0.06) 50%, rgba(255,255,255,0.02) 75%)'
+              : 'linear-gradient(135deg, rgba(0,0,0,0.02) 25%, rgba(0,0,0,0.05) 50%, rgba(0,0,0,0.02) 75%)',
+            backgroundSize: '200% 200%',
+            animation: 'shimmer 1.8s ease-in-out infinite',
+            '@keyframes shimmer': {
+              '0%':   { backgroundPosition: '200% 0' },
+              '100%': { backgroundPosition: '-200% 0' },
+            },
+          }} />
+          <CircularProgress size={22} thickness={3} sx={{ color: primary, opacity: 0.7, position: 'relative' }} />
+          <Box sx={{ position: 'relative', textAlign: 'center', px: 2 }}>
+            <Typography sx={{ fontSize: 11, fontWeight: 600, color: primary, opacity: 0.8 }}>
+              {stageLabel}
+            </Typography>
+            <Typography sx={{ fontSize: 10, color: theme.palette.text.secondary, mt: 0.5, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+              {turn.prompt || 'Untitled'}
+            </Typography>
+          </Box>
+        </Box>
+      </>
+    )
+  }
 
   return (
     <>
