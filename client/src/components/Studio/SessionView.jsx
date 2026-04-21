@@ -11,6 +11,7 @@ import FrameThumbnail              from './FrameThumbnail'
 import NotesPanel                  from './NotesPanel'
 import { getFrameType }            from './constants'
 import { useMediaUrl }             from '../../hooks/useMediaUrl'
+import { BRAND, PALETTE }          from '../../theme/tokens.js'
 
 // ─── Frame strip with keyboard navigation and scroll-fade indicators ──────────
 function FrameStrip({ sessionId, captions, images, activeFrame, onFrameChange, onExpandFrame }) {
@@ -53,7 +54,7 @@ function FrameStrip({ sessionId, captions, images, activeFrame, onFrameChange, o
     thumb?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' })
   }, [activeFrame])
 
-  const fadeBg = isDark ? '#1a1a1a' : '#ffffff'
+  const fadeBg = isDark ? PALETTE.darkSurface : PALETTE.ivory
 
   return (
     <Box sx={{ position: 'relative' }}>
@@ -250,10 +251,10 @@ function SlideDialog({ open, frameIndex, captions, images, sessionId, onClose, o
               sx={{
                 flexShrink: 0, cursor: 'pointer',
                 fontSize: 11.5, fontWeight: 600, height: 26,
-                bgcolor: 'rgba(79,110,255,0.15)',
-                color: '#818cf8',
-                border: '1px solid rgba(79,110,255,0.35)',
-                '&:hover': { bgcolor: 'rgba(79,110,255,0.28)' },
+                bgcolor: 'rgba(75,114,255,0.15)',
+                color: BRAND.accent,
+                border: `1px solid rgba(75,114,255,0.35)`,
+                '&:hover': { bgcolor: 'rgba(75,114,255,0.28)' },
                 '& .MuiChip-icon': { color: 'inherit' },
                 transition: 'all 0.15s',
               }}
@@ -351,10 +352,10 @@ export default function SessionView({ session, videoPhase, framesData, onPauseAs
                 sx={{
                   flexShrink: 0, cursor: 'pointer',
                   fontSize: 11.5, fontWeight: 600, height: 26,
-                  bgcolor: isDark ? 'rgba(79,110,255,0.1)' : '#f0f4ff',
+                  bgcolor: isDark ? 'rgba(75,114,255,0.10)' : `${BRAND.primary}0d`,
                   color: theme.palette.primary.main,
-                  border: `1px solid ${isDark ? 'rgba(79,110,255,0.25)' : '#c7d2fe'}`,
-                  '&:hover': { bgcolor: isDark ? 'rgba(79,110,255,0.2)' : '#e0e8ff' },
+                  border: `1px solid ${isDark ? 'rgba(75,114,255,0.25)' : `${BRAND.primary}30`}`,
+                  '&:hover': { bgcolor: isDark ? 'rgba(75,114,255,0.20)' : `${BRAND.primary}18` },
                   '& .MuiChip-icon': { color: 'inherit' },
                   transition: 'all 0.15s',
                 }}

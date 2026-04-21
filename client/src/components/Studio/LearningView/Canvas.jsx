@@ -10,6 +10,7 @@ import { useFlowData } from './useFlowData'
 import SessionNode from './SessionNode'
 import FlowEdge    from './FlowEdge'
 import AskNode     from './AskNode'
+import { PALETTE } from '../../../theme/tokens.js'
 
 const nodeTypes = { sessionNode: SessionNode, askNode: AskNode }
 const edgeTypes = { flowEdge: FlowEdge }
@@ -76,20 +77,20 @@ export default function Canvas({ turns, onNodeClick, onAsk }) {
       // Style RF's built-in controls to match the app theme
       '& .react-flow__controls': {
         boxShadow: 'none',
-        border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : '#e2e8f0'}`,
+        border: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.borderWarm}`,
         borderRadius: '10px',
         overflow: 'hidden',
-        bgcolor: isDark ? '#1a1a1a' : '#fff',
+        bgcolor: isDark ? PALETTE.darkSurface : PALETTE.ivory,
       },
       '& .react-flow__controls-button': {
-        bgcolor:     isDark ? '#1a1a1a' : '#fff',
-        color:       isDark ? 'rgba(255,255,255,0.7)' : '#374151',
-        borderColor: isDark ? 'rgba(255,255,255,0.08)' : '#e5e7eb',
-        '&:hover': { bgcolor: isDark ? '#252525' : '#f9fafb' },
+        bgcolor:     isDark ? PALETTE.darkSurface : PALETTE.ivory,
+        color:       isDark ? 'rgba(255,255,255,0.7)' : PALETTE.charcoalWarm,
+        borderColor: isDark ? PALETTE.borderDark : PALETTE.borderWarm,
+        '&:hover': { bgcolor: isDark ? PALETTE.darkSubsurface : PALETTE.warmSand },
       },
       '& .react-flow__minimap': {
         borderRadius: '10px',
-        border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : '#e2e8f0'}`,
+        border: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.borderWarm}`,
         overflow: 'hidden',
       },
       '& .react-flow__attribution': { display: 'none' },
@@ -108,7 +109,7 @@ export default function Canvas({ turns, onNodeClick, onAsk }) {
         maxZoom={2}
         nodesConnectable={false}
         proOptions={{ hideAttribution: true }}
-        style={{ background: isDark ? '#0d0d0d' : '#f4f6f9' }}
+        style={{ background: isDark ? PALETTE.nearBlack : PALETTE.parchment }}
       >
         <Background
           variant={BackgroundVariant.Dots}
@@ -118,9 +119,9 @@ export default function Canvas({ turns, onNodeClick, onAsk }) {
         />
         <Controls />
         <MiniMap
-          nodeColor={isDark ? '#2a2a2a' : '#e2e8f0'}
-          maskColor={isDark ? 'rgba(0,0,0,0.4)' : 'rgba(240,242,245,0.7)'}
-          style={{ background: isDark ? '#1a1a1a' : '#fff' }}
+          nodeColor={isDark ? PALETTE.dividerDark : PALETTE.borderWarm}
+          maskColor={isDark ? 'rgba(0,0,0,0.4)' : 'rgba(245,244,237,0.7)'}
+          style={{ background: isDark ? PALETTE.darkSurface : PALETTE.ivory }}
         />
       </ReactFlow>
     </Box>

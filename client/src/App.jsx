@@ -1,6 +1,7 @@
 import { useState, useMemo, createContext, useContext, useCallback, useEffect } from 'react'
 import { Routes, Route, useLocation, useNavigate, useMatch, Navigate } from 'react-router-dom'
-import { Box, ThemeProvider, CssBaseline, createTheme } from '@mui/material'
+import { Box, ThemeProvider, CssBaseline } from '@mui/material'
+import { buildTheme } from './theme/index.js'
 import Sidebar from './components/common/Sidebar'
 import Footer from './components/common/Footer'
 import AboutUs from './pages/AboutUs'
@@ -17,49 +18,6 @@ import { api } from './services/api'
 // ─── Theme context ────────────────────────────────────────────────────────────
 export const ColorModeContext = createContext({ mode: 'light', toggle: () => {} })
 export const useColorMode = () => useContext(ColorModeContext)
-
-// ─── Theme factory ────────────────────────────────────────────────────────────
-const buildTheme = (mode) =>
-  createTheme({
-    typography: {
-      fontFamily: '"Sora", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-      fontWeightLight:   300,
-      fontWeightRegular: 400,
-      fontWeightMedium:  500,
-      fontWeightBold:    600,
-    },
-    palette: {
-      mode,
-      primary: { main: mode === 'dark' ? '#4F6EFF' : '#001AFF' },
-      background: {
-        default: mode === 'dark' ? '#111111' : '#f8fafc',
-        paper:   mode === 'dark' ? '#1a1a1a' : '#ffffff',
-      },
-      text: {
-        primary:   mode === 'dark' ? '#f1f5f9' : '#0f172a',
-        secondary: mode === 'dark' ? '#94a3b8' : '#64748b',
-      },
-      divider: mode === 'dark' ? '#252525' : '#f0f0f0',
-    },
-    components: {
-      MuiCssBaseline: {
-        styleOverrides: {
-          body: {
-            backgroundColor: mode === 'dark' ? '#111111' : '#f8fafc',
-            fontFamily: '"Sora", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-          },
-          '::selection': {
-            backgroundColor: 'rgba(20, 184, 166, 0.35)',
-            color: 'inherit',
-          },
-          '::-moz-selection': {
-            backgroundColor: 'rgba(20, 184, 166, 0.35)',
-            color: 'inherit',
-          },
-        },
-      },
-    },
-  })
 
 // ─── Pages that use the full viewport height — no footer, no padding ──────────
 const NO_PADDING_PAGES  = ['/']
@@ -249,6 +207,12 @@ function App() {
     const stored = localStorage.getItem('zenith-theme')
     return stored === 'light' || stored === 'dark' ? stored : 'light'
   })
+
+  // Keep CSS custom properties in sync with MUI theme so non-MUI elements
+  // (scrollbars, ProseMirror editor, third-party widgets) also respond to mode.
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', mode)
+  }, [mode])
 
   const colorMode = useMemo(() => ({
     mode,

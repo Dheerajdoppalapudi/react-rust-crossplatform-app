@@ -2,6 +2,7 @@ import { Component } from 'react'
 import { Box, Typography, Button, useTheme } from '@mui/material'
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline'
 import RefreshIcon from '@mui/icons-material/Refresh'
+import { BRAND, PALETTE } from '../../theme/tokens.js'
 
 // ─── Fallback UIs ──────────────────────────────────────────────────────────────
 

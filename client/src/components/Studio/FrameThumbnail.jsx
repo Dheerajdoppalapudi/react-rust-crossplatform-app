@@ -3,6 +3,7 @@ import { Box, Typography, useTheme } from '@mui/material'
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline'
 import { useMediaUrl } from '../../hooks/useMediaUrl'
+import { PALETTE } from '../../theme/tokens.js'
 
 // CRIT-2: FrameThumbnail receives getFrameUrl from useMediaUrl (called in the parent
 // FrameStrip or SessionView) so all thumbnails in a session share one token fetch.
@@ -27,8 +28,8 @@ export default function FrameThumbnail({ sessionId, frameIndex, caption, type, i
         width: 130, height: 78,
         flexShrink: 0, borderRadius: '8px', overflow: 'hidden',
         cursor: 'pointer', position: 'relative',
-        border: `2px solid ${isActive ? theme.palette.primary.main : (isDark ? '#2a2a2a' : '#e2e8f0')}`,
-        backgroundColor: isDark ? '#141414' : '#f1f5f9',
+        border: `2px solid ${isActive ? theme.palette.primary.main : (isDark ? PALETTE.dividerDark : PALETTE.borderWarm)}`,
+        backgroundColor: isDark ? PALETTE.nearBlack : PALETTE.warmSand,
         transition: 'all 0.15s',
         '&:hover': {
           borderColor: theme.palette.primary.main,

@@ -19,6 +19,7 @@ import SchoolIcon            from '@mui/icons-material/School'
 import ArrowForwardIcon      from '@mui/icons-material/ArrowForward'
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline'
 import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline'
+import { BRAND, PALETTE } from '../theme/tokens.js'
 
 // ─── Framer helpers ───────────────────────────────────────────────────────────
 const MotionBox = motion(Box)
@@ -137,7 +138,7 @@ export default function AboutUs() {
   const headline2 = 'Understand everything.'
 
   const cardBg     = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.025)'
-  const cardBorder = isDark ? 'rgba(255,255,255,0.08)' : '#e8eaf0'
+  const cardBorder = isDark ? 'rgba(255,255,255,0.08)' : PALETTE.borderCream
 
   return (
     <Box
@@ -166,8 +167,8 @@ export default function AboutUs() {
           justifyContent: 'center',
           overflow: 'hidden',
           background: isDark
-            ? 'radial-gradient(ellipse 90% 70% at 50% -10%, rgba(79,110,255,0.22) 0%, transparent 65%), #111111'
-            : 'radial-gradient(ellipse 90% 70% at 50% -10%, rgba(0,26,255,0.10) 0%, transparent 65%), #f8fafc',
+            ? `radial-gradient(ellipse 90% 70% at 50% -10%, rgba(75,114,255,0.22) 0%, transparent 65%), ${PALETTE.nearBlack}`
+            : `radial-gradient(ellipse 90% 70% at 50% -10%, rgba(24,71,214,0.10) 0%, transparent 65%), ${PALETTE.parchment}`,
         }}
       >
         {/* Animated gradient orbs */}
@@ -251,7 +252,7 @@ export default function AboutUs() {
             <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, mb: 3 }}>
               <Box sx={{
                 width: 36, height: 36, borderRadius: '10px',
-                background: 'linear-gradient(135deg, #001AFF 0%, #6B44F8 100%)',
+                background: BRAND.gradient,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 boxShadow: `0 8px 24px ${accent}50`,
               }}>
@@ -340,7 +341,7 @@ export default function AboutUs() {
                 sx={{
                   display: 'inline-flex', alignItems: 'center', gap: 1,
                   px: 3.5, py: 1.4,
-                  background: 'linear-gradient(135deg, #001AFF 0%, #6B44F8 100%)',
+                  background: BRAND.gradient,
                   borderRadius: '12px', cursor: 'pointer',
                   boxShadow: `0 6px 28px ${accent}45`,
                   color: '#fff', fontSize: 14.5, fontWeight: 700,
@@ -404,7 +405,7 @@ export default function AboutUs() {
         width: '100%',
         borderTop: `1px solid ${cardBorder}`,
         borderBottom: `1px solid ${cardBorder}`,
-        bgcolor: isDark ? '#161616' : '#fff',
+        bgcolor: isDark ? PALETTE.sidebarDark : PALETTE.ivory,
         py: { xs: 4, md: 5 },
         px: { xs: 2, sm: 4, md: 6 },
       }}>
@@ -533,10 +534,10 @@ export default function AboutUs() {
         position: 'relative', overflow: 'hidden',
         py: { xs: 8, md: 12 },
         background: isDark
-          ? `linear-gradient(135deg, rgba(79,110,255,0.15) 0%, rgba(124,58,237,0.12) 50%, rgba(8,145,178,0.10) 100%)`
-          : `linear-gradient(135deg, rgba(0,26,255,0.07) 0%, rgba(124,58,237,0.06) 50%, rgba(8,145,178,0.05) 100%)`,
-        borderTop:    `1px solid ${isDark ? 'rgba(79,110,255,0.2)' : 'rgba(0,26,255,0.1)'}`,
-        borderBottom: `1px solid ${isDark ? 'rgba(79,110,255,0.2)' : 'rgba(0,26,255,0.1)'}`,
+          ? `linear-gradient(135deg, rgba(75,114,255,0.15) 0%, rgba(124,58,237,0.12) 50%, rgba(8,145,178,0.10) 100%)`
+          : `linear-gradient(135deg, rgba(24,71,214,0.07) 0%, rgba(124,58,237,0.06) 50%, rgba(8,145,178,0.05) 100%)`,
+        borderTop:    `1px solid ${isDark ? 'rgba(75,114,255,0.2)' : 'rgba(24,71,214,0.1)'}`,
+        borderBottom: `1px solid ${isDark ? 'rgba(75,114,255,0.2)' : 'rgba(24,71,214,0.1)'}`,
       }}>
         {/* Decorative orb */}
         <MotionBox
@@ -659,7 +660,7 @@ export default function AboutUs() {
       ════════════════════════════════════════════════════════════════════ */}
       <Box sx={{
         py: { xs: 6, md: 9 }, px: { xs: 3, sm: 5, md: 8 },
-        bgcolor: isDark ? '#161616' : '#fff',
+        bgcolor: isDark ? PALETTE.sidebarDark : PALETTE.ivory,
         borderTop: `1px solid ${cardBorder}`,
         borderBottom: `1px solid ${cardBorder}`,
       }}>
@@ -733,7 +734,7 @@ export default function AboutUs() {
                       {msg.role === 'ai' && (
                         <Box sx={{
                           width: 28, height: 28, borderRadius: '8px', flexShrink: 0, mt: 0.25,
-                          background: 'linear-gradient(135deg, #001AFF 0%, #6B44F8 100%)',
+                          background: BRAND.gradient,
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                           boxShadow: `0 4px 12px ${accent}40`,
                         }}>
@@ -824,9 +825,9 @@ export default function AboutUs() {
                 alignItems: { sm: 'center' }, gap: 3,
                 p: { xs: 3, sm: 4 }, borderRadius: '20px',
                 background: isDark
-                  ? `linear-gradient(135deg, rgba(79,110,255,0.12) 0%, rgba(124,58,237,0.08) 100%)`
-                  : `linear-gradient(135deg, rgba(0,26,255,0.06) 0%, rgba(124,58,237,0.04) 100%)`,
-                border: `1.5px solid ${isDark ? 'rgba(79,110,255,0.2)' : 'rgba(0,26,255,0.12)'}`,
+                  ? `linear-gradient(135deg, rgba(75,114,255,0.12) 0%, rgba(124,58,237,0.08) 100%)`
+                  : `linear-gradient(135deg, rgba(24,71,214,0.06) 0%, rgba(124,58,237,0.04) 100%)`,
+                border: `1.5px solid ${isDark ? 'rgba(75,114,255,0.2)' : 'rgba(24,71,214,0.12)'}`,
                 boxShadow: isDark ? '0 16px 48px rgba(0,0,0,0.3)' : '0 16px 48px rgba(0,0,0,0.06)',
                 position: 'relative', overflow: 'hidden',
               }}

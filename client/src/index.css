@@ -1,17 +1,121 @@
+/* ─── Reset ──────────────────────────────────────────────────────────────────── */
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
 
+/* ─── Design Tokens — Light Mode (default) ───────────────────────────────────
+   These mirror the values in src/theme/tokens.js.
+   Used by non-MUI elements: raw HTML, third-party components, scrollbars, etc.
+   MUI components get their tokens via ThemeProvider — these CSS vars are the
+   second layer that reaches everything else.
+   ─────────────────────────────────────────────────────────────────────────── */
+:root {
+  /* Backgrounds */
+  --color-bg-page:      #f5f4ed;
+  --color-bg-surface:   #faf9f5;
+  --color-bg-elevated:  #ffffff;
+  --color-bg-sidebar:   #eef0f4;
+  --color-bg-sand:      #e8e6dc;
+
+  /* Brand */
+  --color-brand:        #1847D6;
+  --color-brand-accent: #4B72FF;
+  --color-brand-gradient: linear-gradient(135deg, #1847D6 0%, #6B44F8 100%);
+
+  /* Text */
+  --color-text-primary:   #141413;
+  --color-text-secondary: #5e5d59;
+  --color-text-tertiary:  #87867f;
+  --color-text-disabled:  #b0aea5;
+
+  /* Borders */
+  --color-border:        #f0eee6;
+  --color-border-strong: #e8e6dc;
+  --color-divider:       #f0eee6;
+
+  /* Semantic */
+  --color-error:   #b53333;
+  --color-success: #22c55e;
+  --color-warning: #fb923c;
+  --color-focus:   #3898ec;
+
+  /* Radius scale */
+  --radius-sharp: 4px;
+  --radius-sm:    6px;
+  --radius-md:    8px;
+  --radius-lg:   12px;
+  --radius-xl:   16px;
+  --radius-xxl:  24px;
+  --radius-full: 32px;
+
+  /* Shadows */
+  --shadow-ring:     0px 0px 0px 1px #e8e6dc;
+  --shadow-ring-brand: 0px 0px 0px 1px #1847D6;
+  --shadow-whisper:  rgba(0,0,0,0.05) 0px 4px 24px;
+  --shadow-card:     rgba(0,0,0,0.08) 0px 2px 12px;
+  --shadow-brand:    0 4px 16px rgba(24, 71, 214, 0.40);
+
+  /* Transitions */
+  --transition-fast:   0.12s ease;
+  --transition-normal: 0.18s ease;
+  --transition-slow:   0.28s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ─── Dark Mode Overrides ────────────────────────────────────────────────────
+   Applied when App.jsx sets data-theme="dark" on <html>
+   ─────────────────────────────────────────────────────────────────────────── */
+[data-theme="dark"] {
+  --color-bg-page:      #141413;
+  --color-bg-surface:   #1a1a1a;
+  --color-bg-elevated:  #252525;
+  --color-bg-sidebar:   #161616;
+  --color-bg-sand:      #30302e;
+
+  --color-text-primary:   #e8e6dc;
+  --color-text-secondary: #87867f;
+  --color-text-tertiary:  #5e5d59;
+  --color-text-disabled:  #4d4c48;
+
+  --color-border:        #2a2a2a;
+  --color-border-strong: #30302e;
+  --color-divider:       #2a2a2a;
+
+  --shadow-ring:     0px 0px 0px 1px #30302e;
+  --shadow-whisper:  rgba(0,0,0,0.35) 0px 4px 24px;
+  --shadow-card:     rgba(0,0,0,0.40) 0px 2px 12px;
+}
+
+/* ─── Base ───────────────────────────────────────────────────────────────────── */
 body {
-  font-family: 'Roboto', sans-serif;
-  background-color: #f5f5f5;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background-color: var(--color-bg-page);
   min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 #root {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+}
+
+/* ─── Selection ─────────────────────────────────────────────────────────────── */
+::selection,
+::-moz-selection {
+  background-color: rgba(24, 71, 214, 0.18);
+  color: inherit;
+}
+
+/* ─── Scrollbars ─────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar        { width: 3px; height: 3px; }
+::-webkit-scrollbar-track  { background: transparent; }
+::-webkit-scrollbar-thumb  {
+  background: var(--color-border-strong);
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-disabled);
 }

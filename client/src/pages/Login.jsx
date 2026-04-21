@@ -8,6 +8,7 @@ import { Visibility, VisibilityOff } from '@mui/icons-material'
 import { motion, useReducedMotion } from 'framer-motion'
 import { useGoogleLogin } from '@react-oauth/google'
 import { useAuth } from '../contexts/AuthContext'
+import { BRAND, PALETTE } from '../theme/tokens.js'
 
 const MotionBox = motion(Box)
 const MotionG   = motion.g
@@ -102,25 +103,25 @@ function RocketScene() {
 
           {/* Left fin */}
           <motion.g {...assemble(0.3, { x: -20 }, { x: 0 })}>
-            <path d="M80 160 L65 195 L80 190 Z" fill="#001AFF" opacity="0.9"/>
-            <path d="M80 160 L65 195 L80 190 Z" fill="#4F6EFF" opacity="0.3"/>
+            <path d="M80 160 L65 195 L80 190 Z" fill={BRAND.primary} opacity="0.9"/>
+            <path d="M80 160 L65 195 L80 190 Z" fill={BRAND.accent} opacity="0.3"/>
           </motion.g>
 
           {/* Right fin */}
           <motion.g {...assemble(0.3, { x: 20 }, { x: 0 })}>
-            <path d="M120 160 L135 195 L120 190 Z" fill="#001AFF" opacity="0.9"/>
-            <path d="M120 160 L135 195 L120 190 Z" fill="#4F6EFF" opacity="0.3"/>
+            <path d="M120 160 L135 195 L120 190 Z" fill={BRAND.primary} opacity="0.9"/>
+            <path d="M120 160 L135 195 L120 190 Z" fill={BRAND.accent} opacity="0.3"/>
           </motion.g>
 
           {/* Body */}
           <motion.g {...assemble(0, { y: 15 }, { y: 0 })}>
             <rect x="80" y="90" width="40" height="115" rx="2" fill="url(#bodyGrad)"/>
             {/* Side accent lines */}
-            <rect x="80" y="90" width="3" height="115" rx="1" fill="#4F6EFF" opacity="0.6"/>
-            <rect x="117" y="90" width="3" height="115" rx="1" fill="#4F6EFF" opacity="0.6"/>
+            <rect x="80" y="90" width="3" height="115" rx="1" fill={BRAND.accent} opacity="0.6"/>
+            <rect x="117" y="90" width="3" height="115" rx="1" fill={BRAND.accent} opacity="0.6"/>
             {/* Bottom nozzle */}
             <rect x="85" y="195" width="30" height="10" rx="2" fill="#0d0d1a"/>
-            <rect x="88" y="198" width="24" height="4" rx="1" fill="#4F6EFF" opacity="0.4"/>
+            <rect x="88" y="198" width="24" height="4" rx="1" fill={BRAND.accent} opacity="0.4"/>
           </motion.g>
 
           {/* Nose cone */}
@@ -132,9 +133,9 @@ function RocketScene() {
 
           {/* Window */}
           <motion.g {...assemble(0.45, { scale: 0 }, { scale: 1 })}>
-            <circle cx="100" cy="140" r="13" fill="#4F6EFF" opacity="0.25"/>
-            <circle cx="100" cy="140" r="10" fill="#1a1a3e" stroke="#4F6EFF" strokeWidth="1.5"/>
-            <circle cx="100" cy="140" r="6"  fill="#4F6EFF" opacity="0.15"/>
+            <circle cx="100" cy="140" r="13" fill={BRAND.accent} opacity="0.25"/>
+            <circle cx="100" cy="140" r="10" fill="#1a1a3e" stroke={BRAND.accent} strokeWidth="1.5"/>
+            <circle cx="100" cy="140" r="6"  fill={BRAND.accent} opacity="0.15"/>
             {/* Window reflection */}
             <circle cx="96" cy="136" r="2.5" fill="white" opacity="0.35"/>
           </motion.g>
@@ -165,9 +166,9 @@ function RocketScene() {
 
 // ── Feature list ──────────────────────────────────────────────────────────────
 const FEATURES = [
-  { dot: '#4F6EFF', text: 'Multimodal inference pipelines that turn prompts into structured lessons' },
-  { dot: '#6B44F8', text: 'Spatial reasoning engine renders diagrams, animations & narration in sync' },
-  { dot: '#FF6B35', text: 'Adaptive knowledge graphs — any domain, any depth, sub-second latency' },
+  { dot: BRAND.accent, text: 'Multimodal inference pipelines that turn prompts into structured lessons' },
+  { dot: '#6B44F8',   text: 'Spatial reasoning engine renders diagrams, animations & narration in sync' },
+  { dot: '#FF6B35',   text: 'Adaptive knowledge graphs — any domain, any depth, sub-second latency' },
 ]
 
 // ── Left panel (branding + rocket) ────────────────────────────────────────────
@@ -196,7 +197,7 @@ function LeftPanel({ isMobile }) {
           sx={{
             position: 'absolute', top: '-5%', left: '-10%',
             width: 350, height: 350, borderRadius: '50%',
-            background: 'radial-gradient(circle, rgba(79,110,255,0.18) 0%, transparent 70%)',
+            background: 'radial-gradient(circle, rgba(75,114,255,0.18) 0%, transparent 70%)',
             filter: 'blur(50px)',
           }}
         />
@@ -234,11 +235,11 @@ function LeftPanel({ isMobile }) {
             <Box sx={{
               display: 'inline-flex', alignItems: 'center', gap: 0.8,
               px: 1.5, py: 0.5, mb: 3,
-              border: '1px solid rgba(79,110,255,0.35)',
+              border: `1px solid ${BRAND.accent}55`,
               borderRadius: '4px',
-              bgcolor: 'rgba(79,110,255,0.08)',
+              bgcolor: `${BRAND.accent}14`,
             }}>
-              <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: '#4F6EFF' }} />
+              <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: BRAND.accent }} />
               <Typography sx={{ fontSize: 11.5, color: 'rgba(255,255,255,0.55)', letterSpacing: '0.04em', fontWeight: 500 }}>
                 INFERENCE ENGINE v2
               </Typography>
@@ -304,7 +305,7 @@ function LeftPanel({ isMobile }) {
                   to="/register"
                   sx={{
                     fontSize: 13, fontWeight: 600, textDecoration: 'none',
-                    background: 'linear-gradient(135deg, #4F6EFF 0%, #6B44F8 100%)',
+                    background: BRAND.gradientAlt,
                     WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
                     '&:hover': { opacity: 0.8 },
                   }}
@@ -521,9 +522,9 @@ function LoginForm({ isMobile }) {
               sx={{
                 borderRadius: '4px', py: 1.3, fontSize: 14,
                 fontWeight: 600, textTransform: 'none',
-                background: 'linear-gradient(135deg, #001AFF 0%, #6B44F8 100%)',
+                background: BRAND.gradient,
                 boxShadow: 'none',
-                '&:hover': { boxShadow: 'none', opacity: 0.88 },
+                '&:hover': { background: BRAND.gradientHover, boxShadow: 'none' },
               }}
             >
               {loading ? 'Signing in…' : 'Sign in'}

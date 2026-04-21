@@ -24,6 +24,7 @@ import DeleteOutlineIcon       from '@mui/icons-material/DeleteOutline'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { relativeTime } from '../Studio/constants'
 import { useAuth } from '../../contexts/AuthContext'
+import { BRAND, PALETTE } from '../../theme/tokens.js'
 
 const DRAWER_OPEN   = 260
 const DRAWER_CLOSED = 56
@@ -58,7 +59,7 @@ function groupConversations(conversations) {
 // ─── Collapsed icon button ────────────────────────────────────────────────────
 const CollapsedBtn = ({ label, icon, onClick, isActive, accent, isDark }) => {
   const theme    = useTheme()
-  const activeBg = isDark ? 'rgba(79,110,255,0.12)' : 'rgba(0,26,255,0.07)'
+  const activeBg = isDark ? 'rgba(75,114,255,0.12)' : 'rgba(24,71,214,0.07)'
   const hoverBg  = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)'
 
   return (
@@ -178,11 +179,11 @@ const ConvItem = ({ conv, isActive, onClick, onRename, onStar, onDelete }) => {
           px: 1.25, py: 0.4, mx: 0.75, mb: 0.1,
           borderRadius: '8px', cursor: 'pointer',
           bgcolor: isActive
-            ? (isDark ? 'rgba(79,110,255,0.12)' : 'rgba(0,26,255,0.07)')
+            ? (isDark ? 'rgba(75,114,255,0.12)' : 'rgba(24,71,214,0.07)')
             : 'transparent',
           '&:hover': {
             bgcolor: isActive
-              ? (isDark ? 'rgba(79,110,255,0.15)' : 'rgba(0,26,255,0.09)')
+              ? (isDark ? 'rgba(75,114,255,0.15)' : 'rgba(24,71,214,0.09)')
               : (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)'),
           },
           transition: 'background 0.15s',
@@ -234,7 +235,7 @@ const ConvItem = ({ conv, isActive, onClick, onRename, onStar, onDelete }) => {
           paper: {
             sx: {
               minWidth: 160,
-              bgcolor: isDark ? '#161616' : '#fafafa',
+              bgcolor: isDark ? PALETTE.sidebarDark : PALETTE.ivory,
               backgroundImage: 'none',
               border: `1px solid ${theme.palette.divider}`,
               boxShadow: isDark
@@ -248,7 +249,7 @@ const ConvItem = ({ conv, isActive, onClick, onRename, onStar, onDelete }) => {
       >
         <MenuItem onClick={handleStar} sx={menuItemSx(isDark, false)}>
           {!!conv.starred
-            ? <><StarIcon sx={{ fontSize: 15, color: '#f59e0b' }} /> Unstar</>
+            ? <><StarIcon sx={{ fontSize: 15, color: PALETTE.starGold }} /> Unstar</>
             : <><StarOutlineIcon sx={{ fontSize: 15 }} /> Star</>
           }
         </MenuItem>
@@ -267,7 +268,7 @@ const ConvItem = ({ conv, isActive, onClick, onRename, onStar, onDelete }) => {
 function menuItemSx(isDark, danger) {
   return {
     fontSize: 13, gap: 1.25, px: 1.5, py: 0.75, borderRadius: '6px', mx: 0.5,
-    color: danger ? '#ef4444' : (isDark ? '#e2e8f0' : '#1e293b'),
+    color: danger ? PALETTE.errorRed : (isDark ? PALETTE.warmSilver : PALETTE.nearBlackText),
     '&:hover': {
       bgcolor: danger
         ? (isDark ? 'rgba(239,68,68,0.1)' : 'rgba(239,68,68,0.07)')
@@ -310,8 +311,8 @@ function RenameDialog({ conv, onClose, onConfirm }) {
       fullWidth
       PaperProps={{
         sx: {
-          bgcolor: isDark ? '#1a1a1a' : '#fff',
-          border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)'}`,
+          bgcolor: isDark ? PALETTE.darkSurface : PALETTE.ivory,
+          border: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.borderCream}`,
           borderRadius: '14px',
           boxShadow: isDark ? '0 24px 60px rgba(0,0,0,0.6)' : '0 24px 60px rgba(0,0,0,0.15)',
         },
@@ -402,7 +403,7 @@ const Sidebar = ({
   const newChatShortcut = isMac ? '⇧⌘O' : 'Ctrl+Shift+O'
   const searchShortcut  = isMac ? '⌘K'  : 'Ctrl+K'
 
-  const sidebarBg = isDark ? '#161616' : '#eef0f4'
+  const sidebarBg = isDark ? PALETTE.sidebarDark : PALETTE.sidebarLight
 
   // ── Keyboard shortcuts ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -493,7 +494,7 @@ const Sidebar = ({
                 width: 32, height: 32, borderRadius: '8px', flexShrink: 0,
                 background: (!open && sidebarHovered)
                   ? 'transparent'
-                  : 'linear-gradient(135deg, #001AFF 0%, #6B44F8 100%)',
+                  : BRAND.gradient,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 boxShadow: (!open && sidebarHovered) ? 'none' : `0 2px 10px ${accent}40`,
                 cursor: 'pointer',

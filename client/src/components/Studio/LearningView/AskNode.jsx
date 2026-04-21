@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Handle, Position } from 'reactflow'
 import { Box, Typography, TextField, IconButton, Tooltip, useTheme } from '@mui/material'
 import SendIcon from '@mui/icons-material/Send'
+import { PALETTE } from '../../../theme/tokens.js'
 
 const ASK_NODE_W = 272
 
@@ -24,7 +25,7 @@ export default function AskNode({ data }) {
         width: ASK_NODE_W,
         borderRadius: '12px',
         border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.09)'}`,
-        bgcolor: isDark ? '#1e1e2a' : '#ffffff',
+        bgcolor: isDark ? PALETTE.darkSurface : PALETTE.ivory,
         overflow: 'hidden',
         boxShadow: isDark
           ? '0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04)'
@@ -51,7 +52,7 @@ export default function AskNode({ data }) {
               '& .MuiOutlinedInput-root': {
                 fontSize: 13, borderRadius: '8px',
                 bgcolor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)',
-                color: isDark ? '#f1f5f9' : '#1e293b',
+                color: isDark ? PALETTE.warmSilver : PALETTE.nearBlackText,
                 '& fieldset': { borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)' },
                 '&:hover fieldset': { borderColor: `${primary}55` },
                 '&.Mui-focused fieldset': { borderColor: `${primary}99` },

@@ -2,6 +2,7 @@ import { Box, Typography } from '@mui/material'
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
 import { useTheme } from '@mui/material'
 import { INITIAL_SUGGESTIONS } from './constants'
+import { BRAND, PALETTE } from '../../theme/tokens.js'
 
 export default function EmptyView({ onSuggestionClick }) {
   const theme  = useTheme()
@@ -19,11 +20,11 @@ export default function EmptyView({ onSuggestionClick }) {
       <Box sx={{
         width: 64, height: 64,
         background: isDark
-          ? 'linear-gradient(135deg, rgba(79,110,255,0.15) 0%, rgba(79,110,255,0.08) 100%)'
-          : 'linear-gradient(135deg, #f0f4ff 0%, #e8edff 100%)',
+          ? 'linear-gradient(135deg, rgba(75,114,255,0.15) 0%, rgba(75,114,255,0.08) 100%)'
+          : `linear-gradient(135deg, ${BRAND.primary}0d 0%, ${BRAND.primary}18 100%)`,
         borderRadius: '18px',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        border: `1px solid ${isDark ? 'rgba(79,110,255,0.2)' : '#e0e8ff'}`,
+        border: `1px solid ${isDark ? 'rgba(75,114,255,0.2)' : `${BRAND.primary}28`}`,
       }}>
         <AutoAwesomeIcon sx={{ fontSize: 28, color: theme.palette.primary.main, opacity: 0.85 }} />
       </Box>
@@ -52,7 +53,7 @@ export default function EmptyView({ onSuggestionClick }) {
               '&:hover': {
                 borderColor: theme.palette.primary.main,
                 color: theme.palette.primary.main,
-                backgroundColor: isDark ? 'rgba(79,110,255,0.08)' : '#f5f7ff',
+                backgroundColor: isDark ? 'rgba(75,114,255,0.08)' : `${BRAND.primary}08`,
               },
               transition: 'all 0.15s',
             }}

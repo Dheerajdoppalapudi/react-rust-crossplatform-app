@@ -7,6 +7,7 @@ import {
 import { Visibility, VisibilityOff } from '@mui/icons-material'
 import { motion, useReducedMotion } from 'framer-motion'
 import { useAuth } from '../contexts/AuthContext'
+import { BRAND } from '../theme/tokens.js'
 
 const MotionBox = motion(Box)
 
@@ -30,7 +31,7 @@ function StarField() {
       <svg width="200" height="220" viewBox="0 0 200 220" fill="none" xmlns="http://www.w3.org/2000/svg">
         <defs>
           <linearGradient id="regGrad" x1="60" y1="60" x2="140" y2="140" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stopColor="#001AFF"/>
+            <stop offset="0%" stopColor={BRAND.primary}/>
             <stop offset="100%" stopColor="#6B44F8"/>
           </linearGradient>
         </defs>
@@ -52,7 +53,7 @@ function StarField() {
             textAnchor="middle"
             fontSize="52"
             fontWeight="800"
-            fontFamily="Sora, sans-serif"
+            fontFamily="Inter, sans-serif"
             fill="url(#regGrad)"
             opacity="0.85"
           >
@@ -83,7 +84,7 @@ function StarField() {
             <motion.circle
               key={`dot-${i}`}
               cx={cx} cy={cy} r={3}
-              fill={i % 2 === 0 ? '#4F6EFF' : '#6B44F8'}
+              fill={i % 2 === 0 ? BRAND.accent : '#6B44F8'}
               initial={{ opacity: 0 }}
               animate={{ opacity: [0.3, 1, 0.3] }}
               transition={{ duration: 2, delay: i * 0.5, repeat: Infinity, ease: 'easeInOut' }}
@@ -97,8 +98,8 @@ function StarField() {
 
 // ── Feature list ──────────────────────────────────────────────────────────────
 const FEATURES = [
-  { dot: '#4F6EFF', text: 'Persistent session context — your learning history informs every generation' },
-  { dot: '#6B44F8', text: 'Full ownership of your inference outputs and conversation threads' },
+  { dot: BRAND.accent, text: 'Persistent session context — your learning history informs every generation' },
+  { dot: '#6B44F8',   text: 'Full ownership of your inference outputs and conversation threads' },
   { dot: '#FF6B35', text: 'No setup. Connect and your first lesson renders in under 10 seconds' },
 ]
 
@@ -138,7 +139,7 @@ function LeftPanel({ isMobile }) {
           sx={{
             position: 'absolute', bottom: '-5%', right: '-10%',
             width: 300, height: 300, borderRadius: '50%',
-            background: 'radial-gradient(circle, rgba(79,110,255,0.18) 0%, transparent 70%)',
+            background: 'radial-gradient(circle, rgba(75,114,255,0.18) 0%, transparent 70%)',
             filter: 'blur(50px)',
           }}
         />
@@ -233,7 +234,7 @@ function LeftPanel({ isMobile }) {
                 to="/login"
                 sx={{
                   fontSize: 13, fontWeight: 600, textDecoration: 'none',
-                  background: 'linear-gradient(135deg, #4F6EFF 0%, #6B44F8 100%)',
+                  background: BRAND.gradientAlt,
                   WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
                   '&:hover': { opacity: 0.8 },
                 }}
@@ -392,9 +393,9 @@ export default function Register() {
               sx={{
                 borderRadius: '4px', py: 1.3, fontSize: 14,
                 fontWeight: 600, textTransform: 'none', mt: 0.5,
-                background: 'linear-gradient(135deg, #001AFF 0%, #6B44F8 100%)',
+                background: BRAND.gradient,
                 boxShadow: 'none',
-                '&:hover': { boxShadow: 'none', opacity: 0.88 },
+                '&:hover': { background: BRAND.gradientHover, boxShadow: 'none' },
               }}
             >
               {loading ? 'Creating account…' : 'Create account'}

@@ -4,6 +4,7 @@ import RefreshIcon from '@mui/icons-material/Refresh'
 import ErrorBoundary from '../error/ErrorBoundary'
 import SessionView from './SessionView'
 import LoadingView from './LoadingView'
+import { BRAND, PALETTE } from '../../theme/tokens.js'
 
 // ─── Centered content column — matches PromptBar max-width ────────────────────
 function ContentColumn({ children }) {
@@ -24,11 +25,11 @@ export function UserBubble({ prompt }) {
     <Box sx={{ display: 'flex', justifyContent: 'flex-end', pt: 3, pb: 3.5 }}>
       <Box sx={{
         maxWidth: '72%', px: 2.5, py: 1.5,
-        backgroundColor: isDark ? '#242424' : '#f1f5f9',
+        backgroundColor: isDark ? PALETTE.darkSubsurface : PALETTE.warmSand,
         color: theme.palette.text.primary,
         borderRadius: '18px 18px 4px 18px',
         fontSize: 14.5, fontWeight: 400, lineHeight: 1.6,
-        border: `1px solid ${isDark ? '#2e2e2e' : '#e2e8f0'}`,
+        border: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.borderWarm}`,
       }}>
         {prompt}
       </Box>
@@ -77,7 +78,7 @@ function RetryBanner({ turn, onRetry }) {
           borderRadius: '8px', flexShrink: 0,
           color: theme.palette.primary.main,
           border: `1px solid ${theme.palette.primary.main}44`,
-          '&:hover': { bgcolor: isDark ? 'rgba(79,110,255,0.1)' : '#f0f4ff' },
+          '&:hover': { bgcolor: isDark ? 'rgba(75,114,255,0.10)' : `${BRAND.primary}0d` },
         }}
       >
         {isRetrying ? 'Retrying…' : 'Retry'}

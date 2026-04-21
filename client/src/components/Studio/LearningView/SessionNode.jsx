@@ -6,6 +6,7 @@ import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline'
 import AddIcon               from '@mui/icons-material/Add'
 import { useMediaUrl } from '../../../hooks/useMediaUrl'
 import { NODE_W, NODE_H } from './useFlowData'
+import { BRAND, PALETTE } from '../../../theme/tokens.js'
 
 const THUMB_H  = Math.round(NODE_W * 9 / 16)  // 146
 const ASK_W    = 272   // must match AskNode width
@@ -119,7 +120,7 @@ export default function SessionNode({ data }) {
           height:       NODE_H,
           borderRadius: '10px',
           border:       `1.5px solid ${isDark ? 'rgba(255,255,255,0.09)' : '#e8ecf2'}`,
-          bgcolor:      isDark ? '#1a1a1a' : '#ffffff',
+          bgcolor:      isDark ? PALETTE.darkSurface : PALETTE.ivory,
           overflow:     'hidden',
           display:      'flex',
           flexDirection:'column',
@@ -203,7 +204,7 @@ export default function SessionNode({ data }) {
             height:       NODE_H,
             borderRadius: '10px',
             border:       `1.5px solid ${isDark ? 'rgba(255,255,255,0.09)' : '#e8ecf2'}`,
-            bgcolor:      isDark ? '#1a1a1a' : '#ffffff',
+            bgcolor:      isDark ? PALETTE.darkSurface : PALETTE.ivory,
             overflow:     'hidden',
             cursor:       'pointer',
             boxShadow:    isDark
@@ -223,7 +224,7 @@ export default function SessionNode({ data }) {
             <Box
               onMouseEnter={() => setThumbHover(true)}
               onMouseLeave={() => setThumbHover(false)}
-              sx={{ width: '100%', height: THUMB_H, bgcolor: isDark ? '#111' : '#f0f2f7', overflow: 'hidden', position: 'relative' }}
+              sx={{ width: '100%', height: THUMB_H, bgcolor: isDark ? PALETTE.nearBlack : PALETTE.warmSand, overflow: 'hidden', position: 'relative' }}
             >
               {turn.id && !imgError && frameUrl ? (
                 <img
@@ -255,18 +256,18 @@ export default function SessionNode({ data }) {
                 </Box>
               )}
 
-              <Box sx={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 32, pointerEvents: 'none', background: isDark ? 'linear-gradient(transparent,#1a1a1a)' : 'linear-gradient(transparent,#ffffff)' }} />
+              <Box sx={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 32, pointerEvents: 'none', background: isDark ? `linear-gradient(transparent,${PALETTE.darkSurface})` : `linear-gradient(transparent,${PALETTE.ivory})` }} />
 
               {/* Badges */}
               <Box sx={{ position: 'absolute', top: 8, right: 8, display: 'flex', alignItems: 'center', gap: 0.5 }}>
                 {intentLabel && (
-                  <Box sx={{ px: 0.75, py: 0.3, borderRadius: '20px', bgcolor: 'rgba(99,102,241,0.18)', border: '1px solid rgba(99,102,241,0.4)', backdropFilter: 'blur(6px)' }}>
-                    <Typography sx={{ fontSize: 8, fontWeight: 600, lineHeight: 1, color: '#818cf8', textTransform: 'capitalize' }}>{intentLabel}</Typography>
+                  <Box sx={{ px: 0.75, py: 0.3, borderRadius: '20px', bgcolor: 'rgba(75,114,255,0.18)', border: '1px solid rgba(75,114,255,0.4)', backdropFilter: 'blur(6px)' }}>
+                    <Typography sx={{ fontSize: 8, fontWeight: 600, lineHeight: 1, color: BRAND.accent, textTransform: 'capitalize' }}>{intentLabel}</Typography>
                   </Box>
                 )}
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, px: 0.75, py: 0.3, borderRadius: '20px', bgcolor: isReady ? 'rgba(34,197,94,0.18)' : 'rgba(251,146,60,0.18)', border: `1px solid ${isReady ? 'rgba(34,197,94,0.4)' : 'rgba(251,146,60,0.4)'}`, backdropFilter: 'blur(6px)' }}>
-                  <Box sx={{ width: 5, height: 5, borderRadius: '50%', bgcolor: isReady ? '#22c55e' : '#fb923c' }} />
-                  <Typography sx={{ fontSize: 8, fontWeight: 700, lineHeight: 1, color: isReady ? '#22c55e' : '#fb923c' }}>
+                  <Box sx={{ width: 5, height: 5, borderRadius: '50%', bgcolor: isReady ? PALETTE.successGreen : PALETTE.warningOrange }} />
+                  <Typography sx={{ fontSize: 8, fontWeight: 700, lineHeight: 1, color: isReady ? PALETTE.successGreen : PALETTE.warningOrange }}>
                     {isReady && duration ? duration : isReady ? 'READY' : 'GEN'}
                   </Typography>
                 </Box>

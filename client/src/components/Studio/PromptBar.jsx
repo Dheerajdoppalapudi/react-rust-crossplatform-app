@@ -12,6 +12,7 @@ import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined'
 import AccountTreeOutlinedIcon from '@mui/icons-material/AccountTreeOutlined'
 import { useTheme } from '@mui/material'
 import { MODELS, RENDER_MODES } from './constants'
+import { BRAND, PALETTE } from '../../theme/tokens.js'
 
 const RENDER_MODE_ICONS = {
   auto:    <AutoAwesomeOutlinedIcon sx={{ fontSize: 13 }} />,
@@ -47,8 +48,8 @@ export default function PromptBar({
   const isFollowUp = !!activeConversation && !isGenerating
   const canSend    = prompt.trim() && !isGenerating
 
-  const promptBorder = isDark ? '#333333' : '#dde3ec'
-  const cardBg       = isDark ? '#1a1a1a' : '#ffffff'
+  const promptBorder = isDark ? PALETTE.dividerDark : PALETTE.borderCream
+  const cardBg       = isDark ? PALETTE.darkSurface : PALETTE.ivory
 
   // Group models by provider for the dropdown
   const claudeModels = MODELS.filter((m) => m.provider === 'claude')
@@ -63,8 +64,8 @@ export default function PromptBar({
           <Box sx={{
             display: 'flex', alignItems: 'center', gap: 1,
             px: 1.5, py: 0.75, borderRadius: '10px',
-            backgroundColor: isDark ? 'rgba(79,110,255,0.1)' : '#f0f4ff',
-            border: `1px solid ${isDark ? 'rgba(79,110,255,0.25)' : '#c7d2fe'}`,
+            backgroundColor: isDark ? 'rgba(75,114,255,0.10)' : `${BRAND.primary}0d`,
+            border: `1px solid ${isDark ? 'rgba(75,114,255,0.25)' : `${BRAND.primary}30`}`,
           }}>
             <PauseCircleOutlineIcon sx={{ fontSize: 14, color: theme.palette.primary.main, flexShrink: 0 }} />
             <Typography sx={{ fontSize: 12, color: theme.palette.primary.main, fontWeight: 500, flexShrink: 0 }}>
@@ -104,8 +105,8 @@ export default function PromptBar({
             '&:focus-within': {
               borderColor: theme.palette.primary.main,
               boxShadow: isDark
-                ? '0 2px 20px rgba(79,110,255,0.15)'
-                : '0 2px 20px rgba(0,26,255,0.08)',
+                ? '0 2px 20px rgba(75,114,255,0.15)'
+                : '0 2px 20px rgba(24,71,214,0.08)',
             },
             transition: 'border-color 0.15s, box-shadow 0.15s',
           }}>
@@ -332,10 +333,10 @@ export default function PromptBar({
                     size="small"
                     sx={{
                       width: 32, height: 32,
-                      backgroundColor: canSend ? theme.palette.primary.main : (isDark ? '#2a2a2a' : '#f1f5f9'),
+                      backgroundColor: canSend ? theme.palette.primary.main : (isDark ? PALETTE.darkSubsurface : PALETTE.warmSand),
                       color: canSend ? '#fff' : theme.palette.text.secondary,
                       borderRadius: '8px',
-                      '&:hover': { backgroundColor: canSend ? (isDark ? '#3D58FF' : '#0015cc') : undefined },
+                      '&:hover': { backgroundColor: canSend ? BRAND.primary : undefined },
                       transition: 'all 0.15s',
                     }}
                   >
