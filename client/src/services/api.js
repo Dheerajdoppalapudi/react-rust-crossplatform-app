@@ -147,7 +147,10 @@ export const api = {
 
   // signal: optional AbortSignal — pass controller.signal to cancel on navigation.
   // timeout: null — generation can run for 60-120+ seconds; no client-side timeout.
-  imageGeneration: async (message, conversationId = null, pauseContext = null, notesEnabled = false, provider = 'claude', model = null, signal = null, renderMode = null) => {
+  // parentSessionId: for general follow-ups (no pause), the last completed session in
+  //   the conversation — used to build the tree view edge. For pause follow-ups this is
+  //   derived from pauseContext, so callers should leave it null in that case.
+  imageGeneration: async (message, conversationId = null, pauseContext = null, notesEnabled = false, provider = 'claude', model = null, signal = null, renderMode = null, parentSessionId = null) => {
     const formData = new FormData()
     formData.append('message', message)
     formData.append('notes_enabled', String(notesEnabled))
@@ -165,6 +168,8 @@ export const api = {
       if (pauseContext.frameIndex != null) {
         formData.append('parent_frame_index', String(pauseContext.frameIndex))
       }
+    } else if (parentSessionId) {
+      formData.append('parent_session_id', parentSessionId)
     }
     return _request(`${API_BASE}/api/image_generation`, {
       method: 'POST', body: formData,

@@ -52,8 +52,8 @@ export default function Canvas({ turns, onNodeClick, onAsk }) {
           return {
             ...e,
             style: {
-              stroke:          solid ? (e.data?.isFrame ? primary : 'rgba(150,150,150,0.55)') : 'rgba(150,150,150,0.35)',
-              strokeWidth:     solid ? (e.data?.isFrame ? 2 : 1.5) : 1.5,
+              stroke:          solid ? (e.data?.isFrame ? primary : 'rgba(180,180,180,0.85)') : 'rgba(150,150,150,0.45)',
+              strokeWidth:     solid ? (e.data?.isFrame ? 2.5 : 2) : 1.5,
               strokeDasharray: solid ? undefined : '5 4',
             },
             markerEnd: {

@@ -91,7 +91,7 @@ export default function SessionNode({ data }) {
       target:       ghostId,
       type:         'default',
       style:        { stroke: edgeColor, strokeWidth: 1.5, strokeDasharray: '5 4' },
-      markerEnd:    { type: 'arrowclosed', color: edgeColor },
+      markerEnd:    { type: 'arrowclosed', width: 20, height: 20, color: edgeColor },
       animated:     false,
     }])
 

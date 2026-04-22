@@ -304,6 +304,14 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
     const tempId      = `temp_${Date.now()}`
     const isFirstTurn = !activeConvId
 
+    // Determine parent session before the temp turn is pushed into state.
+    // Pause follow-up: parent is the paused session.
+    // General follow-up: parent is the last completed turn in this conversation.
+    // First turn: no parent.
+    const parentSessionId = isFirstTurn
+      ? null
+      : (pauseContext?.sessionId ?? turns.filter((t) => t.id).at(-1)?.id ?? null)
+
     if (isFirstTurn) {
       setIsBootstrapping(true)
       setBootstrapStage('planning')
@@ -322,7 +330,7 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
         stage:            'planning',
         framesData:       null,
         videoPhase:       'generating',
-        parentSessionId:  pauseContext?.sessionId  ?? null,
+        parentSessionId:  parentSessionId,
         parentFrameIndex: pauseContext?.frameIndex ?? null,
       }])
     }
@@ -343,6 +351,7 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
         notesEnabled, selectedModel.provider, selectedModel.model,
         genController.signal,
         selectedRenderMode?.id !== 'auto' ? selectedRenderMode.id : null,
+        parentSessionId,
       )
 
       // CRIT-8: If the user navigated away while we were awaiting the response,
@@ -369,7 +378,7 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
         stage:               null,
         framesData,
         videoPhase:          'generating',
-        parentSessionId:     capturedPauseContext?.sessionId  ?? null,
+        parentSessionId:     parentSessionId,
         parentFrameIndex:    capturedPauseContext?.frameIndex ?? null,
       }
 
