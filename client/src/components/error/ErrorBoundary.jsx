@@ -15,20 +15,20 @@ function AppFallback({ onReset }) {
     <Box sx={{
       height: '100vh', display: 'flex', flexDirection: 'column',
       alignItems: 'center', justifyContent: 'center',
-      gap: 2.5, px: 3, bgcolor: '#111',
+      gap: 2.5, px: 3, bgcolor: PALETTE.nearBlack,
     }}>
       <Box sx={{
         width: 56, height: 56, borderRadius: '14px',
-        background: 'linear-gradient(135deg, #001AFF 0%, #6B44F8 100%)',
+        background: BRAND.gradient,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
         <ErrorOutlineIcon sx={{ fontSize: 26, color: '#fff' }} />
       </Box>
       <Box sx={{ textAlign: 'center', maxWidth: 360 }}>
-        <Typography sx={{ fontWeight: 700, fontSize: 18, color: '#f1f5f9', mb: 0.75 }}>
+        <Typography sx={{ fontWeight: 700, fontSize: 18, color: PALETTE.warmSilver, mb: 0.75 }}>
           Something went wrong
         </Typography>
-        <Typography sx={{ fontSize: 13.5, color: '#94a3b8', lineHeight: 1.65 }}>
+        <Typography sx={{ fontSize: 13.5, color: PALETTE.stoneGray, lineHeight: 1.65 }}>
           An unexpected error occurred. Refreshing the page usually fixes this.
         </Typography>
       </Box>
@@ -37,9 +37,9 @@ function AppFallback({ onReset }) {
         startIcon={<RefreshIcon />}
         onClick={() => window.location.reload()}
         sx={{
-          color: '#f1f5f9', borderColor: '#334155',
+          color: PALETTE.warmSilver, borderColor: PALETTE.borderDark,
           borderRadius: '8px', textTransform: 'none', fontWeight: 600,
-          '&:hover': { borderColor: '#4F6EFF', color: '#4F6EFF' },
+          '&:hover': { borderColor: BRAND.accent, color: BRAND.accent },
         }}
       >
         Reload page

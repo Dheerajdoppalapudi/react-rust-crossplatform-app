@@ -1,4 +1,5 @@
 import { Box, Typography, Paper, Switch, Divider } from '@mui/material'
+import { PALETTE } from '../theme/tokens.js'
 
 const settingsItems = [
   { label: 'Email Notifications', desc: 'Receive email updates about your account activity.' },
@@ -15,7 +16,7 @@ const Settings = () => {
       <Typography variant="body1" color="text.secondary" sx={{ mb: 3, maxWidth: 600 }}>
         Manage your account preferences and configurations.
       </Typography>
-      <Paper elevation={0} sx={{ borderRadius: 2, border: '1px solid #e0e0e0' }}>
+      <Paper elevation={0} sx={{ borderRadius: 2, border: `1px solid ${PALETTE.borderWarm}` }}>
         {settingsItems.map((item, index) => (
           <Box key={item.label}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 3 }}>

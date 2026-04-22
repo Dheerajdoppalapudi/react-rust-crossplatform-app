@@ -15,31 +15,31 @@ export const BRAND = {
 // ─── Palette ──────────────────────────────────────────────────────────────────
 export const PALETTE = {
   // Dark backgrounds
-  nearBlack:       '#141413',  // primary dark page background
-  darkSurface:     '#1a1a1a',  // card / paper on dark
-  darkSubsurface:  '#252525',  // elevated surfaces on dark
-  sidebarDark:     '#161616',  // sidebar / nav on dark
+  nearBlack:       '#111111',  // primary dark page background
+  darkSurface:     '#1c1c1c',  // card / paper on dark
+  darkSubsurface:  '#262626',  // elevated surfaces on dark
+  sidebarDark:     '#0f0f0f',  // sidebar / nav on dark
 
-  // Light backgrounds — warm parchment instead of cold white
-  parchment:       '#f5f4ed',  // primary light page background
-  ivory:           '#faf9f5',  // card / paper on light
-  warmSand:        '#e8e6dc',  // button backgrounds, interactive surfaces
-  sidebarLight:    '#eef0f4',  // sidebar / nav on light
+  // Light backgrounds
+  parchment:       '#f8fafc',  // primary light page background
+  ivory:           '#ffffff',  // card / paper on light
+  warmSand:        '#f1f5f9',  // button backgrounds, interactive surfaces
+  sidebarLight:    '#f1f5f9',  // sidebar / nav on light
 
-  // Text — all warm-toned, no cool blue-grays
-  nearBlackText:   '#141413',  // primary text on light
-  oliveGray:       '#5e5d59',  // secondary text on light
-  stoneGray:       '#87867f',  // tertiary text, disabled, metadata
-  charcoalWarm:    '#4d4c48',  // button text on warm surfaces
-  warmSilver:      '#b0aea5',  // primary text on dark
-  darkWarm:        '#3d3d3a',  // emphasized secondary text
+  // Text
+  nearBlackText:   '#0f172a',  // primary text on light
+  oliveGray:       '#64748b',  // secondary text on light
+  stoneGray:       '#94a3b8',  // tertiary text, disabled, metadata
+  charcoalWarm:    '#475569',  // button text on surfaces
+  warmSilver:      '#f1f5f9',  // primary text on dark
+  darkWarm:        '#334155',  // emphasized secondary text
 
   // Borders & dividers
-  borderCream:     '#f0eee6',  // standard light border
-  borderWarm:      '#e8e6dc',  // prominent light border
-  borderDark:      '#30302e',  // standard dark border
-  dividerLight:    '#f0eee6',
-  dividerDark:     '#2a2a2a',
+  borderCream:     '#e2e8f0',  // standard light border
+  borderWarm:      '#e2e8f0',  // prominent light border
+  borderDark:      '#1e293b',  // standard dark border
+  dividerLight:    '#e2e8f0',
+  dividerDark:     '#1e293b',
 
   // Semantic
   errorRed:        '#b53333',  // warm error — serious without alarming
