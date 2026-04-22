@@ -9,7 +9,7 @@ import { NODE_W, NODE_H } from './useFlowData'
 import { BRAND, PALETTE } from '../../../theme/tokens.js'
 
 const THUMB_H  = Math.round(NODE_W * 9 / 16)  // 146
-const ASK_W    = 272   // must match AskNode width
+const ASK_W    = 340   // must match AskNode width
 const ASK_H    = 138   // approximate AskNode height
 
 export default function SessionNode({ data }) {

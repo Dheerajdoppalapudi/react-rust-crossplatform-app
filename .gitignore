@@ -38,3 +38,6 @@ backend/logs/app.log
 /backend/logs
 references/
 backend/database.sqlite
+
+# Graphify
+graphify-out/

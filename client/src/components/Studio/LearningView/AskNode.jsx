@@ -4,7 +4,7 @@ import { Box, Typography, TextField, IconButton, Tooltip, useTheme } from '@mui/
 import SendIcon from '@mui/icons-material/Send'
 import { PALETTE } from '../../../theme/tokens.js'
 
-const ASK_NODE_W = 272
+const ASK_NODE_W = 340
 
 export default function AskNode({ data }) {
   const theme   = useTheme()

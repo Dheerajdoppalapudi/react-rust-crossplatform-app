@@ -6,14 +6,15 @@ A production-grade design token system for the Zenith AI-powered visual learning
 
 ## Design Philosophy
 
-Zenith is a technical tool, but learning should feel warm and welcoming. The aesthetic draws from editorial design: cream paper, warm ink, precise typography — not the cold blue-gray SaaS sterility. The brand color (`#1847D6`) is vivid enough to signal action and progress without being hyperlink-cold.
+Zenith is a technical tool that should feel clean, precise, and trustworthy. The aesthetic is modern SaaS — crisp white surfaces, cool slate neutrals, and a vivid blue brand color that signals intelligence and action. The brand color (`#1847D6`) is rich and premium without being hyperlink-cold.
 
 **Principles:**
-- Warm neutrals everywhere backgrounds appear — parchment, ivory, sand, not white
+- Clean white/near-white backgrounds — `#f8fafc` page, `#ffffff` cards
 - Rich blue brand — signals intelligence, precision, trust
+- Cool slate neutrals for text — the classic, legible SaaS palette
 - Typography does the heavy lifting — Inter is optimized for UI reading at all sizes
 - No decorative shadows — use ring-based focus feedback, not heavy drop shadows
-- Dark mode shifts the warm palette to deep charcoal, not cold navy
+- Dark mode uses deep neutral black — `#111111` base, cool slate text
 
 ---
 
@@ -37,30 +38,30 @@ Zenith is a technical tool, but learning should feel warm and welcoming. The aes
 
 | Token | Value | Role |
 |---|---|---|
-| `PALETTE.parchment` | `#f5f4ed` | Page background — warm cream |
-| `PALETTE.ivory` | `#faf9f5` | Card / paper surfaces |
-| `PALETTE.warmSand` | `#e8e6dc` | Button bg, interactive surfaces |
-| `PALETTE.sidebarLight` | `#eef0f4` | Sidebar / navigation |
-| `PALETTE.nearBlackText` | `#141413` | Primary text |
-| `PALETTE.oliveGray` | `#5e5d59` | Secondary text, labels |
-| `PALETTE.stoneGray` | `#87867f` | Tertiary text, metadata, disabled |
-| `PALETTE.charcoalWarm` | `#4d4c48` | Button text on warm surfaces |
-| `PALETTE.borderCream` | `#f0eee6` | Standard light border |
-| `PALETTE.borderWarm` | `#e8e6dc` | Prominent light border |
-| `PALETTE.dividerLight` | `#f0eee6` | Dividers / separators |
+| `PALETTE.parchment` | `#f8fafc` | Page background |
+| `PALETTE.ivory` | `#ffffff` | Card / paper surfaces |
+| `PALETTE.warmSand` | `#f1f5f9` | Button bg, interactive surfaces |
+| `PALETTE.sidebarLight` | `#f1f5f9` | Sidebar / navigation |
+| `PALETTE.nearBlackText` | `#0f172a` | Primary text |
+| `PALETTE.oliveGray` | `#64748b` | Secondary text, labels |
+| `PALETTE.stoneGray` | `#94a3b8` | Tertiary text, metadata, disabled |
+| `PALETTE.charcoalWarm` | `#475569` | Button text on surfaces |
+| `PALETTE.borderCream` | `#e2e8f0` | Standard light border |
+| `PALETTE.borderWarm` | `#e2e8f0` | Prominent light border |
+| `PALETTE.dividerLight` | `#e2e8f0` | Dividers / separators |
 
 ### Dark Mode
 
 | Token | Value | Role |
 |---|---|---|
-| `PALETTE.nearBlack` | `#141413` | Page background — deep warm black |
-| `PALETTE.darkSurface` | `#1a1a1a` | Card / paper surfaces |
-| `PALETTE.darkSubsurface` | `#252525` | Elevated surfaces, hover states |
-| `PALETTE.sidebarDark` | `#161616` | Sidebar / navigation |
-| `PALETTE.warmSilver` | `#b0aea5` | Primary text |
-| `PALETTE.stoneGray` | `#87867f` | Secondary text |
-| `PALETTE.borderDark` | `#30302e` | Standard dark border |
-| `PALETTE.dividerDark` | `#2a2a2a` | Dividers / separators |
+| `PALETTE.nearBlack` | `#111111` | Page background |
+| `PALETTE.darkSurface` | `#1c1c1c` | Card / paper surfaces |
+| `PALETTE.darkSubsurface` | `#262626` | Elevated surfaces, hover states |
+| `PALETTE.sidebarDark` | `#0f0f0f` | Sidebar / navigation |
+| `PALETTE.warmSilver` | `#f1f5f9` | Primary text |
+| `PALETTE.stoneGray` | `#94a3b8` | Secondary text |
+| `PALETTE.borderDark` | `#1e293b` | Standard dark border |
+| `PALETTE.dividerDark` | `#1e293b` | Dividers / separators |
 
 ### Semantic
 
@@ -169,13 +170,13 @@ Zenith is a technical tool, but learning should feel warm and welcoming. The aes
 
 ## Shadow System
 
-Ring-based — depth comes from borders and rings, not heavy blur. Heavy drop shadows look dated and fight the warm aesthetic.
+Ring-based — depth comes from borders and rings, not heavy blur.
 
 | Token | Value | Use |
 |---|---|---|
-| `ringNeutral` | `0px 0px 0px 1px #d1cfc5` | Default card border ring |
+| `ringNeutral` | `0px 0px 0px 1px #e2e8f0` | Default card border ring |
 | `ringBrand` | `0px 0px 0px 1px #1847D6` | Active / selected state |
-| `ringDark` | `0px 0px 0px 1px #30302e` | Dark mode card border |
+| `ringDark` | `0px 0px 0px 1px #1e293b` | Dark mode card border |
 | `whisper` | `rgba(0,0,0,0.05) 0px 4px 24px` | Cards on light background |
 | `card` | `rgba(0,0,0,0.08) 0px 2px 12px` | Slightly elevated surfaces |
 | `overlay` | `rgba(0,0,0,0.15) 0px 8px 24px` | Modals, dropdowns, popovers |
@@ -252,13 +253,13 @@ Ring-based — depth comes from borders and rings, not heavy blur. Heavy drop sh
 
 ## Dark Mode
 
-Dark mode is not just `background: black`. The strategy:
+Dark mode shifts the clean white palette to deep neutral black. The strategy:
 
-1. **Backgrounds shift from warm parchment to warm charcoal** — `#f5f4ed → #141413`, not `white → #111111`
-2. **Cards use `#1a1a1a`** — slightly lighter than the page, creating depth without harsh contrast
-3. **Text uses `warmSilver (#b0aea5)`** — warm-toned off-white, not pure white (pure white on near-black is too harsh)
+1. **Backgrounds shift from `#f8fafc` to `#111111`** — deep neutral black page background
+2. **Cards use `#1c1c1c`** — slightly lighter than the page, creating depth without harsh contrast
+3. **Text uses `#f1f5f9` (slate-100)** — the same cool slate family, just inverted
 4. **Brand color shifts** — primary `#1847D6` → accent `#4B72FF` (lighter for dark backgrounds)
-5. **Borders use `#30302e` / `#2a2a2a`** — warm dark, not cool gray
+5. **Borders use `#1e293b`** — cool dark slate, consistent with the light-mode slate family
 
 Toggle is handled in `App.jsx`: `document.documentElement.setAttribute('data-theme', mode)` keeps CSS custom properties in sync with MUI's ThemeProvider.
 
@@ -288,17 +289,14 @@ index.css          ← CSS custom properties layer (for non-MUI elements)
 ### Do
 - Import from `tokens.js` for all color, spacing, and radius decisions
 - Use `theme.palette.primary.main` for the primary brand color in MUI components — it's already wired to `BRAND.primary` / `BRAND.accent` via `theme/index.js`
-- Use `RADIUS.lg` (12px) as your default border radius — it's the sweet spot for the warm, approachable aesthetic
-- Use warm-toned neutral text tokens — `PALETTE.oliveGray`, `PALETTE.stoneGray`, never `#94a3b8`
+- Use `RADIUS.lg` (12px) as your default border radius
+- Use slate text tokens — `PALETTE.oliveGray` (`#64748b`), `PALETTE.stoneGray` (`#94a3b8`)
 - Use `BRAND.gradient` for gradient buttons; `BRAND.gradientHover` for the hover state
-- Keep dark mode warm — test both modes before shipping any new component
+- Test both light and dark modes before shipping any new component
 
 ### Don't
 - Don't hardcode hex values anywhere except inside `tokens.js`
-- Don't use `#ffffff` as a card background — use `PALETTE.ivory` (`#faf9f5`) for warmth
-- Don't use `#f8fafc`, `#f5f5f5`, or other cool backgrounds — use `PALETTE.parchment` (`#f5f4ed`)
-- Don't use `#64748b` or `#94a3b8` for text — use `PALETTE.oliveGray` or `PALETTE.stoneGray`
 - Don't use `#001AFF` or `#4F6EFF` — these are the old brand colors; use `BRAND.primary` and `BRAND.accent`
 - Don't use heavy drop shadows — use the ring system and `whisper` / `card` shadows
 - Don't add `textTransform: 'uppercase'` to buttons — it's handled globally in `theme/index.js`
-- Don't use `focusBlue` (`#3898ec`) for anything other than a11y focus rings — it's the one intentionally cool color and using it decoratively breaks the warm palette
+- Don't use `focusBlue` (`#3898ec`) for anything other than a11y focus rings

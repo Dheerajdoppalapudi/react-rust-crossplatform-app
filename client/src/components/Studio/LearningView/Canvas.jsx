@@ -47,18 +47,21 @@ export default function Canvas({ turns, onNodeClick, onAsk }) {
     setEdges((prev) => {
       const ghostEdges = prev.filter((e) => e.id.startsWith('ask_edge_'))
       return [
-        ...layoutEdges.map((e) => ({
-          ...e,
-          style: {
-            stroke:          e.data?.isFrame ? primary : 'rgba(150,150,150,0.4)',
-            strokeWidth:     e.data?.isFrame ? 2       : 1.5,
-            strokeDasharray: e.data?.isFrame ? undefined : '5 4',
-          },
-          markerEnd: {
-            type:  'arrowclosed',
-            color: e.data?.isFrame ? primary : 'rgba(150,150,150,0.5)',
-          },
-        })),
+        ...layoutEdges.map((e) => {
+          const solid = e.data?.isFrame || !e.data?.isLoading
+          return {
+            ...e,
+            style: {
+              stroke:          solid ? (e.data?.isFrame ? primary : 'rgba(150,150,150,0.55)') : 'rgba(150,150,150,0.35)',
+              strokeWidth:     solid ? (e.data?.isFrame ? 2 : 1.5) : 1.5,
+              strokeDasharray: solid ? undefined : '5 4',
+            },
+            markerEnd: {
+              type:  'arrowclosed',
+              color: solid ? (e.data?.isFrame ? primary : 'rgba(150,150,150,0.6)') : 'rgba(150,150,150,0.4)',
+            },
+          }
+        }),
         ...ghostEdges,
       ]
     })

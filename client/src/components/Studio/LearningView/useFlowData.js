@@ -48,7 +48,7 @@ export function useFlowData(turns, onAsk) {
         source: turn.parentSessionId,
         target: nodeId(turn),
         type:   'flowEdge',
-        data:   { isFrame: turn.parentFrameIndex != null },
+        data:   { isFrame: turn.parentFrameIndex != null, isLoading: !!turn.isLoading },
       }))
 
     return { nodes: layoutWithDagre(nodes, edges), edges }
