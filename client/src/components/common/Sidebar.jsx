@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { useState, useMemo, useEffect, useRef, useCallback, memo } from 'react'
 import {
   Drawer, List, ListItem, ListItemButton, ListItemIcon, ListItemText,
   Tooltip, Typography, Box, Divider, useTheme, InputBase, IconButton,
@@ -54,6 +54,36 @@ function groupConversations(conversations) {
     else                buckets.Earlier.push(c)
   })
   return Object.entries(buckets).filter(([, items]) => items.length > 0)
+}
+
+// ─── Logo / collapse toggle (owns its own hover state so Sidebar never re-renders on hover) ──
+const LogoButton = ({ open, accent, onToggle }) => {
+  const theme   = useTheme()
+  const [hovered, setHovered] = useState(false)
+
+  return (
+    <Tooltip title={open ? 'Collapse' : 'Expand'} placement="right" arrow>
+      <Box
+        onClick={(e) => { e.stopPropagation(); onToggle() }}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        sx={{
+          width: 32, height: 32, borderRadius: '8px', flexShrink: 0,
+          background: (!open && hovered) ? 'transparent' : BRAND.gradient,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          boxShadow: (!open && hovered) ? 'none' : `0 2px 10px ${accent}40`,
+          cursor: 'pointer',
+          transition: 'background 0.15s, box-shadow 0.15s, opacity 0.15s',
+          '&:hover': { opacity: (!open && hovered) ? 1 : 0.85 },
+        }}
+      >
+        {(!open && hovered)
+          ? <ChevronRightIcon sx={{ fontSize: 18, color: theme.palette.text.secondary }} />
+          : <AutoAwesomeIcon  sx={{ fontSize: 14, color: '#fff' }} />
+        }
+      </Box>
+    </Tooltip>
+  )
 }
 
 // ─── Collapsed icon button ────────────────────────────────────────────────────
@@ -143,7 +173,7 @@ const NavItem = ({ item, open, isActive, onClick }) => {
 }
 
 // ─── Single conversation row ───────────────────────────────────────────────────
-const ConvItem = ({ conv, isActive, onClick, onRename, onStar, onDelete }) => {
+const ConvItem = memo(({ conv, isActive, onSelect, onRename, onStar, onDelete }) => {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
   const accent = theme.palette.primary.main
@@ -172,7 +202,7 @@ const ConvItem = ({ conv, isActive, onClick, onRename, onStar, onDelete }) => {
   return (
     <>
       <Box
-        onClick={onClick}
+        onClick={() => onSelect(conv)}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         sx={{
@@ -263,7 +293,7 @@ const ConvItem = ({ conv, isActive, onClick, onRename, onStar, onDelete }) => {
       </Menu>
     </>
   )
-}
+})
 
 function menuItemSx(isDark, danger) {
   return {
@@ -393,11 +423,11 @@ const Sidebar = ({
   const { user, logout } = useAuth()
 
   const [open, setOpen]           = useState(false)
-  const [sidebarHovered, setSidebarHovered] = useState(false)
   const [search, setSearch]       = useState('')
-  const [isFetchingConv, setIsFetchingConv] = useState(false)
-  const [renamingConv, setRenamingConv]     = useState(null)  // conv object being renamed
+  const [renamingConv, setRenamingConv]     = useState(null)
   const searchRef = useRef(null)
+
+  const toggleOpen = useCallback(() => setOpen(p => !p), [])
 
   const isMac           = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/i.test(navigator.userAgent)
   const newChatShortcut = isMac ? '⇧⌘O' : 'Ctrl+Shift+O'
@@ -423,13 +453,6 @@ const Sidebar = ({
     return () => window.removeEventListener('keydown', handler)
   }, [isMac, onNewConversation])
 
-  useEffect(() => {
-    if (!activeConvId) return
-    setIsFetchingConv(true)
-    const t = setTimeout(() => setIsFetchingConv(false), 800)
-    return () => clearTimeout(t)
-  }, [activeConvId])
-
   const filtered = useMemo(() => {
     if (!search.trim()) return conversations
     const q = search.toLowerCase()
@@ -445,18 +468,14 @@ const Sidebar = ({
   const convItemProps = (conv) => ({
     conv,
     isActive: activeConvId === conv.id,
-    onClick: () => onSelectConv(conv),
+    onSelect: onSelectConv,
     onStar: onStarConv,
-    onRename: (c) => setRenamingConv(c),
+    onRename: setRenamingConv,
     onDelete: onDeleteConv,
   })
 
   return (
-    <Box
-      sx={{ position: 'relative', flexShrink: 0 }}
-      onMouseEnter={() => setSidebarHovered(true)}
-      onMouseLeave={() => setSidebarHovered(false)}
-    >
+    <Box sx={{ position: 'relative', flexShrink: 0 }}>
       <Drawer
         variant="permanent"
         onClick={() => { if (!open) setOpen(true) }}
@@ -487,27 +506,7 @@ const Sidebar = ({
           gap: 0.5,
           margin: '6px',
         }}>
-          <Tooltip title={open ? 'Collapse' : 'Expand'} placement="right" arrow>
-            <Box
-              onClick={(e) => { e.stopPropagation(); setOpen((p) => !p) }}
-              sx={{
-                width: 32, height: 32, borderRadius: '8px', flexShrink: 0,
-                background: (!open && sidebarHovered)
-                  ? 'transparent'
-                  : BRAND.gradient,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                boxShadow: (!open && sidebarHovered) ? 'none' : `0 2px 10px ${accent}40`,
-                cursor: 'pointer',
-                transition: 'background 0.15s, box-shadow 0.15s, opacity 0.15s',
-                '&:hover': { opacity: (!open && sidebarHovered) ? 1 : 0.85 },
-              }}
-            >
-              {(!open && sidebarHovered)
-                ? <ChevronRightIcon sx={{ fontSize: 18, color: theme.palette.text.secondary }} />
-                : <AutoAwesomeIcon  sx={{ fontSize: 14, color: '#fff' }} />
-              }
-            </Box>
-          </Tooltip>
+          <LogoButton open={open} accent={accent} onToggle={toggleOpen} />
 
           {open && (
             <Typography sx={{

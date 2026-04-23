@@ -14,6 +14,9 @@ import { useTheme } from '@mui/material'
 import { MODELS, RENDER_MODES } from './constants'
 import { BRAND, PALETTE } from '../../theme/tokens.js'
 
+const claudeModels = MODELS.filter((m) => m.provider === 'claude')
+const openaiModels = MODELS.filter((m) => m.provider === 'openai')
+
 const RENDER_MODE_ICONS = {
   auto:    <AutoAwesomeOutlinedIcon sx={{ fontSize: 13 }} />,
   manim:   <FunctionsOutlinedIcon  sx={{ fontSize: 13 }} />,
@@ -50,10 +53,6 @@ export default function PromptBar({
 
   const promptBorder = isDark ? PALETTE.dividerDark : PALETTE.borderCream
   const cardBg       = isDark ? PALETTE.darkSurface : PALETTE.ivory
-
-  // Group models by provider for the dropdown
-  const claudeModels = MODELS.filter((m) => m.provider === 'claude')
-  const openaiModels = MODELS.filter((m) => m.provider === 'openai')
 
   return (
     <Box sx={{ flexShrink: 0 }}>

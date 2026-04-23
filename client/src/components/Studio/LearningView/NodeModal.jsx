@@ -7,9 +7,9 @@ import CloseIcon                  from '@mui/icons-material/Close'
 import SendIcon                   from '@mui/icons-material/Send'
 import NotesOutlinedIcon          from '@mui/icons-material/NotesOutlined'
 import QuestionAnswerOutlinedIcon from '@mui/icons-material/QuestionAnswerOutlined'
-import MovieCreationOutlinedIcon  from '@mui/icons-material/MovieCreationOutlined'
 import { useMediaUrl } from '../../../hooks/useMediaUrl'
 import VideoPanel from '../VideoPanel'
+import { api } from '../../../services/api'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 function parseNotes(raw) {
@@ -139,7 +139,7 @@ export default function NodeModal({ node, onClose, onAsk }) {
         })
         .finally(() => setLoadingMeta(false))
     }
-  }, [node?.id])   // eslint-disable-line react-hooks/exhaustive-deps
+  }, [node?.id, node?.framesData])
 
   if (!node) return null
 

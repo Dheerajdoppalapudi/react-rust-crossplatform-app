@@ -58,7 +58,7 @@ export default function MergedVideoModal({ open, onClose, mergedVideoUrl, sessio
         v.onerror          = () => { if (!cancelled) finish(i, 0) }
         v.src = url
       } catch {
-        finish(i, 0)
+        if (!cancelled) finish(i, 0)
       }
     })
 

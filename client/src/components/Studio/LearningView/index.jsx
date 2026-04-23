@@ -30,22 +30,22 @@ export default function LearningView({ turns, conversationId, onExit, onAskFromL
   const [mergeError,    setMergeError]    = useState(null)
   const [mergedVideoUrl, setMergedVideoUrl] = useState(null)
 
-  const handleNodeClick = (node) => {
+  const handleNodeClick = useCallback((node) => {
     // Always use the freshest turn data from the turns array
     const fresh = turns.find((t) => t.id === node.id) || node
     setSelectedNode(fresh)
-  }
+  }, [turns])
 
-  const handleAsk = ({ question, sessionId, frameIndex, caption }) => {
+  const handleAsk = useCallback(({ question, sessionId, frameIndex, caption }) => {
     setSelectedNode(null)
     onAskFromLearn?.({ question, sessionId, frameIndex, caption })
-  }
+  }, [onAskFromLearn])
 
   const handleCanvasAsk = useCallback(({ question, sessionId }) => {
     onGenerateFromCanvas?.({ question, sessionId })
   }, [onGenerateFromCanvas])
 
-  const handleMerge = async () => {
+  const handleMerge = useCallback(async () => {
     setMerging(true)
     setMergeError(null)
     try {
@@ -59,7 +59,7 @@ export default function LearningView({ turns, conversationId, onExit, onAskFromL
     } finally {
       setMerging(false)
     }
-  }
+  }, [conversationId])
 
   return (
     <Box sx={{

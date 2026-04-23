@@ -39,7 +39,7 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
     const handleKey = (e) => {
       if ((isMac ? e.metaKey : e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'n') {
         e.preventDefault()
-        toggleUserNotes()
+        setUserNotesOpen((p) => !p)
       }
     }
     window.addEventListener('keydown', handleKey)
@@ -423,11 +423,11 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
     onConversationsRefresh, runVideoGenerationForTurn, scrollToTop, toast,
   ])
 
-  const handleKeyDown = (e) => {
+  const handleKeyDown = useCallback((e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleGenerate() }
-  }
+  }, [handleGenerate])
 
-  const handleNewConversation = () => {
+  const handleNewConversation = useCallback(() => {
     loadedConvIdRef.current = null
     onActiveConvIdChange(null)
     setTurns([])
@@ -435,7 +435,7 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
     setIsBootstrapping(false)
     scrollToTop()
     inputRef.current?.focus()
-  }
+  }, [onActiveConvIdChange, scrollToTop])
 
   const handlePauseAsk = useCallback(({ sessionId, currentTime, duration, frameIndex: directFrameIndex, caption: directCaption }) => {
     const turn = turns.find((t) => t.id === sessionId)
@@ -469,6 +469,11 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
       ? activeConversationMeta.suggested_followups
       : (FOLLOWUP_SUGGESTIONS[activeConversationMeta?.intent_type] || FOLLOWUP_SUGGESTIONS.illustration)
   })()
+
+  const handleSuggestionClick = useCallback((s) => {
+    setPrompt(s)
+    inputRef.current?.focus()
+  }, [])
 
   const handleLearnAsk = useCallback(({ question, sessionId, frameIndex, caption }) => {
     setPauseContext({ sessionId, frameIndex: frameIndex ?? undefined, caption: caption ?? undefined })
@@ -716,7 +721,7 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
           )}
 
           {showEmpty && (
-            <EmptyView onSuggestionClick={(s) => { setPrompt(s); inputRef.current?.focus() }} />
+            <EmptyView onSuggestionClick={handleSuggestionClick} />
           )}
 
           {showThread && (
@@ -736,7 +741,7 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
                     <Box key={s}>
                       {i > 0 && <Divider sx={{ opacity: 0.2 }} />}
                       <Box
-                        onClick={() => { setPrompt(s); inputRef.current?.focus() }}
+                        onClick={() => handleSuggestionClick(s)}
                         sx={{
                           display: 'flex', alignItems: 'center', gap: 1.5,
                           py: 0.9, px: 0.5, cursor: 'pointer', userSelect: 'none',

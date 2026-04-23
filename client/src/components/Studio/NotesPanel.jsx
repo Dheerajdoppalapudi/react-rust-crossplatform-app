@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Box, Typography, Collapse, IconButton, Tooltip, useTheme } from '@mui/material'
 import ChevronRightIcon  from '@mui/icons-material/ChevronRight'
 import ContentCopyIcon   from '@mui/icons-material/ContentCopy'
@@ -17,6 +17,9 @@ export default function NotesPanel({ notes }) {
   const isDark = theme.palette.mode === 'dark'
   const [open,   setOpen]   = useState(true)
   const [copied, setCopied] = useState(false)
+  const copyTimerRef = useRef(null)
+
+  useEffect(() => () => clearTimeout(copyTimerRef.current), [])
 
   if (!notes) return null
   const bullets = parseBullets(notes)
@@ -25,7 +28,8 @@ export default function NotesPanel({ notes }) {
   const handleCopy = () => {
     navigator.clipboard.writeText(bullets.map((b) => `• ${b}`).join('\n'))
     setCopied(true)
-    setTimeout(() => setCopied(false), 1800)
+    clearTimeout(copyTimerRef.current)
+    copyTimerRef.current = setTimeout(() => setCopied(false), 1800)
   }
 
   const mutedText  = isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)'
