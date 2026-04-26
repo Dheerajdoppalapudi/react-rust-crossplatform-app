@@ -23,8 +23,8 @@ from core.config import (
     SVG_INTENT_TYPES,
 )
 from core.database import get_db
-from services.Frame_generation.excalidraw_enhancer import enhance
-from services.Frame_generation.planner import (
+from services.frame_generation.excalidraw_enhancer import enhance
+from services.frame_generation.planner import (
     GenerationPlan,
     _vocab_plan_to_generation_plan,
     classify_intent,
@@ -32,20 +32,20 @@ from services.Frame_generation.planner import (
     generate_all_frames,
     _log,
 )
-from services.Frame_generation.combiner import combine_frames
-from services.Frame_generation.mermaid.mermaid_generator import (
+from services.frame_generation.combiner import combine_frames
+from services.frame_generation.mermaid.mermaid_generator import (
     generate_mermaid_frames,
     _sidecar_available,
 )
-from services.Frame_generation.manim.manim_generator import generate_manim_frames, manim_available
-from services.Frame_generation.svg.svg_generator import generate_svg_frames, svg_available
-from services.Frame_generation.slide_generator import generate_slide, generate_summary_slide
+from services.frame_generation.manim.manim_generator import generate_manim_frames, manim_available
+from services.frame_generation.svg.svg_generator import generate_svg_frames, svg_available
+from services.frame_generation.slide_generator import generate_slide, generate_summary_slide
 
 logger = logging.getLogger(__name__)
 
 # ── Prompt templates — loaded once at import time ─────────────────────────────
 
-_PROMPTS_DIR = Path(__file__).parent / "Frame_generation" / "prompts"
+_PROMPTS_DIR = Path(__file__).parent / "frame_generation" / "prompts"
 
 
 def _load_prompt(filename: str) -> str:
@@ -398,7 +398,7 @@ async def _run_frame_generation(
         _log({"event": "stage_complete", "stage": "frame_generation", "path": "manim"})
 
         # Collect generated Python code from the lifecycle log
-        from services.Frame_generation.planner import request_log
+        from services.frame_generation.planner import request_log
         lifecycle_log = request_log.get() or []
         manim_calls   = [e for e in lifecycle_log if e.get("event") == "llm_call"]
         frame_codes   = [e["full_response"] for e in manim_calls[1:]]

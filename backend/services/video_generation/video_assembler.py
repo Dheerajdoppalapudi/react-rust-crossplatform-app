@@ -30,7 +30,7 @@ import subprocess
 import tempfile
 from typing import Optional
 
-from services.video.tts_service import estimate_duration
+from services.video_generation.tts_service import estimate_duration
 
 logger = logging.getLogger(__name__)
 

@@ -39,7 +39,7 @@ try:
 except ImportError:
     _LXML_AVAILABLE = False
 
-from services.Frame_generation.planner import GenerationPlan, FramePlan, call_llm
+from services.frame_generation.planner import GenerationPlan, FramePlan, call_llm
 
 
 # ---------------------------------------------------------------------------

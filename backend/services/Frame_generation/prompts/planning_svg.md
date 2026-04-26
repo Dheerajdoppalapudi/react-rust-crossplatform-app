@@ -86,8 +86,6 @@ You do NOT own: shapes, geometry, pixel positions — those belong to the render
       "accent_color": "<hex>"
     }
   ],
-  "suggested_followups": ["<q1>", "<q2>", "<q3>"],
-  "notes": ["<bullet 1>", "<bullet 2>", "<bullet 3>", "<bullet 4>", "<bullet 5>"]
 }
 ```
 

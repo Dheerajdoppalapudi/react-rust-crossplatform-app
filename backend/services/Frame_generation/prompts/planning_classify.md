@@ -5,9 +5,15 @@ Given a user's question, output ONLY a JSON object — no markdown, no explanati
 ```json
 {
   "intent_type": "<math | process | architecture | timeline | concept_analogy | comparison | illustration>",
-  "frame_count": <integer 2–6>
+  "frame_count": <integer 2–6>,
+  "notes": ["<key takeaway 1>", "<key takeaway 2>", "<key takeaway 3>", "<key takeaway 4>", "<key takeaway 5>"],
+  "suggested_followups": ["<follow-up question 1>", "<follow-up question 2>", "<follow-up question 3>"]
 }
 ```
+
+**notes** — exactly 5 concise, concrete bullets. Each is one sentence, teaches a standalone fact the user should remember. No vague sentences like "this is important". Specific numbers, mechanisms, or cause-effect relationships preferred.
+
+**suggested_followups** — exactly 3 short questions a curious learner would ask next. They should go deeper than the original question or explore a closely related concept.
 
 ## Intent rules
 

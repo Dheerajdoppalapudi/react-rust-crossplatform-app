@@ -29,9 +29,9 @@ from core.database import get_db, update_session
 from core.db_models import User
 from core.responses import success
 from dependencies.auth import get_current_user, create_media_token, resolve_media_user
-from services.video.frame_exporter import export_frames
-from services.video.tts_service import parse_narration, generate_audio_parallel
-from services.video.video_assembler import assemble, moviepy_available
+from services.video_generation.frame_exporter import export_frames
+from services.video_generation.tts_service import parse_narration, generate_audio_parallel
+from services.video_generation.video_assembler import assemble, moviepy_available
 
 logger = logging.getLogger(__name__)
 

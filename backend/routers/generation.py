@@ -30,7 +30,7 @@ from core.database import (
     session_output_dir,
     now_iso,
 )
-from services.Frame_generation.planner import request_log, token_usage, request_llm_service, _log
+from services.frame_generation.planner import request_log, token_usage, request_llm_service, _log
 from services.generation_service import (
     run_generation_pipeline,
     build_conversation_context,

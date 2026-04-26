@@ -65,7 +65,11 @@
       "Bash(rm -rf autoimprov autoimprov_manim)",
       "Bash(mv autoimprov_parent AutoImprov)",
       "Bash(cp \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/references/svg_prompt.md\" \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/AutoImprov/autoimprov_svg/prompts/svg_prompt.md\")",
-      "Bash(cp \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/references/planning_svg.md\" \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/AutoImprov/autoimprov_svg/prompts/planning_svg.md\")"
+      "Bash(cp \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/references/planning_svg.md\" \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/AutoImprov/autoimprov_svg/prompts/planning_svg.md\")",
+      "Bash(mv Frame_generation _frame_generation_tmp)",
+      "Bash(mv _frame_generation_tmp frame_generation)",
+      "Bash(mv video *)",
+      "Bash(mv _video_generation_tmp video_generation)"
     ]
   }
 }

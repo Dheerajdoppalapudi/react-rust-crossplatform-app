@@ -1,7 +1,9 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { Box, Tooltip, IconButton, Typography, Divider, useTheme } from '@mui/material'
-import NotesOutlinedIcon from '@mui/icons-material/NotesOutlined'
-import EditNoteIcon      from '@mui/icons-material/EditNote'
+import NotesOutlinedIcon    from '@mui/icons-material/NotesOutlined'
+import EditNoteIcon         from '@mui/icons-material/EditNote'
+import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined'
+import VideocamOffOutlined  from '@mui/icons-material/VideocamOffOutlined'
 
 import LoadingView         from '../components/Studio/LoadingView'
 import EmptyView           from '../components/Studio/EmptyView'
@@ -26,6 +28,16 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
   const toggleNotes = () => setNotesEnabled((prev) => {
     const next = !prev
     localStorage.setItem('studio-notes-enabled', String(next))
+    return next
+  })
+
+  // ── Video toggle — persisted across sessions ──────────────────────────────────
+  const [videoEnabled, setVideoEnabled] = useState(
+    () => localStorage.getItem('studio-video-enabled') !== 'false'
+  )
+  const toggleVideo = () => setVideoEnabled((prev) => {
+    const next = !prev
+    localStorage.setItem('studio-video-enabled', String(next))
     return next
   })
 
@@ -329,7 +341,7 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
         isLoading:        true,
         stage:            'planning',
         framesData:       null,
-        videoPhase:       'generating',
+        videoPhase:       videoEnabled ? 'generating' : 'disabled',
         parentSessionId:  parentSessionId,
         parentFrameIndex: pauseContext?.frameIndex ?? null,
       }])
@@ -377,7 +389,7 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
         isLoading:           false,
         stage:               null,
         framesData,
-        videoPhase:          'generating',
+        videoPhase:          videoEnabled ? 'generating' : 'disabled',
         parentSessionId:     parentSessionId,
         parentFrameIndex:    capturedPauseContext?.frameIndex ?? null,
       }
@@ -389,15 +401,20 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
         setBootstrapFrames({ framesData, sessionId: data.session_id })
         setTurns([realTurn])
         await onConversationsRefresh()
-        setBootstrapStage('video')
-        runVideoGenerationForTurn(tempId, data.session_id, () => {
+        if (videoEnabled) {
+          setBootstrapStage('video')
+          runVideoGenerationForTurn(tempId, data.session_id, () => {
+            setIsBootstrapping(false)
+            setBootstrapFrames(null)
+          })
+        } else {
           setIsBootstrapping(false)
           setBootstrapFrames(null)
-        })
+        }
       } else {
         setTurns((prev) => prev.map((t) => t.tempId === tempId ? realTurn : t))
         await onConversationsRefresh()
-        runVideoGenerationForTurn(tempId, data.session_id)
+        if (videoEnabled) runVideoGenerationForTurn(tempId, data.session_id)
       }
     } catch (err) {
       console.error('[Studio] handleGenerate:', err)
@@ -418,7 +435,7 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
       if (it2) clearTimeout(it2)
     }
   }, [
-    prompt, isBootstrapping, turns, activeConvId, notesEnabled,
+    prompt, isBootstrapping, turns, activeConvId, notesEnabled, videoEnabled,
     pauseContext, selectedModel, selectedRenderMode, onActiveConvIdChange,
     onConversationsRefresh, runVideoGenerationForTurn, scrollToTop, toast,
   ])
@@ -507,7 +524,7 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
       isLoading:        true,
       stage:            'planning',
       framesData:       null,
-      videoPhase:       'generating',
+      videoPhase:       videoEnabled ? 'generating' : 'disabled',
       parentSessionId:  sessionId  ?? null,
       parentFrameIndex: null,
     }])
@@ -546,14 +563,14 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
         isLoading:        false,
         stage:            null,
         framesData,
-        videoPhase:       'generating',
+        videoPhase:       videoEnabled ? 'generating' : 'disabled',
         parentSessionId:  capturedPauseCtx.sessionId ?? null,
         parentFrameIndex: null,
       }
 
       setTurns((prev) => prev.map((t) => t.tempId === tempId ? realTurn : t))
       await onConversationsRefresh()
-      runVideoGenerationForTurn(tempId, data.session_id)
+      if (videoEnabled) runVideoGenerationForTurn(tempId, data.session_id)
     } catch (err) {
       if (err?.name !== 'AbortError') {
         console.error('[Studio] handleLearnGenerate:', err)
@@ -566,7 +583,7 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
       clearTimeout(it1)
       clearTimeout(it2)
     }
-  }, [activeConvId, notesEnabled, selectedModel, selectedRenderMode,
+  }, [activeConvId, notesEnabled, videoEnabled, selectedModel, selectedRenderMode,
       onConversationsRefresh, runVideoGenerationForTurn, toast])
 
   // ── Learning view — full-screen focus mode ────────────────────────────────────
@@ -663,6 +680,36 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
             }}
           >
             <NotesOutlinedIcon sx={{ fontSize: 15 }} />
+          </IconButton>
+        </Tooltip>
+
+        {/* Video generation toggle */}
+        <Tooltip title={videoEnabled ? 'Video on' : 'Video off'}>
+          <IconButton
+            size="small"
+            onClick={toggleVideo}
+            aria-pressed={videoEnabled}
+            sx={{
+              borderRadius: '7px', p: 0.6,
+              border: `1px solid ${videoEnabled
+                ? (isDark ? 'rgba(79,110,255,0.45)' : '#c7d2fe')
+                : (isDark ? 'rgba(255,255,255,0.12)' : '#e2e8f0')}`,
+              color: videoEnabled
+                ? theme.palette.primary.main
+                : (isDark ? 'rgba(255,255,255,0.4)' : '#94a3b8'),
+              bgcolor: videoEnabled
+                ? (isDark ? 'rgba(79,110,255,0.1)' : '#f0f4ff')
+                : 'transparent',
+              '&:hover': {
+                borderColor: isDark ? 'rgba(255,255,255,0.25)' : '#94a3b8',
+                color: videoEnabled ? theme.palette.primary.main : (isDark ? '#fff' : '#374151'),
+              },
+              transition: 'all 0.15s',
+            }}
+          >
+            {videoEnabled
+              ? <VideocamOutlinedIcon sx={{ fontSize: 15 }} />
+              : <VideocamOffOutlined  sx={{ fontSize: 15 }} />}
           </IconButton>
         </Tooltip>
 

@@ -19,7 +19,7 @@ import re
 import requests
 
 from core.config import MERMAID_SIDECAR_URL
-from services.Frame_generation.planner import GenerationPlan, call_llm
+from services.frame_generation.planner import GenerationPlan, call_llm
 
 logger = logging.getLogger(__name__)
 
