@@ -150,11 +150,12 @@ export const api = {
   // parentSessionId: for general follow-ups (no pause), the last completed session in
   //   the conversation — used to build the tree view edge. For pause follow-ups this is
   //   derived from pauseContext, so callers should leave it null in that case.
-  imageGeneration: async (message, conversationId = null, pauseContext = null, notesEnabled = false, provider = 'claude', model = null, signal = null, renderMode = null, parentSessionId = null) => {
+  imageGeneration: async (message, conversationId = null, pauseContext = null, notesEnabled = false, provider = 'claude', model = null, signal = null, renderMode = null, parentSessionId = null, textOnly = false) => {
     const formData = new FormData()
     formData.append('message', message)
     formData.append('notes_enabled', String(notesEnabled))
     formData.append('provider', provider)
+    formData.append('text_only', String(textOnly))
     if (model)          formData.append('model', model)
     if (conversationId) formData.append('conversation_id', conversationId)
     if (renderMode)     formData.append('render_mode', renderMode)

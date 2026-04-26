@@ -108,8 +108,6 @@ STRICT OUTPUT RULES:
     "persistent_objects": ["<ids of visual_objects that stay on screen across multiple frames>"],
     "transition_strategy": "<how frames connect visually — e.g. 'each frame adds a layer to the same diagram' or 'left side stays, right side transforms'>"
   },
-  "suggested_followups": ["<q1>", "<q2>", "<q3>"],
-  "notes": ["<key takeaway 1>", "<key takeaway 2>", "<key takeaway 3>"]
 }
 ```
 

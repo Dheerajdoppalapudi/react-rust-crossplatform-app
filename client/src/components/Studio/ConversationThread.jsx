@@ -4,6 +4,7 @@ import RefreshIcon from '@mui/icons-material/Refresh'
 import ErrorBoundary from '../error/ErrorBoundary'
 import SessionView from './SessionView'
 import LoadingView from './LoadingView'
+import NotesPanel from './NotesPanel'
 import { BRAND, PALETTE } from '../../theme/tokens.js'
 
 // ─── Centered content column — matches PromptBar max-width ────────────────────
@@ -88,7 +89,7 @@ function RetryBanner({ turn, onRetry }) {
 }
 
 // ─── Single conversation turn ─────────────────────────────────────────────────
-function TurnView({ turn, onPauseAsk, onRetryTurn }) {
+function TurnView({ turn, onPauseAsk, onRetryTurn, onSuggestionClick }) {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
 
@@ -98,7 +99,7 @@ function TurnView({ turn, onPauseAsk, onRetryTurn }) {
         <UserBubble prompt={turn.prompt} />
 
         {turn.isLoading ? (
-          <LoadingView stage={turn.stage || 'planning'} compact />
+          <LoadingView stage={turn.stage || 'planning'} compact textMode={turn.textMode} />
         ) : turn.videoPhase === 'error' && !turn.id ? (
           /* Complete generation failure */
           <Box sx={{
@@ -131,6 +132,8 @@ function TurnView({ turn, onPauseAsk, onRetryTurn }) {
               <RetryBanner turn={turn} onRetry={onRetryTurn} />
             </Box>
           </>
+        ) : turn.id && turn.framesData?.render_path === 'text' ? (
+          <NotesPanel notes={turn.framesData?.notes} />
         ) : turn.id ? (
           <SessionView
             session={turn}
@@ -145,30 +148,33 @@ function TurnView({ turn, onPauseAsk, onRetryTurn }) {
 }
 
 // ─── Wrapped turn — isolated error boundary per turn ─────────────────────────
-function TurnWithBoundary({ turn, onPauseAsk, onRetryTurn }) {
+function TurnWithBoundary({ turn, onPauseAsk, onRetryTurn, onSuggestionClick }) {
   return (
     <ErrorBoundary
       level="component"
-      // Stable key — error recovery here is state-based (videoPhase), not ErrorBoundary-based.
-      // The boundary protects against unexpected render exceptions thrown by child components.
       key={`${turn.tempId}-boundary`}
     >
-      <TurnView turn={turn} onPauseAsk={onPauseAsk} onRetryTurn={onRetryTurn} />
+      <TurnView
+        turn={turn}
+        onPauseAsk={onPauseAsk}
+        onRetryTurn={onRetryTurn}
+        onSuggestionClick={onSuggestionClick}
+      />
     </ErrorBoundary>
   )
 }
 
 // ─── Full conversation thread ──────────────────────────────────────────────────
-export default function ConversationThread({ turns, onPauseAsk, onRetryTurn }) {
+export default function ConversationThread({ turns, onPauseAsk, onRetryTurn, onSuggestionClick }) {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', pt: 1, pb: 1 }}>
       {turns.map((turn) => (
-        // tempId is stable for both in-flight and loaded turns
         <TurnWithBoundary
           key={turn.tempId}
           turn={turn}
           onPauseAsk={onPauseAsk}
           onRetryTurn={onRetryTurn}
+          onSuggestionClick={onSuggestionClick}
         />
       ))}
     </Box>

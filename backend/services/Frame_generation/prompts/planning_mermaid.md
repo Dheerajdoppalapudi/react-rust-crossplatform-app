@@ -63,8 +63,6 @@ You do NOT own: Mermaid syntax, exact node IDs, classDef colors — those belong
       "accent_color": "<hex>"
     }
   ],
-  "suggested_followups": ["<q1>", "<q2>", "<q3>"],
-  "notes": ["<bullet 1>", "<bullet 2>", "<bullet 3>", "<bullet 4>", "<bullet 5>"]
 }
 ```
 
@@ -206,19 +204,7 @@ A chronological sequence of events, periods, or milestones. Use `timeline` diagr
       "narration": "The load balancer continuously probes each server with health checks — typically a lightweight HTTP request every few seconds — to confirm it is still alive and responding. When a server fails to respond, the load balancer immediately stops sending it traffic, routing all requests to the remaining healthy pool. This is automatic failover: from the user's perspective, the service keeps working even as individual servers crash or restart. For a pool of three servers, you can lose one without any user-visible downtime — a practice called N+1 redundancy. This health-check loop is what makes load balancers the cornerstone of high-availability architectures."
     }
   ],
-  "slide_frames": [],
-  "suggested_followups": [
-    "What is the difference between Layer 4 and Layer 7 load balancing?",
-    "How does sticky sessions work with a load balancer?",
-    "What happens when the load balancer itself goes down?"
-  ],
-  "notes": [
-    "A load balancer distributes traffic across a server pool, hiding backend complexity from clients",
-    "Common algorithms: Round Robin (simple rotation), Least Connections (load-aware), IP Hash (sticky routing)",
-    "Health checks run every few seconds — failed servers are automatically removed from the pool",
-    "N+1 redundancy means the pool has one more server than the minimum needed to handle peak traffic",
-    "Layer 7 load balancers can route based on URL path or headers; Layer 4 routes by IP/TCP only"
-  ]
+  "slide_frames": []
 }
 ```
 

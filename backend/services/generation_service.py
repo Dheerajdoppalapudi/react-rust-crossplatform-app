@@ -281,6 +281,58 @@ def build_conversation_context(
     return "\n".join(lines)
 
 
+# ── Text-only pipeline (video off) ────────────────────────────────────────────
+
+async def run_text_pipeline(
+    message:              str,
+    session_id:           str,
+    output_dir:           str,
+    conversation_context: str,
+) -> dict:
+    """
+    Lightweight single-LLM-call path used when the user has video generation off.
+
+    Calls classify_intent (Haiku) which returns notes + suggested_followups
+    alongside intent metadata. Writes a minimal frames.json and returns a
+    result payload with render_path='text'.
+    """
+    _log({"event": "stage_start", "stage": "text_classify"})
+
+    intent_type, frame_count, notes_list, followups = await classify_intent(
+        message, conversation_context
+    )
+    notes = "\n".join(notes_list) if notes_list else ""
+    suggested_followups = followups or []
+
+    _log({"event": "stage_complete", "stage": "text_classify",
+          "intent_type": intent_type, "frame_count": frame_count})
+    logger.info(
+        "Text pipeline complete  session=%s  intent=%s  notes=%d  followups=%d",
+        session_id, intent_type, len(notes_list), len(suggested_followups),
+    )
+
+    os.makedirs(output_dir, exist_ok=True)
+    with open(os.path.join(output_dir, "frames.json"), "w") as f:
+        json.dump({
+            "render_path":         "text",
+            "images":              [],
+            "captions":            [],
+            "notes":               notes,
+            "suggested_followups": suggested_followups,
+        }, f, indent=2)
+
+    return {
+        "session_id":          session_id,
+        "render_path":         "text",
+        "frame_count":         0,
+        "intent_type":         intent_type,
+        "captions":            [],
+        "images":              [],
+        "notes":               notes,
+        "suggested_followups": suggested_followups,
+    }
+
+
 # ── Main pipeline ─────────────────────────────────────────────────────────────
 
 # Maps frontend render_mode value → canonical intent_type for the planner
@@ -309,15 +361,19 @@ async def run_generation_pipeline(
     # ── Stage 1: Planning ─────────────────────────────────────────────────────
     _log({"event": "stage_start", "stage": "planning"})
 
-    # If the user picked a render mode from the UI, skip classify entirely —
-    # we already know the intent. Use 4 frames as the default; create_vocab_plan
-    # can adjust this freely based on content complexity.
+    # Always run classify — it produces notes/followups cheaply.
+    # If the user forced a render mode, we override intent_type/frame_count after.
+    intent_type, frame_count, notes_list, followups = await classify_intent(
+        message, conversation_context
+    )
+    notes = "\n".join(notes_list) if notes_list else ""
+    suggested_followups = followups or []
+
     if forced_render_mode and forced_render_mode in _FORCED_INTENT:
         intent_type = _FORCED_INTENT[forced_render_mode]
         frame_count = 4
         logger.info("Intent forced  render_mode=%s  intent=%s  frames=%d", forced_render_mode, intent_type, frame_count)
     else:
-        intent_type, frame_count = await classify_intent(message, conversation_context)
         logger.info("Intent classified  intent=%s  frames=%d", intent_type, frame_count)
 
     _log({"event": "stage_complete", "stage": "planning_classify",
@@ -335,10 +391,8 @@ async def run_generation_pipeline(
         session_id, plan.intent_type, plan.frame_count, plan.layout,
     )
 
-    captions            = [frame.caption for frame in plan.frames]
-    frame_narrations    = [frame.narration for frame in plan.frames]
-    suggested_followups = plan.suggested_followups or [] if notes_enabled else []
-    notes               = (plan.notes or "")              if notes_enabled else ""
+    captions         = [frame.caption for frame in plan.frames]
+    frame_narrations = [frame.narration for frame in plan.frames]
 
     narration_lines: list[str] = []
     for i, frame in enumerate(plan.frames):

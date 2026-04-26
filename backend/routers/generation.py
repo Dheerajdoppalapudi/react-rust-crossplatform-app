@@ -33,6 +33,7 @@ from core.database import (
 from services.frame_generation.planner import request_log, token_usage, request_llm_service, _log
 from services.generation_service import (
     run_generation_pipeline,
+    run_text_pipeline,
     build_conversation_context,
     count_llm_calls,
 )
@@ -69,6 +70,7 @@ async def image_generation(
     provider:            str  = Form("claude"),
     model:               Optional[str] = Form(None),
     render_mode:         Optional[str] = Form(None),   # 'manim' | 'svg' | 'mermaid' | None
+    text_only:           bool = Form(False),
     current_user:        User = Depends(get_current_user),
 ):
     session_id = uuid.uuid4().hex
@@ -133,14 +135,22 @@ async def image_generation(
     logger.info("Request received  session=%s  prompt=%r", session_id, message[:120])
 
     try:
-        result_payload = await run_generation_pipeline(
-            message=message,
-            session_id=session_id,
-            output_dir=output_dir,
-            conversation_context=conversation_context,
-            notes_enabled=notes_enabled,
-            forced_render_mode=render_mode,
-        )
+        if text_only:
+            result_payload = await run_text_pipeline(
+                message=message,
+                session_id=session_id,
+                output_dir=output_dir,
+                conversation_context=conversation_context,
+            )
+        else:
+            result_payload = await run_generation_pipeline(
+                message=message,
+                session_id=session_id,
+                output_dir=output_dir,
+                conversation_context=conversation_context,
+                notes_enabled=notes_enabled,
+                forced_render_mode=render_mode,
+            )
 
         # ── Persist ──────────────────────────────────────────────────────────
         duration_ms    = int((time.time() - start_time) * 1000)

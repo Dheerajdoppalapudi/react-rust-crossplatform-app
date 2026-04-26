@@ -148,21 +148,27 @@ const STEPS = [
   { key: 'video',      label: 'Generating video' },
 ]
 
+const TEXT_STEPS = [
+  { key: 'planning', label: 'Thinking' },
+]
+
 // ── Main component ─────────────────────────────────────────────────────────────
 /**
  * framesData: { sessionId: string, framesData: { images: [] } } | null
+ * textMode:   when true, shows a single "Thinking…" step (video off path)
  */
-export default function LoadingView({ stage, compact = false, framesData = null }) {
-  const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
-  const current = STEPS.findIndex((s) => s.key === stage)
+export default function LoadingView({ stage, compact = false, framesData = null, textMode = false }) {
+  const theme    = useTheme()
+  const isDark   = theme.palette.mode === 'dark'
+  const steps    = textMode ? TEXT_STEPS : STEPS
+  const current  = steps.findIndex((s) => s.key === stage)
 
   const mutedColor   = isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)'
   const activeColor  = isDark ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.8)'
   const pendingColor = isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'
   const lineColor    = isDark ? 'rgba(255,255,255,0.1)'  : 'rgba(0,0,0,0.1)'
 
-  const currentStepLabel = STEPS[current]?.label ?? 'Complete'
+  const currentStepLabel = steps[current]?.label ?? 'Complete'
 
   return (
     <Box
@@ -173,7 +179,7 @@ export default function LoadingView({ stage, compact = false, framesData = null 
         position:   'relative',
         display:    'flex',
         alignItems: 'flex-start',
-        minHeight:  compact ? 80 : 240,
+        minHeight:  compact ? 80 : (textMode ? 80 : 240),
         py:         compact ? 1.5 : 3,
         px:         compact ? 0   : 4,
       }}
@@ -188,7 +194,7 @@ export default function LoadingView({ stage, compact = false, framesData = null 
 
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0, maxWidth: 400 }}>
 
-        {STEPS.map((step, i) => {
+        {steps.map((step, i) => {
           const status = i < current ? 'done' : i === current ? 'active' : 'pending'
           const color  = status === 'active' ? activeColor : status === 'done' ? mutedColor : pendingColor
 
@@ -214,13 +220,13 @@ export default function LoadingView({ stage, compact = false, framesData = null 
               {/* Dot + connector line */}
               <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0, pt: '5px' }}>
                 <Box sx={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: color, flexShrink: 0 }} />
-                {i < STEPS.length - 1 && (
+                {i < steps.length - 1 && (
                   <Box sx={{ width: 1.5, height: lineH, backgroundColor: lineColor, mt: 0.5 }} />
                 )}
               </Box>
 
               {/* Label + visual */}
-              <Box sx={{ pb: i < STEPS.length - 1 ? 0.75 : 0 }}>
+              <Box sx={{ pb: i < steps.length - 1 ? 0.75 : 0 }}>
                 <Typography sx={{
                   fontSize:   compact ? 12.5 : 13,
                   color,
@@ -257,7 +263,7 @@ export default function LoadingView({ stage, compact = false, framesData = null 
         })}
 
         {/* Done checkmark */}
-        {current === STEPS.length && (
+        {current === steps.length && (
           <Box sx={{
             display: 'flex', alignItems: 'center', gap: 0.75, mt: 1,
             animation: `${fadeIn} 0.3s ease both`,

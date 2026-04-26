@@ -197,7 +197,9 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
         frame_count:      t.frame_count,
         isLoading:        false,
         framesData:       null,
-        videoPhase:       t.video_path ? 'ready' : (t.status === 'error' ? 'error' : 'generating'),
+        videoPhase:       t.render_path === 'text'
+          ? 'disabled'
+          : (t.video_path ? 'ready' : (t.status === 'error' ? 'error' : 'generating')),
         parentSessionId:  t.parent_session_id  ?? null,
         parentFrameIndex: t.parent_frame_index ?? null,
       }))
@@ -228,7 +230,7 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
 
       // Kick off video generation for any turns still in the generating state.
       for (const turn of loadedTurns) {
-        if (!loadSignal.aborted && turn.videoPhase === 'generating') {
+        if (!loadSignal.aborted && turn.videoPhase === 'generating' && turn.render_path !== 'text') {
           runVideoGenerationForTurn(turn.tempId, turn.id)
         }
       }
@@ -340,6 +342,7 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
         frame_count:      null,
         isLoading:        true,
         stage:            'planning',
+        textMode:         !videoEnabled,
         framesData:       null,
         videoPhase:       videoEnabled ? 'generating' : 'disabled',
         parentSessionId:  parentSessionId,
@@ -347,8 +350,9 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
       }])
     }
 
-    const t1  = isFirstTurn  ? setTimeout(() => setBootstrapStage('generating'), 2500) : null
-    const t2  = isFirstTurn  ? setTimeout(() => setBootstrapStage('rendering'),  6000) : null
+    // Skip stage-advance timers in text-only mode — only "Thinking" step is shown
+    const t1  = (isFirstTurn && videoEnabled)  ? setTimeout(() => setBootstrapStage('generating'), 2500) : null
+    const t2  = (isFirstTurn && videoEnabled)  ? setTimeout(() => setBootstrapStage('rendering'),  6000) : null
     const it1 = !isFirstTurn ? setTimeout(() =>
       setTurns((p) => p.map((t) => t.tempId === tempId ? { ...t, stage: 'generating' } : t)), 2500) : null
     const it2 = !isFirstTurn ? setTimeout(() =>
@@ -364,6 +368,7 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
         genController.signal,
         selectedRenderMode?.id !== 'auto' ? selectedRenderMode.id : null,
         parentSessionId,
+        !videoEnabled,
       )
 
       // CRIT-8: If the user navigated away while we were awaiting the response,
@@ -523,16 +528,17 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
       frame_count:      null,
       isLoading:        true,
       stage:            'planning',
+      textMode:         !videoEnabled,
       framesData:       null,
       videoPhase:       videoEnabled ? 'generating' : 'disabled',
       parentSessionId:  sessionId  ?? null,
       parentFrameIndex: null,
     }])
 
-    const it1 = setTimeout(() =>
-      setTurns((p) => p.map((t) => t.tempId === tempId ? { ...t, stage: 'generating' } : t)), 2500)
-    const it2 = setTimeout(() =>
-      setTurns((p) => p.map((t) => t.tempId === tempId ? { ...t, stage: 'rendering'  } : t)), 6000)
+    const it1 = videoEnabled ? setTimeout(() =>
+      setTurns((p) => p.map((t) => t.tempId === tempId ? { ...t, stage: 'generating' } : t)), 2500) : null
+    const it2 = videoEnabled ? setTimeout(() =>
+      setTurns((p) => p.map((t) => t.tempId === tempId ? { ...t, stage: 'rendering'  } : t)), 6000) : null
 
     try {
       const data = await api.imageGeneration(
@@ -540,6 +546,8 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
         notesEnabled, selectedModel.provider, selectedModel.model,
         genController.signal,
         selectedRenderMode?.id !== 'auto' ? selectedRenderMode.id : null,
+        null,
+        !videoEnabled,
       )
 
       if (isStale()) return
@@ -763,7 +771,7 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
                   <UserBubble prompt={bootstrapPrompt} />
                 </Box>
               )}
-              <LoadingView stage={bootstrapStage} framesData={bootstrapFrames} />
+              <LoadingView stage={bootstrapStage} framesData={bootstrapFrames} textMode={!videoEnabled} />
             </Box>
           )}
 
@@ -777,6 +785,7 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
                 turns={turns}
                 onPauseAsk={handlePauseAsk}
                 onRetryTurn={handleRetryTurn}
+                onSuggestionClick={handleSuggestionClick}
               />
 
               {followUpSuggestions.length > 0 && (

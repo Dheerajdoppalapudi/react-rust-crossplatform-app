@@ -297,18 +297,6 @@ Contrast two things side-by-side. Frame 0 introduces both subjects. Subsequent f
       "narration": "Before we see the browser connect to the server, let us anchor four facts about DNS that will make the next frame much clearer. Speed, caching, and security are the three pillars of how DNS operates in practice.",
       "accent_color": "#a5d8ff"
     }
-  ],
-  "suggested_followups": [
-    "What happens if the DNS server is down?",
-    "How does DNS caching speed things up?",
-    "What is the difference between DNS and DHCP?"
-  ],
-  "notes": [
-    "DNS translates domain names like google.com into IP addresses like 142.250.80.46",
-    "Every browser request starts with a DNS lookup — DNS acts as the internet's phone book",
-    "DNS resolvers cache results using TTL (Time To Live) — repeated visits skip the full lookup",
-    "The full DNS resolution chain goes: root servers → TLD servers → authoritative name servers",
-    "DNS lookup typically completes in under 20ms; the full page load under 500ms on a fast connection"
   ]
 }
 ```
