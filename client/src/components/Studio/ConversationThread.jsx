@@ -94,7 +94,7 @@ function TurnView({ turn, onPauseAsk, onRetryTurn, onSuggestionClick }) {
   const isDark = theme.palette.mode === 'dark'
 
   return (
-    <Box sx={{ mb: 4, '&:last-child': { mb: 0 } }}>
+    <Box data-turn-id={turn.tempId} sx={{ mb: 4, '&:last-child': { mb: 0 } }}>
       <ContentColumn>
         <UserBubble prompt={turn.prompt} />
 

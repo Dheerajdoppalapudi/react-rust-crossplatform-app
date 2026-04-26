@@ -11,6 +11,7 @@ import ConversationThread, { UserBubble } from '../components/Studio/Conversatio
 import PromptBar           from '../components/Studio/PromptBar'
 import LearningView        from '../components/Studio/LearningView/index'
 import UserNotesPanel      from '../components/Studio/UserNotesPanel/index'
+import ConversationMiniTree from '../components/Studio/ConversationMiniTree'
 
 import { api } from '../services/api'
 import { useToast } from '../contexts/ToastContext'
@@ -837,6 +838,16 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
           onRenderModeChange={setSelectedRenderMode}
         />
       </Box>
+
+      {showThread && (
+        <ConversationMiniTree
+          turns={turns}
+          onNavigate={(tempId) => {
+            document.querySelector(`[data-turn-id="${tempId}"]`)
+              ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+          }}
+        />
+      )}
 
     </Box>{/* end main column */}
 

@@ -4,6 +4,7 @@ import { Box, Typography, Tooltip, useTheme, CircularProgress } from '@mui/mater
 import MovieOutlinedIcon     from '@mui/icons-material/MovieOutlined'
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline'
 import AddIcon               from '@mui/icons-material/Add'
+import NotesOutlinedIcon     from '@mui/icons-material/NotesOutlined'
 import { useMediaUrl } from '../../../hooks/useMediaUrl'
 import { NODE_W, NODE_H } from './useFlowData'
 import { BRAND, PALETTE } from '../../../theme/tokens.js'
@@ -25,9 +26,10 @@ export default function SessionNode({ data }) {
   const [isOpen,      setIsOpen]      = useState(false)
   const [duration,    setDuration]    = useState(null)
 
+  const isTextTurn  = turn.framesData?.render_path === 'text' || turn.render_path === 'text'
   const frameCount  = turn.framesData?.captions?.length || turn.frame_count || 0
   const intentLabel = (turn.intent_type || '').replace(/_/g, ' ')
-  const isReady     = turn.videoPhase === 'ready'
+  const isReady     = !isTextTurn && turn.videoPhase === 'ready'
 
   const { videoUrl, getFrameUrl } = useMediaUrl(turn.id)
   const frameUrl = getFrameUrl(0)
@@ -226,7 +228,15 @@ export default function SessionNode({ data }) {
               onMouseLeave={() => setThumbHover(false)}
               sx={{ width: '100%', height: THUMB_H, bgcolor: isDark ? PALETTE.nearBlack : PALETTE.warmSand, overflow: 'hidden', position: 'relative' }}
             >
-              {turn.id && !imgError && frameUrl ? (
+              {isTextTurn ? (
+                /* Text-only turn — notes icon placeholder */
+                <Box sx={{
+                  width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
+                }}>
+                  <NotesOutlinedIcon sx={{ fontSize: 32, opacity: 0.18, color: theme.palette.text.secondary }} />
+                </Box>
+              ) : turn.id && !imgError && frameUrl ? (
                 <img
                   src={frameUrl}
                   alt="thumbnail"
@@ -250,7 +260,7 @@ export default function SessionNode({ data }) {
                 </Box>
               )}
 
-              {thumbHover && turn.id && !imgError && frameUrl && (
+              {!isTextTurn && thumbHover && turn.id && !imgError && frameUrl && (
                 <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'rgba(0,0,0,0.28)' }}>
                   <PlayCircleOutlineIcon sx={{ fontSize: 36, color: 'rgba(255,255,255,0.85)' }} />
                 </Box>
@@ -265,12 +275,14 @@ export default function SessionNode({ data }) {
                     <Typography sx={{ fontSize: 8, fontWeight: 600, lineHeight: 1, color: BRAND.accent, textTransform: 'capitalize' }}>{intentLabel}</Typography>
                   </Box>
                 )}
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, px: 0.75, py: 0.3, borderRadius: '20px', bgcolor: isReady ? 'rgba(34,197,94,0.18)' : 'rgba(251,146,60,0.18)', border: `1px solid ${isReady ? 'rgba(34,197,94,0.4)' : 'rgba(251,146,60,0.4)'}`, backdropFilter: 'blur(6px)' }}>
-                  <Box sx={{ width: 5, height: 5, borderRadius: '50%', bgcolor: isReady ? PALETTE.successGreen : PALETTE.warningOrange }} />
-                  <Typography sx={{ fontSize: 8, fontWeight: 700, lineHeight: 1, color: isReady ? PALETTE.successGreen : PALETTE.warningOrange }}>
-                    {isReady && duration ? duration : isReady ? 'READY' : 'GEN'}
-                  </Typography>
-                </Box>
+                {!isTextTurn && (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, px: 0.75, py: 0.3, borderRadius: '20px', bgcolor: isReady ? 'rgba(34,197,94,0.18)' : 'rgba(251,146,60,0.18)', border: `1px solid ${isReady ? 'rgba(34,197,94,0.4)' : 'rgba(251,146,60,0.4)'}`, backdropFilter: 'blur(6px)' }}>
+                    <Box sx={{ width: 5, height: 5, borderRadius: '50%', bgcolor: isReady ? PALETTE.successGreen : PALETTE.warningOrange }} />
+                    <Typography sx={{ fontSize: 8, fontWeight: 700, lineHeight: 1, color: isReady ? PALETTE.successGreen : PALETTE.warningOrange }}>
+                      {isReady && duration ? duration : isReady ? 'READY' : 'GEN'}
+                    </Typography>
+                  </Box>
+                )}
               </Box>
             </Box>
 
@@ -283,7 +295,7 @@ export default function SessionNode({ data }) {
                 {turn.prompt || 'Untitled'}
               </Typography>
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                {frameCount > 0 ? (
+                {!isTextTurn && frameCount > 0 ? (
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.4 }}>
                     {Array.from({ length: Math.min(frameCount, 6) }).map((_, i) => (
                       <Box key={i} sx={{ width: 4, height: 4, borderRadius: '50%', flexShrink: 0, bgcolor: primary, opacity: 0.5 }} />
