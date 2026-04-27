@@ -5,9 +5,9 @@ import ErrorBoundary from '../error/ErrorBoundary'
 import SessionView from './SessionView'
 import LoadingView from './LoadingView'
 import NotesPanel from './NotesPanel'
+import { isTextTurn } from './studioUtils'
 import { BRAND, PALETTE } from '../../theme/tokens.js'
 
-// ─── Centered content column — matches PromptBar max-width ────────────────────
 function ContentColumn({ children }) {
   return (
     <Box sx={{ width: '100%', maxWidth: 760, mx: 'auto', px: 3 }}>
@@ -16,8 +16,7 @@ function ContentColumn({ children }) {
   )
 }
 
-// ─── User prompt bubble ───────────────────────────────────────────────────────
-// Exported so Studio.jsx can reuse it for the bootstrap (first-turn) prompt display.
+// Exported so Studio.jsx can reuse it for the bootstrap prompt display.
 export function UserBubble({ prompt }) {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
@@ -38,22 +37,15 @@ export function UserBubble({ prompt }) {
   )
 }
 
-// ─── Video retry banner ───────────────────────────────────────────────────────
 function RetryBanner({ turn, onRetry }) {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
-  // M-9: Track whether a retry is in-flight so the button shows a loading state
-  // and cannot be double-clicked while the video stream is reconnecting.
   const [isRetrying, setIsRetrying] = useState(false)
 
   const handleRetryClick = async () => {
     if (isRetrying) return
     setIsRetrying(true)
-    try {
-      await onRetry(turn)
-    } finally {
-      setIsRetrying(false)
-    }
+    try { await onRetry(turn) } finally { setIsRetrying(false) }
   }
 
   return (
@@ -69,10 +61,7 @@ function RetryBanner({ turn, onRetry }) {
       <Button
         size="small"
         disabled={isRetrying}
-        startIcon={isRetrying
-          ? <CircularProgress size={12} color="inherit" />
-          : <RefreshIcon sx={{ fontSize: 14 }} />
-        }
+        startIcon={isRetrying ? <CircularProgress size={12} color="inherit" /> : <RefreshIcon sx={{ fontSize: 14 }} />}
         onClick={handleRetryClick}
         sx={{
           textTransform: 'none', fontSize: 12.5, fontWeight: 600,
@@ -88,8 +77,7 @@ function RetryBanner({ turn, onRetry }) {
   )
 }
 
-// ─── Single conversation turn ─────────────────────────────────────────────────
-function TurnView({ turn, onPauseAsk, onRetryTurn, onSuggestionClick }) {
+function TurnView({ turn, onPauseAsk, onRetryTurn }) {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
 
@@ -101,7 +89,6 @@ function TurnView({ turn, onPauseAsk, onRetryTurn, onSuggestionClick }) {
         {turn.isLoading ? (
           <LoadingView stage={turn.stage || 'planning'} compact textMode={turn.textMode} />
         ) : turn.videoPhase === 'error' && !turn.id ? (
-          /* Complete generation failure */
           <Box sx={{
             py: 2.5, px: 3, borderRadius: '12px',
             backgroundColor: isDark ? '#1a1a1a' : '#fff8f8',
@@ -112,70 +99,39 @@ function TurnView({ turn, onPauseAsk, onRetryTurn, onSuggestionClick }) {
             </Typography>
           </Box>
         ) : turn.id && turn.videoPhase === 'generating' ? (
-          <LoadingView
-            stage="video"
-            compact
-            framesData={{ sessionId: turn.id, framesData: turn.framesData }}
-          />
+          <LoadingView stage="video" compact framesData={{ sessionId: turn.id, framesData: turn.framesData }} />
         ) : turn.id && turn.videoPhase === 'error' ? (
-          /* Video generation failed — frames may still be present */
           <>
             {turn.framesData && (
-              <SessionView
-                session={turn}
-                videoPhase="error"
-                framesData={turn.framesData}
-                onPauseAsk={onPauseAsk}
-              />
+              <SessionView session={turn} videoPhase="error" framesData={turn.framesData} onPauseAsk={onPauseAsk} />
             )}
             <Box sx={{ mt: turn.framesData ? 1.5 : 0 }}>
               <RetryBanner turn={turn} onRetry={onRetryTurn} />
             </Box>
           </>
-        ) : turn.id && turn.framesData?.render_path === 'text' ? (
+        ) : turn.id && isTextTurn(turn) ? (
           <NotesPanel notes={turn.framesData?.notes} />
         ) : turn.id ? (
-          <SessionView
-            session={turn}
-            videoPhase={turn.videoPhase}
-            framesData={turn.framesData}
-            onPauseAsk={onPauseAsk}
-          />
+          <SessionView session={turn} videoPhase={turn.videoPhase} framesData={turn.framesData} onPauseAsk={onPauseAsk} />
         ) : null}
       </ContentColumn>
     </Box>
   )
 }
 
-// ─── Wrapped turn — isolated error boundary per turn ─────────────────────────
-function TurnWithBoundary({ turn, onPauseAsk, onRetryTurn, onSuggestionClick }) {
+function TurnWithBoundary({ turn, onPauseAsk, onRetryTurn }) {
   return (
-    <ErrorBoundary
-      level="component"
-      key={`${turn.tempId}-boundary`}
-    >
-      <TurnView
-        turn={turn}
-        onPauseAsk={onPauseAsk}
-        onRetryTurn={onRetryTurn}
-        onSuggestionClick={onSuggestionClick}
-      />
+    <ErrorBoundary level="component" key={`${turn.tempId}-boundary`}>
+      <TurnView turn={turn} onPauseAsk={onPauseAsk} onRetryTurn={onRetryTurn} />
     </ErrorBoundary>
   )
 }
 
-// ─── Full conversation thread ──────────────────────────────────────────────────
-export default function ConversationThread({ turns, onPauseAsk, onRetryTurn, onSuggestionClick }) {
+export default function ConversationThread({ turns, onPauseAsk, onRetryTurn, onSuggestionClick: _unused }) {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', pt: 1, pb: 1 }}>
       {turns.map((turn) => (
-        <TurnWithBoundary
-          key={turn.tempId}
-          turn={turn}
-          onPauseAsk={onPauseAsk}
-          onRetryTurn={onRetryTurn}
-          onSuggestionClick={onSuggestionClick}
-        />
+        <TurnWithBoundary key={turn.tempId} turn={turn} onPauseAsk={onPauseAsk} onRetryTurn={onRetryTurn} />
       ))}
     </Box>
   )

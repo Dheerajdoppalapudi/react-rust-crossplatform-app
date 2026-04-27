@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { Box, Tooltip, IconButton, Typography, Divider, useTheme } from '@mui/material'
 import NotesOutlinedIcon    from '@mui/icons-material/NotesOutlined'
 import EditNoteIcon         from '@mui/icons-material/EditNote'
@@ -16,13 +16,12 @@ import ConversationMiniTree from '../components/Studio/ConversationMiniTree'
 import { api } from '../services/api'
 import { useToast } from '../contexts/ToastContext'
 import { DEFAULT_MODEL, DEFAULT_RENDER_MODE, FOLLOWUP_SUGGESTIONS } from '../components/Studio/constants'
+import { createTempTurn, normalizeFramesData } from '../components/Studio/studioUtils'
 
-// ─── Studio ────────────────────────────────────────────────────────────────────
 export default function Studio({ activeConvId, activeConvTitle, activeConvStarred, onActiveConvIdChange, onConversationsRefresh, onRenameConv, onStarConv, onDeleteConv }) {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
   const toast  = useToast()
-  // ── Notes toggle — persisted across sessions ─────────────────────────────────
   const [notesEnabled, setNotesEnabled] = useState(
     () => localStorage.getItem('studio-notes-enabled') === 'true'
   )
@@ -32,7 +31,6 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
     return next
   })
 
-  // ── Video toggle — persisted across sessions ──────────────────────────────────
   const [videoEnabled, setVideoEnabled] = useState(
     () => localStorage.getItem('studio-video-enabled') !== 'false'
   )
@@ -42,11 +40,9 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
     return next
   })
 
-  // ── User notes panel ──────────────────────────────────────────────────────────
   const [userNotesOpen, setUserNotesOpen] = useState(false)
   const toggleUserNotes = () => setUserNotesOpen((prev) => !prev)
 
-  // Keyboard shortcut: Cmd/Ctrl+Shift+N
   useEffect(() => {
     const isMac = navigator.platform.toUpperCase().includes('MAC')
     const handleKey = (e) => {
@@ -59,7 +55,6 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
     return () => window.removeEventListener('keydown', handleKey)
   }, [])
 
-  // ── Prompt input ──────────────────────────────────────────────────────────────
   const [prompt, setPrompt]                       = useState('')
   const [selectedModel, setSelectedModel]         = useState(DEFAULT_MODEL)
   const [selectedRenderMode, setSelectedRenderMode] = useState(DEFAULT_RENDER_MODE)
@@ -67,42 +62,20 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
   const threadBottomRef    = useRef(null)
   const contentScrollRef   = useRef(null)
 
-  // ── Active conversation turns ─────────────────────────────────────────────────
   const [turns, setTurns] = useState([])
-
-  // True while the first turn of a brand-new conversation is being submitted
   const [isBootstrapping, setIsBootstrapping] = useState(false)
   const [bootstrapStage, setBootstrapStage]   = useState('planning')
   const [bootstrapPrompt, setBootstrapPrompt] = useState('')
   const [bootstrapFrames, setBootstrapFrames] = useState(null)
 
-  // ── View mode ─────────────────────────────────────────────────────────────────
-  const [viewMode, setViewMode] = useState('chat') // 'chat' | 'learn'
-
-  // ── Pause context ─────────────────────────────────────────────────────────────
+  const [viewMode, setViewMode] = useState('chat')
   const [pauseContext, setPauseContext] = useState(null)
 
-  // Track which convId we've already loaded to avoid duplicate loads
-  const loadedConvIdRef = useRef(null)
-
-  // CRIT-8: Monotonically-increasing ID stamped at the start of each handleGenerate call.
-  // Before applying any async result we check the current ID still matches, preventing
-  // stale mutations after the user navigates to a different conversation mid-generation.
-  const generationIdRef = useRef(0)
-
-  // CRIT-7: AbortController for the active imageGeneration HTTP request.
-  // Cancelled when the user navigates away or starts a new generation.
-  const generationAbortRef = useRef(null)
-
-  // CRIT-7: AbortControllers for active video SSE streams, keyed by tempId.
-  // Cancelled on conversation change and on unmount.
-  const videoAbortControllersRef = useRef(new Map())
-
-  // CRIT-7: AbortController for the active loadConversationById request set.
-  // Cancelled when a new conversation is selected before loading completes.
-  const loadAbortRef = useRef(null)
-
-  // ── Helpers ───────────────────────────────────────────────────────────────────
+  const loadedConvIdRef           = useRef(null)
+  const generationIdRef           = useRef(0)
+  const generationAbortRef        = useRef(null)
+  const videoAbortControllersRef  = useRef(new Map())
+  const loadAbortRef              = useRef(null)
 
   const scrollToTop = useCallback(() => {
     if (contentScrollRef.current) contentScrollRef.current.scrollTop = 0
@@ -119,8 +92,6 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
   }, [])
 
   const runVideoGenerationForTurn = useCallback(async (tempId, sessionId, onDone) => {
-    // CRIT-7: Create an AbortController so this stream can be cancelled on
-    // conversation change or component unmount.
     const controller = new AbortController()
     videoAbortControllersRef.current.set(tempId, controller)
 
@@ -133,7 +104,6 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
         }
       }, controller.signal)
     } catch (err) {
-      // AbortError = intentional cancel (conv switch / unmount), not an error to surface.
       if (err?.name !== 'AbortError') {
         setTurnVideoPhase(tempId, sessionId, 'error')
       }
@@ -143,19 +113,16 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
     }
   }, [setTurnVideoPhase])
 
-  // Retry video generation for a specific failed turn
   const handleRetryTurn = useCallback((turn) => {
     if (!turn.id) return
     setTurnVideoPhase(turn.tempId, turn.id, 'generating')
     runVideoGenerationForTurn(turn.tempId, turn.id)
   }, [setTurnVideoPhase, runVideoGenerationForTurn])
 
-  // Scroll to bottom when new turns are added
   useEffect(() => {
     threadBottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [turns.length])
 
-  // Auto-focus input when the empty view is shown
   useEffect(() => {
     const showEmpty = !isBootstrapping && turns.length === 0
     if (showEmpty) {
@@ -164,18 +131,15 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
     }
   }, [isBootstrapping, turns.length])
 
-  // ── Load conversation by id ───────────────────────────────────────────────────
   const loadConversationById = useCallback(async (convId) => {
     setTurns([])
     scrollToTop()
 
-    // CRIT-7: Cancel any previous in-progress load (HTTP requests + state guards).
     loadAbortRef.current?.abort()
     const loadController = new AbortController()
     loadAbortRef.current = loadController
     const { signal: loadSignal } = loadController
 
-    // Cancel any in-progress video streams before loading a new conversation.
     for (const controller of videoAbortControllersRef.current.values()) {
       controller.abort()
     }
@@ -207,21 +171,12 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
 
       setTurns(loadedTurns)
 
-      // HIGH-8: use Promise.allSettled so all frame meta fetches run concurrently
-      // and individual failures don't short-circuit the rest.
-      // CRIT-7: pass loadSignal so these requests are aborted on conv switch.
       await Promise.allSettled(
         loadedTurns.map(async (turn) => {
           const raw = await api.getFramesMeta(turn.id, loadSignal)
           if (loadSignal.aborted) return
           if (raw) {
-            const framesData = {
-              render_path:         raw.render_path,
-              images:              raw.images              || [],
-              captions:            raw.captions            || [],
-              suggested_followups: raw.suggested_followups || [],
-              notes:               raw.notes               || '',
-            }
+            const framesData = normalizeFramesData(raw)
             setTurns((prev) => prev.map((t) => t.id === turn.id ? { ...t, framesData } : t))
           }
         })
@@ -229,30 +184,21 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
 
       if (loadSignal.aborted) return
 
-      // Kick off video generation for any turns still in the generating state.
       for (const turn of loadedTurns) {
         if (!loadSignal.aborted && turn.videoPhase === 'generating' && turn.render_path !== 'text') {
           runVideoGenerationForTurn(turn.tempId, turn.id)
         }
       }
     } catch (err) {
-      // AbortError = intentional cancel from conv switch — not a user-facing error.
       if (err?.name !== 'AbortError' && !loadSignal.aborted) {
         toast.error('Failed to load the conversation. Please try again.')
       }
     }
   }, [runVideoGenerationForTurn, scrollToTop, toast])
 
-  // Stable ref to loadConversationById so the activeConvId effect below never
-  // stales — updating the ref on every render is intentional and cheaper than
-  // including loadConversationById in the effect dependency array.
   const loadConversationByIdRef = useRef(loadConversationById)
   loadConversationByIdRef.current = loadConversationById
 
-  // CRIT-7: Cancel all in-flight requests when unmounting.
-  // Also reset loadedConvIdRef so that if the component remounts (React Strict Mode
-  // double-invokes effects in dev, or genuine unmount/remount), the active conversation
-  // is re-loaded rather than silently skipped due to the ref still holding its old value.
   useEffect(() => {
     return () => {
       generationAbortRef.current?.abort()
@@ -264,17 +210,12 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
     }
   }, [])
 
-  // ── React to activeConvId prop changes ────────────────────────────────────────
   useEffect(() => {
-    // Always clear stale pause context when switching conversations
     setPauseContext(null)
-
-    // Always abort in-flight generation and conversation loads.
     generationAbortRef.current?.abort()
     loadAbortRef.current?.abort()
 
     if (activeConvId && activeConvId !== loadedConvIdRef.current) {
-      // User switched to a different conversation — abort in-flight video streams.
       for (const controller of videoAbortControllersRef.current.values()) {
         controller.abort()
       }
@@ -282,7 +223,6 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
       loadedConvIdRef.current = activeConvId
       loadConversationByIdRef.current(activeConvId)
     } else if (!activeConvId && loadedConvIdRef.current !== null) {
-      // User opened a new chat — abort in-flight video streams.
       for (const controller of videoAbortControllersRef.current.values()) {
         controller.abort()
       }
@@ -293,25 +233,17 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
       setIsBootstrapping(false)
       scrollToTop()
     }
-    // If activeConvId === loadedConvIdRef.current: the URL updated to reflect our
-    // own handleGenerate navigation (we set the ref before calling navigate).
-    // Do NOT abort video controllers — the SSE stream was just started.
   }, [activeConvId, scrollToTop])
 
-  // ── Submit handler ────────────────────────────────────────────────────────────
   const handleGenerate = useCallback(async () => {
     if (!prompt.trim() || isBootstrapping || turns.some((t) => t.isLoading)) return
 
     const submittedPrompt = prompt.trim()
     setPrompt('')
 
-    // CRIT-8: Stamp a unique generation ID so we can detect if the user has
-    // navigated away before this async operation completes. Any state mutation
-    // that runs after an await must check this ID still matches.
     const thisGenId = ++generationIdRef.current
     const isStale   = () => generationIdRef.current !== thisGenId
 
-    // CRIT-7: Cancel any previous in-flight generation, then create a new controller.
     generationAbortRef.current?.abort()
     const genController = new AbortController()
     generationAbortRef.current = genController
@@ -319,10 +251,6 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
     const tempId      = `temp_${Date.now()}`
     const isFirstTurn = !activeConvId
 
-    // Determine parent session before the temp turn is pushed into state.
-    // Pause follow-up: parent is the paused session.
-    // General follow-up: parent is the last completed turn in this conversation.
-    // First turn: no parent.
     const parentSessionId = isFirstTurn
       ? null
       : (pauseContext?.sessionId ?? turns.filter((t) => t.id).at(-1)?.id ?? null)
@@ -334,24 +262,15 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
       setTurns([])
       scrollToTop()
     } else {
-      setTurns((prev) => [...prev, {
+      setTurns((prev) => [...prev, createTempTurn({
         tempId,
-        id:               null,
         prompt:           submittedPrompt,
-        intent_type:      null,
-        render_path:      null,
-        frame_count:      null,
-        isLoading:        true,
-        stage:            'planning',
-        textMode:         !videoEnabled,
-        framesData:       null,
-        videoPhase:       videoEnabled ? 'generating' : 'disabled',
-        parentSessionId:  parentSessionId,
+        videoEnabled,
+        parentSessionId,
         parentFrameIndex: pauseContext?.frameIndex ?? null,
-      }])
+      })])
     }
 
-    // Skip stage-advance timers in text-only mode — only "Thinking" step is shown
     const t1  = (isFirstTurn && videoEnabled)  ? setTimeout(() => setBootstrapStage('generating'), 2500) : null
     const t2  = (isFirstTurn && videoEnabled)  ? setTimeout(() => setBootstrapStage('rendering'),  6000) : null
     const it1 = !isFirstTurn ? setTimeout(() =>
@@ -363,26 +282,16 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
     setPauseContext(null)
 
     try {
+      const renderModeId = selectedRenderMode?.id !== 'auto' ? selectedRenderMode.id : null
       const data = await api.imageGeneration(
         submittedPrompt, activeConvId, capturedPauseContext,
         notesEnabled, selectedModel.provider, selectedModel.model,
-        genController.signal,
-        selectedRenderMode?.id !== 'auto' ? selectedRenderMode.id : null,
-        parentSessionId,
-        !videoEnabled,
+        genController.signal, renderModeId, parentSessionId, !videoEnabled,
       )
 
-      // CRIT-8: If the user navigated away while we were awaiting the response,
-      // discard the result entirely — do not mutate state for a stale generation.
       if (isStale()) return
 
-      const framesData = {
-        render_path:         data.render_path,
-        images:              data.images              || [],
-        captions:            data.captions            || [],
-        suggested_followups: data.suggested_followups || [],
-        notes:               data.notes               || '',
-      }
+      const framesData = normalizeFramesData(data)
       const realTurn = {
         tempId,
         id:                  data.session_id,
@@ -473,25 +382,24 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
   }, [turns])
 
   const lastTurn = turns.filter((t) => t.intent_type).at(-1) ?? null
-  const activeConversationMeta = activeConvId ? {
+  const activeConversationMeta = useMemo(() => activeConvId ? {
     id:                  activeConvId,
     intent_type:         lastTurn?.intent_type  ?? null,
     suggested_followups: lastTurn?.framesData?.suggested_followups ?? [],
-  } : null
+  } : null, [activeConvId, lastTurn])
 
   const isAnyGenerating = isBootstrapping || turns.some((t) => t.isLoading)
   const showEmpty       = !isBootstrapping && turns.length === 0
   const showLoader      = isBootstrapping
   const showThread      = !isBootstrapping && turns.length > 0
 
-  // Follow-up suggestions: shown below the thread when idle and not in pause-to-ask mode
-  const followUpSuggestions = (() => {
+  const followUpSuggestions = useMemo(() => {
     const isFollowUp = showThread && !!activeConvId && !isAnyGenerating && !pauseContext
     if (!isFollowUp) return []
     return activeConversationMeta?.suggested_followups?.length
       ? activeConversationMeta.suggested_followups
       : (FOLLOWUP_SUGGESTIONS[activeConversationMeta?.intent_type] || FOLLOWUP_SUGGESTIONS.illustration)
-  })()
+  }, [showThread, activeConvId, isAnyGenerating, pauseContext, activeConversationMeta])
 
   const handleSuggestionClick = useCallback((s) => {
     setPrompt(s)
@@ -505,8 +413,6 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
     setTimeout(() => inputRef.current?.focus(), 120)
   }, [])
 
-  // Direct generation from the canvas "+" handle — stays in learn mode,
-  // creates a new child node immediately with loading state.
   const handleLearnGenerate = useCallback(async ({ question, sessionId }) => {
     if (!activeConvId || !question.trim()) return
 
@@ -520,21 +426,13 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
     const tempId           = `temp_${Date.now()}`
     const capturedPauseCtx = { sessionId, frameIndex: undefined, caption: undefined }
 
-    setTurns((prev) => [...prev, {
+    setTurns((prev) => [...prev, createTempTurn({
       tempId,
-      id:               null,
-      prompt:           question,
-      intent_type:      null,
-      render_path:      null,
-      frame_count:      null,
-      isLoading:        true,
-      stage:            'planning',
-      textMode:         !videoEnabled,
-      framesData:       null,
-      videoPhase:       videoEnabled ? 'generating' : 'disabled',
-      parentSessionId:  sessionId  ?? null,
+      prompt:          question,
+      videoEnabled,
+      parentSessionId: sessionId ?? null,
       parentFrameIndex: null,
-    }])
+    })])
 
     const it1 = videoEnabled ? setTimeout(() =>
       setTurns((p) => p.map((t) => t.tempId === tempId ? { ...t, stage: 'generating' } : t)), 2500) : null
@@ -542,24 +440,16 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
       setTurns((p) => p.map((t) => t.tempId === tempId ? { ...t, stage: 'rendering'  } : t)), 6000) : null
 
     try {
+      const renderModeId = selectedRenderMode?.id !== 'auto' ? selectedRenderMode.id : null
       const data = await api.imageGeneration(
         question, activeConvId, capturedPauseCtx,
         notesEnabled, selectedModel.provider, selectedModel.model,
-        genController.signal,
-        selectedRenderMode?.id !== 'auto' ? selectedRenderMode.id : null,
-        null,
-        !videoEnabled,
+        genController.signal, renderModeId, null, !videoEnabled,
       )
 
       if (isStale()) return
 
-      const framesData = {
-        render_path:         data.render_path,
-        images:              data.images              || [],
-        captions:            data.captions            || [],
-        suggested_followups: data.suggested_followups || [],
-        notes:               data.notes               || '',
-      }
+      const framesData = normalizeFramesData(data)
       const realTurn = {
         tempId,
         id:               data.session_id,
@@ -595,20 +485,24 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
   }, [activeConvId, notesEnabled, videoEnabled, selectedModel, selectedRenderMode,
       onConversationsRefresh, runVideoGenerationForTurn, toast])
 
-  // ── Learning view — full-screen focus mode ────────────────────────────────────
+  const handleExitLearnView    = useCallback(() => setViewMode('chat'), [])
+  const handleMiniTreeNavigate = useCallback((tempId) => {
+    document.querySelector(`[data-turn-id="${tempId}"]`)
+      ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [])
+
   if (viewMode === 'learn') {
     return (
       <LearningView
         turns={turns}
         conversationId={activeConvId}
-        onExit={() => setViewMode('chat')}
+        onExit={handleExitLearnView}
         onAskFromLearn={handleLearnAsk}
         onGenerateFromCanvas={handleLearnGenerate}
       />
     )
   }
 
-  // ── Render ────────────────────────────────────────────────────────────────────
   return (
     <Box sx={{
       height: '100%',
@@ -617,7 +511,6 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
       bgcolor: 'background.default',
     }}>
 
-    {/* Main column */}
     <Box sx={{
       flex: 1,
       display: 'flex', flexDirection: 'column',
@@ -626,7 +519,6 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
       minWidth: 0,
     }}>
 
-      {/* ── Floating controls — top right ──────────────────────────────────── */}
       <Box sx={{
         position: 'absolute', top: 12, right: 16, zIndex: 10,
         display: 'flex', alignItems: 'center', gap: 0.75,
@@ -637,7 +529,6 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
         px: 0.75, py: 0.5,
         boxShadow: isDark ? '0 4px 16px rgba(0,0,0,0.4)' : '0 4px 16px rgba(0,0,0,0.08)',
       }}>
-        {/* Chat / Learn toggle */}
         <Box sx={{
           display: 'flex',
           border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : '#e2e8f0'}`,
@@ -664,7 +555,6 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
           })}
         </Box>
 
-        {/* AI notes toggle */}
         <Tooltip title={notesEnabled ? 'AI Notes on' : 'AI Notes off'}>
           <IconButton
             size="small"
@@ -692,7 +582,6 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
           </IconButton>
         </Tooltip>
 
-        {/* Video generation toggle */}
         <Tooltip title={videoEnabled ? 'Video on' : 'Video off'}>
           <IconButton
             size="small"
@@ -722,7 +611,6 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
           </IconButton>
         </Tooltip>
 
-        {/* My Notes toggle */}
         <Tooltip title={`My Notes (${navigator.platform.toUpperCase().includes('MAC') ? '⇧⌘N' : 'Ctrl+Shift+N'})`}>
           <IconButton
             size="small"
@@ -751,10 +639,8 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
         </Tooltip>
       </Box>
 
-      {/* ── Body ─────────────────────────────────────────────────────────────── */}
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
 
-        {/* Scrollable content */}
         <Box
           ref={contentScrollRef}
           sx={{
@@ -764,7 +650,6 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
             '&::-webkit-scrollbar-thumb': { backgroundColor: theme.palette.divider, borderRadius: 2 },
           }}
         >
-          {/* Bootstrap loading state */}
           {showLoader && (
             <Box sx={{ width: '100%', maxWidth: 760, mx: 'auto', px: 3 }}>
               {bootstrapPrompt && (
@@ -820,7 +705,6 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
           )}
         </Box>
 
-        {/* Prompt bar */}
         <PromptBar
           prompt={prompt}
           onPromptChange={setPrompt}
@@ -840,18 +724,11 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
       </Box>
 
       {showThread && (
-        <ConversationMiniTree
-          turns={turns}
-          onNavigate={(tempId) => {
-            document.querySelector(`[data-turn-id="${tempId}"]`)
-              ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-          }}
-        />
+        <ConversationMiniTree turns={turns} onNavigate={handleMiniTreeNavigate} />
       )}
 
-    </Box>{/* end main column */}
+    </Box>
 
-    {/* User notes panel — right-side slide-in */}
     <UserNotesPanel
       conversationId={activeConvId}
       isOpen={userNotesOpen}

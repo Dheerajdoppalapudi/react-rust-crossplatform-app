@@ -3,6 +3,7 @@ import { Dialog, Box, Typography, LinearProgress, useTheme } from '@mui/material
 import MergeTypeIcon from '@mui/icons-material/MergeType'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked'
+import { pulse } from '../../../theme/animations'
 
 const STEPS = [
   { key: 'tree',    label: 'Reading session tree',       duration: 800  },
@@ -11,6 +12,8 @@ const STEPS = [
   { key: 'saving',  label: 'Saving merged video',         duration: 500  },
   { key: 'done',    label: 'Ready to play',               duration: 0    },
 ]
+
+const VISIBLE_STEPS = STEPS.filter((s) => s.key !== 'done')
 
 export default function MergeLoadingModal({ open, sessionCount = 0 }) {
   const theme  = useTheme()
@@ -66,7 +69,6 @@ export default function MergeLoadingModal({ open, sessionCount = 0 }) {
         }
       }}
     >
-      {/* Header */}
       <Box sx={{
         px: 3, pt: 3, pb: 2,
         display: 'flex', alignItems: 'center', gap: 1.5,
@@ -90,16 +92,14 @@ export default function MergeLoadingModal({ open, sessionCount = 0 }) {
         </Box>
       </Box>
 
-      {/* Timeline steps */}
       <Box sx={{ px: 3, py: 2.5, display: 'flex', flexDirection: 'column', gap: 0 }}>
-        {STEPS.filter((s) => s.key !== 'done').map((step, i) => {
+        {VISIBLE_STEPS.map((step, i) => {
           const isDone    = i < stepIndex
           const isActive  = i === stepIndex
           const isPending = i > stepIndex
 
           return (
             <Box key={step.key} sx={{ display: 'flex', gap: 2, alignItems: 'stretch' }}>
-              {/* Left: icon + connector line */}
               <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
                 <Box sx={{ mt: 0.25 }}>
                   {isDone ? (
@@ -113,19 +113,14 @@ export default function MergeLoadingModal({ open, sessionCount = 0 }) {
                       <Box sx={{
                         width: 7, height: 7, borderRadius: '50%',
                         bgcolor: theme.palette.primary.main,
-                        animation: 'pulse 1s ease-in-out infinite',
-                        '@keyframes pulse': {
-                          '0%, 100%': { opacity: 1 },
-                          '50%': { opacity: 0.3 },
-                        },
+                        animation: `${pulse} 1s ease-in-out infinite`,
                       }} />
                     </Box>
                   ) : (
                     <RadioButtonUncheckedIcon sx={{ fontSize: 18, color: isDark ? 'rgba(255,255,255,0.2)' : '#d1d5db' }} />
                   )}
                 </Box>
-                {/* Connector line */}
-                {i < STEPS.filter((s) => s.key !== 'done').length - 1 && (
+                {i < VISIBLE_STEPS.length - 1 && (
                   <Box sx={{
                     width: 2, flex: 1, minHeight: 20, my: 0.5,
                     bgcolor: isDone ? theme.palette.primary.main : isDark ? 'rgba(255,255,255,0.1)' : '#e5e7eb',
@@ -135,8 +130,7 @@ export default function MergeLoadingModal({ open, sessionCount = 0 }) {
                 )}
               </Box>
 
-              {/* Right: label + progress bar */}
-              <Box sx={{ pb: i < STEPS.filter((s) => s.key !== 'done').length - 1 ? 1.5 : 0, flex: 1 }}>
+              <Box sx={{ pb: i < VISIBLE_STEPS.length - 1 ? 1.5 : 0, flex: 1 }}>
                 <Typography sx={{
                   fontSize: 12.5, fontWeight: isActive ? 600 : 400,
                   color: isDone
@@ -166,7 +160,6 @@ export default function MergeLoadingModal({ open, sessionCount = 0 }) {
         })}
       </Box>
 
-      {/* Footer note */}
       <Box sx={{
         px: 3, pb: 2.5,
         borderTop: `1px solid ${isDark ? 'rgba(255,255,255,0.07)' : '#f0f0f0'}`,

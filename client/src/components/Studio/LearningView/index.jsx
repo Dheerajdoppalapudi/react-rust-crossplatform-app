@@ -11,27 +11,18 @@ import { getConversationMediaToken } from '../../../services/mediaToken'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
-/**
- * LearningView — full-screen focus canvas (position: fixed overlay).
- *
- * Props:
- *   turns          — flat turns array from Studio
- *   conversationId — id of the active conversation (for merging)
- *   onExit         — switch back to chat mode
- *   onAskFromLearn — ({ question, sessionId, frameIndex, caption }) → handled by Studio
- */
 export default function LearningView({ turns, conversationId, onExit, onAskFromLearn, onGenerateFromCanvas }) {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
 
-  const [selectedNode,  setSelectedNode]  = useState(null)
-  const [merging,       setMerging]       = useState(false)
-  const [mergeResult,   setMergeResult]   = useState(null)
-  const [mergeError,    setMergeError]    = useState(null)
-  const [mergedVideoUrl, setMergedVideoUrl] = useState(null)
+  const [selectedNode,    setSelectedNode]    = useState(null)
+  const [merging,         setMerging]         = useState(false)
+  const [mergeResult,     setMergeResult]     = useState(null)
+  const [showMergedModal, setShowMergedModal] = useState(false)
+  const [mergeError,      setMergeError]      = useState(null)
+  const [mergedVideoUrl,  setMergedVideoUrl]  = useState(null)
 
   const handleNodeClick = useCallback((node) => {
-    // Always use the freshest turn data from the turns array
     const fresh = turns.find((t) => t.id === node.id) || node
     setSelectedNode(fresh)
   }, [turns])
@@ -51,7 +42,7 @@ export default function LearningView({ turns, conversationId, onExit, onAskFromL
     try {
       const result = await api.mergeConversation(conversationId)
       setMergeResult(result)
-      // Fetch a short-lived media token so the merged video URL never carries the main JWT.
+      setShowMergedModal(true)
       const token = await getConversationMediaToken(conversationId)
       setMergedVideoUrl(`${API_BASE}/api/conversations/${conversationId}/merged_video?token=${token}`)
     } catch (e) {
@@ -61,6 +52,8 @@ export default function LearningView({ turns, conversationId, onExit, onAskFromL
     }
   }, [conversationId])
 
+  const readyCount = turns.filter((t) => t.id && t.videoPhase === 'ready').length
+
   return (
     <Box sx={{
       position:      'fixed',
@@ -69,7 +62,6 @@ export default function LearningView({ turns, conversationId, onExit, onAskFromL
       display:       'flex',
       flexDirection: 'column',
     }}>
-      {/* ── Floating toolbar (top-left) ────────────────────────────────────── */}
       <Box sx={{
         position: 'absolute', top: 16, left: 16, zIndex: 10,
         display: 'flex', alignItems: 'center', gap: 1,
@@ -108,7 +100,6 @@ export default function LearningView({ turns, conversationId, onExit, onAskFromL
         </Box>
       </Box>
 
-      {/* ── Hint pill (bottom-center) ──────────────────────────────────────── */}
       <Box sx={{
         position:       'absolute', bottom: 20, left: '50%',
         transform:      'translateX(-50%)', zIndex: 10,
@@ -124,7 +115,6 @@ export default function LearningView({ turns, conversationId, onExit, onAskFromL
         </Typography>
       </Box>
 
-      {/* ── Merge button (top-right) ────────────────────────────────────────── */}
       <Box sx={{ position: 'absolute', top: 16, right: 16, zIndex: 10, display: 'flex', alignItems: 'center', gap: 1 }}>
         {mergeError && (
           <Typography sx={{ fontSize: 11, color: '#f87171', bgcolor: 'rgba(239,68,68,0.12)', px: 1.5, py: 0.5, borderRadius: '6px', border: '1px solid rgba(239,68,68,0.3)' }}>
@@ -132,7 +122,7 @@ export default function LearningView({ turns, conversationId, onExit, onAskFromL
           </Typography>
         )}
         <Button
-          onClick={mergeResult ? () => setMergeResult(mergeResult) : handleMerge}
+          onClick={mergeResult ? () => setShowMergedModal(true) : handleMerge}
           disabled={merging}
           size="small"
           variant="contained"
@@ -148,10 +138,8 @@ export default function LearningView({ turns, conversationId, onExit, onAskFromL
         </Button>
       </Box>
 
-      {/* ── Canvas ─────────────────────────────────────────────────────────── */}
       <Canvas turns={turns} onNodeClick={handleNodeClick} onAsk={handleCanvasAsk} />
 
-      {/* ── Node detail modal ──────────────────────────────────────────────── */}
       {selectedNode && (
         <NodeModal
           node={selectedNode}
@@ -160,14 +148,12 @@ export default function LearningView({ turns, conversationId, onExit, onAskFromL
         />
       )}
 
-      {/* ── Merge loading modal ─────────────────────────────────────────────── */}
-      <MergeLoadingModal open={merging} sessionCount={turns.filter((t) => t.id && t.videoPhase === 'ready').length} />
+      <MergeLoadingModal open={merging} sessionCount={readyCount} />
 
-      {/* ── Merged video modal ──────────────────────────────────────────────── */}
       {mergeResult && (
         <MergedVideoModal
-          open={true}
-          onClose={() => setMergeResult(null)}
+          open={showMergedModal}
+          onClose={() => setShowMergedModal(false)}
           mergedVideoUrl={mergedVideoUrl}
           sessions={mergeResult.sessions}
         />

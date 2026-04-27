@@ -10,16 +10,8 @@ import QuestionAnswerOutlinedIcon from '@mui/icons-material/QuestionAnswerOutlin
 import { useMediaUrl } from '../../../hooks/useMediaUrl'
 import VideoPanel from '../VideoPanel'
 import { api } from '../../../services/api'
+import { parseNotes, formatIntentType } from '../studioUtils'
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
-function parseNotes(raw) {
-  return (raw || '')
-    .split('\n')
-    .map((l) => l.replace(/^[-•*]\s*/, '').trim())
-    .filter(Boolean)
-}
-
-// ── Frame thumbnail strip ──────────────────────────────────────────────────────
 function FrameStrip({ sessionId, captions, activeFrame, onSelect, isDark, theme }) {
   const { getFrameUrl } = useMediaUrl(sessionId)
   return (
@@ -32,7 +24,6 @@ function FrameStrip({ sessionId, captions, activeFrame, onSelect, isDark, theme 
         Slides · {captions.length}
       </Typography>
 
-      {/* Thumbnail row */}
       <Box sx={{
         display: 'flex', gap: 1, overflowX: 'auto', pb: 1,
         '&::-webkit-scrollbar': { height: 3 },
@@ -68,7 +59,6 @@ function FrameStrip({ sessionId, captions, activeFrame, onSelect, isDark, theme 
         ))}
       </Box>
 
-      {/* Selected caption */}
       {captions[activeFrame] && (
         <Box sx={{
           mt: 1, px: 1.5, py: 1,
@@ -88,7 +78,6 @@ function FrameStrip({ sessionId, captions, activeFrame, onSelect, isDark, theme 
   )
 }
 
-// ── Video generating placeholder (used inside modal only) ──────────────────────
 function VideoGeneratingPlaceholder({ isDark, theme }) {
   return (
     <Box sx={{
@@ -107,7 +96,6 @@ function VideoGeneratingPlaceholder({ isDark, theme }) {
   )
 }
 
-// ── Main modal ─────────────────────────────────────────────────────────────────
 export default function NodeModal({ node, onClose, onAsk }) {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
@@ -117,7 +105,6 @@ export default function NodeModal({ node, onClose, onAsk }) {
   const [activeFrame, setActiveFrame] = useState(0)
   const [question,    setQuestion]    = useState('')
 
-  // Load/sync framesData when node changes
   useEffect(() => {
     if (!node) return
     setActiveFrame(0)
@@ -147,8 +134,10 @@ export default function NodeModal({ node, onClose, onAsk }) {
   const noteLines  = parseNotes(framesData?.notes)
   const hasCaption = captions.length > 0
 
+  const hasQuestion = Boolean(question.trim())
+
   const handleAsk = () => {
-    if (!question.trim()) return
+    if (!hasQuestion) return
     onAsk({
       question:    question.trim(),
       sessionId:   node.id,
@@ -179,7 +168,6 @@ export default function NodeModal({ node, onClose, onAsk }) {
         },
       }}
     >
-      {/* ── Header ──────────────────────────────────────────────────────────── */}
       <Box sx={{
         px: 3, py: 1.75, flexShrink: 0,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -195,7 +183,7 @@ export default function NodeModal({ node, onClose, onAsk }) {
               color: theme.palette.primary.main,
               border: `1px solid ${isDark ? 'rgba(79,110,255,0.3)' : '#c7d2fe'}`,
             }}>
-              {node.intent_type.replace(/_/g, ' ')}
+              {formatIntentType(node.intent_type)}
             </Typography>
           )}
           <Typography sx={{
@@ -212,10 +200,8 @@ export default function NodeModal({ node, onClose, onAsk }) {
         </IconButton>
       </Box>
 
-      {/* ── Two-column body ──────────────────────────────────────────────────── */}
       <Box sx={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
 
-        {/* ── Left: Video + Frame strip ──────────────────────────────────────── */}
         <Box sx={{
           flex: '0 0 60%',
           display: 'flex', flexDirection: 'column',
@@ -224,14 +210,12 @@ export default function NodeModal({ node, onClose, onAsk }) {
           '&::-webkit-scrollbar': { width: 4 },
           '&::-webkit-scrollbar-thumb': { backgroundColor: theme.palette.divider, borderRadius: 2 },
         }}>
-          {/* Video */}
           {node.videoPhase === 'generating' ? (
             <VideoGeneratingPlaceholder isDark={isDark} theme={theme} />
           ) : (
             <VideoPanel sessionId={node.id} videoPhase={node.videoPhase} onPauseAsk={null} />
           )}
 
-          {/* Frame strip */}
           {loadingMeta && !captions.length && (
             <Box sx={{ display: 'flex', justifyContent: 'center', pt: 3 }}>
               <CircularProgress size={20} />
@@ -249,10 +233,8 @@ export default function NodeModal({ node, onClose, onAsk }) {
           )}
         </Box>
 
-        {/* ── Right: Notes + Ask ────────────────────────────────────────────── */}
         <Box sx={{ flex: '0 0 40%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
 
-          {/* Notes (scrollable) */}
           <Box sx={{
             flex: 1, overflowY: 'auto', p: 2.5,
             '&::-webkit-scrollbar': { width: 4 },
@@ -299,7 +281,6 @@ export default function NodeModal({ node, onClose, onAsk }) {
             )}
           </Box>
 
-          {/* ── Ask follow-up ──────────────────────────────────────────────── */}
           <Box sx={{
             flexShrink: 0, p: 2.5,
             borderTop: `1px solid ${theme.palette.divider}`,
@@ -320,7 +301,6 @@ export default function NodeModal({ node, onClose, onAsk }) {
               <Chip
                 label={`Context: Slide ${activeFrame + 1}`}
                 size="small"
-                onClick={() => {}}
                 sx={{
                   mb: 1.25, fontSize: 10.5, height: 24, cursor: 'default',
                   bgcolor: isDark ? 'rgba(79,110,255,0.1)' : '#f0f4ff',
@@ -353,13 +333,13 @@ export default function NodeModal({ node, onClose, onAsk }) {
                 <span>
                   <IconButton
                     onClick={handleAsk}
-                    disabled={!question.trim()}
+                    disabled={!hasQuestion}
                     size="small"
                     sx={{
                       width: 38, height: 38, flexShrink: 0,
-                      bgcolor: question.trim() ? theme.palette.primary.main : 'transparent',
-                      color: question.trim() ? '#fff' : theme.palette.text.disabled,
-                      border: `1.5px solid ${question.trim() ? theme.palette.primary.main : theme.palette.divider}`,
+                      bgcolor: hasQuestion ? theme.palette.primary.main : 'transparent',
+                      color: hasQuestion ? '#fff' : theme.palette.text.disabled,
+                      border: `1.5px solid ${hasQuestion ? theme.palette.primary.main : theme.palette.divider}`,
                       borderRadius: '10px',
                       transition: 'all 0.15s',
                       '&:hover': { bgcolor: theme.palette.primary.dark, color: '#fff' },

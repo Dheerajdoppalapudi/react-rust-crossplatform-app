@@ -13,7 +13,25 @@ import { getFrameType }            from './constants'
 import { useMediaUrl }             from '../../hooks/useMediaUrl'
 import { BRAND, PALETTE }          from '../../theme/tokens.js'
 
-// ─── Frame strip with keyboard navigation and scroll-fade indicators ──────────
+function NavButton({ onClick, disabled, children }) {
+  return (
+    <IconButton
+      onClick={onClick}
+      disabled={disabled}
+      size="small"
+      sx={{
+        color: '#fff',
+        bgcolor: 'rgba(0,0,0,0.45)',
+        backdropFilter: 'blur(4px)',
+        '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' },
+        '&.Mui-disabled': { opacity: 0.25 },
+      }}
+    >
+      {children}
+    </IconButton>
+  )
+}
+
 function FrameStrip({ sessionId, captions, images, activeFrame, onFrameChange, onExpandFrame }) {
   const theme       = useTheme()
   const isDark      = theme.palette.mode === 'dark'
@@ -58,7 +76,6 @@ function FrameStrip({ sessionId, captions, images, activeFrame, onFrameChange, o
 
   return (
     <Box sx={{ position: 'relative' }}>
-      {/* Left fade indicator */}
       {canScrollLeft && (
         <Box sx={{
           position: 'absolute', left: 0, top: 0, bottom: 8,
@@ -67,7 +84,6 @@ function FrameStrip({ sessionId, captions, images, activeFrame, onFrameChange, o
         }} />
       )}
 
-      {/* Scrollable strip */}
       <Box
         ref={stripRef}
         role="listbox"
@@ -99,7 +115,6 @@ function FrameStrip({ sessionId, captions, images, activeFrame, onFrameChange, o
         ))}
       </Box>
 
-      {/* Right fade indicator */}
       {canScrollRight && (
         <Box sx={{
           position: 'absolute', right: 0, top: 0, bottom: 8,
@@ -111,7 +126,6 @@ function FrameStrip({ sessionId, captions, images, activeFrame, onFrameChange, o
   )
 }
 
-// ─── Expanded slide dialog ────────────────────────────────────────────────────
 function SlideDialog({ open, frameIndex, captions, images, sessionId, onClose, onFrameChange, onAsk }) {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
@@ -124,7 +138,6 @@ function SlideDialog({ open, frameIndex, captions, images, sessionId, onClose, o
   const goPrev = () => onFrameChange((f) => Math.max(f - 1, 0))
   const goNext = () => onFrameChange((f) => Math.min(f + 1, total - 1))
 
-  // Keyboard navigation inside dialog
   useEffect(() => {
     if (!open) return
     const handler = (e) => {
@@ -134,23 +147,6 @@ function SlideDialog({ open, frameIndex, captions, images, sessionId, onClose, o
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [open, frameIndex, total]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const navBtn = (onClick, disabled, children) => (
-    <IconButton
-      onClick={onClick}
-      disabled={disabled}
-      size="small"
-      sx={{
-        color: '#fff',
-        bgcolor: 'rgba(0,0,0,0.45)',
-        backdropFilter: 'blur(4px)',
-        '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' },
-        '&.Mui-disabled': { opacity: 0.25 },
-      }}
-    >
-      {children}
-    </IconButton>
-  )
 
   return (
     <Dialog
@@ -170,7 +166,6 @@ function SlideDialog({ open, frameIndex, captions, images, sessionId, onClose, o
     >
       <DialogContent sx={{ p: 0, position: 'relative' }}>
 
-        {/* Close button */}
         <IconButton
           onClick={onClose}
           size="small"
@@ -184,7 +179,6 @@ function SlideDialog({ open, frameIndex, captions, images, sessionId, onClose, o
           <CloseIcon sx={{ fontSize: 16 }} />
         </IconButton>
 
-        {/* Slide counter */}
         <Box sx={{
           position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)',
           zIndex: 10, px: 1.5, py: 0.4, borderRadius: '20px',
@@ -195,7 +189,6 @@ function SlideDialog({ open, frameIndex, captions, images, sessionId, onClose, o
           </Typography>
         </Box>
 
-        {/* Image area with prev/next */}
         <Box sx={{
           position: 'relative', bgcolor: '#000',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -217,20 +210,22 @@ function SlideDialog({ open, frameIndex, captions, images, sessionId, onClose, o
             </Box>
           )}
 
-          {/* Prev / Next overlays */}
           {frameIndex > 0 && (
             <Box sx={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }}>
-              {navBtn(goPrev, frameIndex === 0, <ArrowBackIosNewIcon sx={{ fontSize: 16 }} />)}
+              <NavButton onClick={goPrev} disabled={frameIndex === 0}>
+                <ArrowBackIosNewIcon sx={{ fontSize: 16 }} />
+              </NavButton>
             </Box>
           )}
           {frameIndex < total - 1 && (
             <Box sx={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)' }}>
-              {navBtn(goNext, frameIndex === total - 1, <ArrowForwardIosIcon sx={{ fontSize: 16 }} />)}
+              <NavButton onClick={goNext} disabled={frameIndex === total - 1}>
+                <ArrowForwardIosIcon sx={{ fontSize: 16 }} />
+              </NavButton>
             </Box>
           )}
         </Box>
 
-        {/* Caption + ask chip */}
         <Box sx={{
           px: 3, py: 2,
           display: 'flex', alignItems: 'flex-start', gap: 2,
@@ -267,14 +262,6 @@ function SlideDialog({ open, frameIndex, captions, images, sessionId, onClose, o
   )
 }
 
-// ─── SessionView ──────────────────────────────────────────────────────────────
-/**
- * Props:
- *   session    — turn object (must include id and prompt)
- *   videoPhase — 'ready' | 'generating' | 'error'
- *   framesData — { images, captions, notes, ... } | null
- *   onPauseAsk — callback
- */
 export default function SessionView({ session, videoPhase, framesData, onPauseAsk }) {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
@@ -300,7 +287,6 @@ export default function SessionView({ session, videoPhase, framesData, onPauseAs
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
 
-      {/* ── Video ─────────────────────────────────────────────────────────── */}
       <VideoPanel
         sessionId={session.id}
         videoPhase={videoPhase}
@@ -311,7 +297,6 @@ export default function SessionView({ session, videoPhase, framesData, onPauseAs
         onFrameSync={setActiveFrame}
       />
 
-      {/* ── Frame strip ───────────────────────────────────────────────────── */}
       {captions.length > 0 && (
         <Box sx={{ pt: 2 }}>
           <Typography sx={{
@@ -330,7 +315,6 @@ export default function SessionView({ session, videoPhase, framesData, onPauseAs
             onExpandFrame={setExpandedFrame}
           />
 
-          {/* Active frame caption + ask chip */}
           {captions[activeFrame] && (
             <Box sx={{
               display: 'flex', alignItems: 'center', gap: 2,
@@ -365,10 +349,8 @@ export default function SessionView({ session, videoPhase, framesData, onPauseAs
         </Box>
       )}
 
-      {/* ── Notes ─────────────────────────────────────────────────────────── */}
       {notes && <NotesPanel notes={notes} />}
 
-      {/* ── Expanded slide dialog ─────────────────────────────────────────── */}
       {expandedFrame !== null && captions.length > 0 && (
         <SlideDialog
           open={expandedFrame !== null}

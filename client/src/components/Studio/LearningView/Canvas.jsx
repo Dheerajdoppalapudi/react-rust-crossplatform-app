@@ -25,9 +25,8 @@ export default function Canvas({ turns, onNodeClick, onAsk }) {
   const [nodes, setNodes, onNodesChange] = useNodesState(layoutNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
 
-  // Sync when layout changes — preserve dragged positions for existing nodes,
-  // use dagre positions for new nodes, refresh data (framesData, videoPhase) always.
-  // Ghost nodes/edges (ask_ghost_ / ask_edge_ prefix) are preserved across syncs.
+  // Sync node positions and data when layout changes.
+  // Ghost nodes (ask_ghost_ prefix) are preserved across syncs.
   useEffect(() => {
     setNodes((prev) => {
       const prevById   = Object.fromEntries(prev.map((n) => [n.id, n]))
@@ -36,14 +35,17 @@ export default function Canvas({ turns, onNodeClick, onAsk }) {
         ...layoutNodes.map((ln) => {
           const existing = prevById[ln.id]
           return existing
-            ? { ...existing, data: ln.data }   // keep position, refresh data
-            : ln                               // new node — use dagre position
+            ? { ...existing, data: ln.data }  // keep position, refresh data
+            : ln                              // new node — use dagre position
         }),
-        ...ghostNodes,                         // keep any open ask-input nodes
+        ...ghostNodes,
       ]
     })
+  }, [layoutNodes, setNodes])
 
-    // Apply theme colours to edges, preserving ghost edges
+  // Apply theme colours to edges separately so a theme change doesn't re-sync positions.
+  // Ghost edges (ask_edge_ prefix) are preserved.
+  useEffect(() => {
     setEdges((prev) => {
       const ghostEdges = prev.filter((e) => e.id.startsWith('ask_edge_'))
       return [
@@ -65,11 +67,11 @@ export default function Canvas({ turns, onNodeClick, onAsk }) {
         ...ghostEdges,
       ]
     })
-  }, [layoutNodes, layoutEdges, primary])   // eslint-disable-line react-hooks/exhaustive-deps
+  }, [layoutEdges, primary, setEdges])
 
   const handleNodeClick = useCallback((_, rfNode) => {
-    if (rfNode.type === 'askNode') return          // ghost input node — don't open modal
-    if (rfNode.data?.turn?.isLoading) return       // still generating — nothing to show
+    if (rfNode.type === 'askNode') return
+    if (rfNode.data?.turn?.isLoading) return
     const turn = turns.find((t) => t.id === rfNode.id) || rfNode.data.turn
     onNodeClick?.(turn)
   }, [turns, onNodeClick])
@@ -77,12 +79,10 @@ export default function Canvas({ turns, onNodeClick, onAsk }) {
   return (
     <Box sx={{
       flex: 1,
-      // Style RF's built-in controls to match the app theme
       '& .react-flow__controls': {
         boxShadow: 'none',
         border: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.borderWarm}`,
-        borderRadius: '10px',
-        overflow: 'hidden',
+        borderRadius: '10px', overflow: 'hidden',
         bgcolor: isDark ? PALETTE.darkSurface : PALETTE.ivory,
       },
       '& .react-flow__controls-button': {
@@ -114,12 +114,8 @@ export default function Canvas({ turns, onNodeClick, onAsk }) {
         proOptions={{ hideAttribution: true }}
         style={{ background: isDark ? PALETTE.nearBlack : PALETTE.parchment }}
       >
-        <Background
-          variant={BackgroundVariant.Dots}
-          gap={22}
-          size={1}
-          color={isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.07)'}
-        />
+        <Background variant={BackgroundVariant.Dots} gap={22} size={1}
+          color={isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.07)'} />
         <Controls />
         <MiniMap
           nodeColor={isDark ? PALETTE.dividerDark : PALETTE.borderWarm}

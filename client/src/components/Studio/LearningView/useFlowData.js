@@ -52,5 +52,5 @@ export function useFlowData(turns, onAsk) {
       }))
 
     return { nodes: layoutWithDagre(nodes, edges), edges }
-  }, [turns, onAsk])
+  }, [turns])
 }

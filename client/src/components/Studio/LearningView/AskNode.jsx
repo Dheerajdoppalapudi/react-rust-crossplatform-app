@@ -12,8 +12,10 @@ export default function AskNode({ data }) {
   const primary = theme.palette.primary.main
   const [question, setQuestion] = useState('')
 
+  const isValid = Boolean(question.trim())
+
   const handleSubmit = () => {
-    if (!question.trim()) return
+    if (!isValid) return
     data.onSubmit?.(question.trim())
   }
 
@@ -31,7 +33,6 @@ export default function AskNode({ data }) {
           ? '0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04)'
           : '0 8px 32px rgba(0,0,0,0.1), 0 0 0 1px rgba(0,0,0,0.04)',
       }}>
-        {/* Accent strip */}
         <Box sx={{ height: 2, background: `linear-gradient(90deg, transparent, ${primary}77, transparent)` }} />
 
         <Box sx={{ p: 1.75 }}>
@@ -72,13 +73,13 @@ export default function AskNode({ data }) {
               <span>
                 <IconButton
                   onClick={handleSubmit}
-                  disabled={!question.trim()}
+                  disabled={!isValid}
                   size="small"
                   sx={{
                     width: 30, height: 30,
-                    bgcolor: question.trim() ? primary : 'transparent',
-                    color: question.trim() ? '#fff' : (isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)'),
-                    border: `1.5px solid ${question.trim() ? primary : (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)')}`,
+                    bgcolor: isValid ? primary : 'transparent',
+                    color: isValid ? '#fff' : (isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)'),
+                    border: `1.5px solid ${isValid ? primary : (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)')}`,
                     borderRadius: '8px',
                     transition: 'all 0.15s',
                     '&:hover': { bgcolor: theme.palette.primary.dark, color: '#fff', borderColor: theme.palette.primary.dark },

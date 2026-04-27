@@ -45,10 +45,9 @@ export default function PromptBar({
 
   const [menuAnchor,       setMenuAnchor]       = useState(null)
   const [renderMenuAnchor, setRenderMenuAnchor] = useState(null)
-  const menuOpen       = Boolean(menuAnchor)
-  const renderMenuOpen = Boolean(renderMenuAnchor)
 
-  const isFollowUp = !!activeConversation && !isGenerating
+  const isFollowUp    = !!activeConversation && !isGenerating
+  const isCustomRender = selectedRenderMode?.id !== 'auto'
   const canSend    = prompt.trim() && !isGenerating
 
   const promptBorder = isDark ? PALETTE.dividerDark : PALETTE.borderCream
@@ -57,7 +56,6 @@ export default function PromptBar({
   return (
     <Box sx={{ flexShrink: 0 }}>
 
-      {/* Pause context indicator */}
       {pauseContext && (
         <Box sx={{ px: 3, pt: 1.5, pb: 0 }}>
           <Box sx={{
@@ -89,10 +87,8 @@ export default function PromptBar({
         </Box>
       )}
 
-      {/* Input area */}
       <Box sx={{ px: 3, pt: 1, pb: 2 }}>
         <Box sx={{ maxWidth: 760, mx: 'auto' }}>
-          {/* Card */}
           <Box sx={{
             border: `1.5px solid ${promptBorder}`,
             borderRadius: '14px',
@@ -109,7 +105,6 @@ export default function PromptBar({
             },
             transition: 'border-color 0.15s, box-shadow 0.15s',
           }}>
-            {/* Text row */}
             <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, px: 2, pt: 1.25, pb: 0.25 }}>
               {isFollowUp && (
                 <Tooltip title="Start a new conversation">
@@ -154,12 +149,10 @@ export default function PromptBar({
               />
             </Box>
 
-            {/* Toolbar row */}
             <Box sx={{
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
               px: 1.5, pb: 1.25, pt: 0.25,
             }}>
-              {/* Model selector */}
               <Box sx={{ display: 'flex', alignItems: 'center' }}>
                 <Box
                   onClick={(e) => setMenuAnchor(e.currentTarget)}
@@ -183,7 +176,7 @@ export default function PromptBar({
 
                 <Menu
                   anchorEl={menuAnchor}
-                  open={menuOpen}
+                  open={Boolean(menuAnchor)}
                   onClose={() => setMenuAnchor(null)}
                   anchorOrigin={{ vertical: 'top', horizontal: 'left' }}
                   transformOrigin={{ vertical: 'bottom', horizontal: 'left' }}
@@ -233,7 +226,6 @@ export default function PromptBar({
                 </Menu>
               </Box>
 
-              {/* Render mode selector */}
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, ml: 'auto', mr: 1 }}>
                 <Box
                   onClick={(e) => setRenderMenuAnchor(e.currentTarget)}
@@ -241,22 +233,22 @@ export default function PromptBar({
                     display: 'flex', alignItems: 'center', gap: 0.5,
                     px: 1, py: 0.4, borderRadius: '7px', cursor: 'pointer',
                     userSelect: 'none',
-                    backgroundColor: selectedRenderMode?.id !== 'auto'
+                    backgroundColor: isCustomRender
                       ? (isDark
                           ? `${selectedRenderMode?.color}22`
                           : `${selectedRenderMode?.bg}`)
                       : 'transparent',
-                    color: selectedRenderMode?.id !== 'auto'
+                    color: isCustomRender
                       ? selectedRenderMode?.color
                       : theme.palette.text.secondary,
-                    border: selectedRenderMode?.id !== 'auto'
+                    border: isCustomRender
                       ? `1px solid ${selectedRenderMode?.color}44`
                       : '1px solid transparent',
                     '&:hover': {
-                      bgcolor: selectedRenderMode?.id !== 'auto'
+                      bgcolor: isCustomRender
                         ? (isDark ? `${selectedRenderMode?.color}33` : `${selectedRenderMode?.bg}`)
                         : (isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)'),
-                      color: selectedRenderMode?.id !== 'auto'
+                      color: isCustomRender
                         ? selectedRenderMode?.color
                         : theme.palette.text.primary,
                     },
@@ -265,7 +257,7 @@ export default function PromptBar({
                 >
                   <Box sx={{
                     display: 'flex', alignItems: 'center', flexShrink: 0,
-                    color: selectedRenderMode?.id !== 'auto' ? selectedRenderMode?.color : theme.palette.text.secondary,
+                    color: isCustomRender ? selectedRenderMode?.color : theme.palette.text.secondary,
                   }}>
                     {RENDER_MODE_ICONS[selectedRenderMode?.id]}
                   </Box>
@@ -277,7 +269,7 @@ export default function PromptBar({
 
                 <Menu
                   anchorEl={renderMenuAnchor}
-                  open={renderMenuOpen}
+                  open={Boolean(renderMenuAnchor)}
                   onClose={() => setRenderMenuAnchor(null)}
                   anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
                   transformOrigin={{ vertical: 'bottom', horizontal: 'right' }}
@@ -323,7 +315,6 @@ export default function PromptBar({
                 </Menu>
               </Box>
 
-              {/* Send button — tooltip explains disabled state */}
               <Tooltip title={isGenerating ? 'Generating…' : !prompt.trim() ? 'Type something to generate' : 'Generate (Enter)'}>
                 <span>
                   <IconButton

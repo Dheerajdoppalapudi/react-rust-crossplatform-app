@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Dialog, Box, Typography, IconButton, Divider, useTheme, LinearProgress } from '@mui/material'
 import CloseIcon    from '@mui/icons-material/Close'
 import MergeTypeIcon from '@mui/icons-material/MergeType'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
 import { getSessionMediaToken } from '../../../services/mediaToken'
+import { blink } from '../../../theme/animations'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
@@ -65,11 +66,10 @@ export default function MergedVideoModal({ open, onClose, mergedVideoUrl, sessio
     return () => { cancelled = true }
   }, [sessions])
 
-  // Compute cumulative start times  e.g. [0, 42, 90, ...]
-  const cumulative = durations.reduce((acc, d, i) => {
+  const cumulative = useMemo(() => durations.reduce((acc, d, i) => {
     acc.push(i === 0 ? 0 : acc[i - 1] + (durations[i - 1] || 0))
     return acc
-  }, [])
+  }, []), [durations])
 
   // Track video playback time
   const handleTimeUpdate = () => {
@@ -115,7 +115,6 @@ export default function MergedVideoModal({ open, onClose, mergedVideoUrl, sessio
         }
       }}
     >
-      {/* Header */}
       <Box sx={{
         px: 3, py: 1.5, flexShrink: 0,
         display: 'flex', alignItems: 'center', gap: 1.5,
@@ -131,10 +130,8 @@ export default function MergedVideoModal({ open, onClose, mergedVideoUrl, sessio
         </IconButton>
       </Box>
 
-      {/* Body */}
       <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
 
-        {/* ── Left: video player ──────────────────────────────────────────────── */}
         <Box sx={{
           width: '65%', flexShrink: 0,
           display: 'flex', flexDirection: 'column',
@@ -152,7 +149,6 @@ export default function MergedVideoModal({ open, onClose, mergedVideoUrl, sessio
             />
           )}
 
-          {/* Now Playing overlay at bottom */}
           {durationsReady && sessions?.[activeIndex] && (
             <Box sx={{
               position: 'absolute', bottom: 56, left: 0, right: 0,
@@ -170,8 +166,7 @@ export default function MergedVideoModal({ open, onClose, mergedVideoUrl, sessio
                 <Box sx={{
                   width: 6, height: 6, borderRadius: '50%',
                   bgcolor: theme.palette.primary.main,
-                  animation: 'blink 1.2s ease-in-out infinite',
-                  '@keyframes blink': { '0%,100%': { opacity: 1 }, '50%': { opacity: 0.2 } },
+                  animation: `${blink} 1.2s ease-in-out infinite`,
                   flexShrink: 0,
                 }} />
                 <Typography sx={{
@@ -191,7 +186,6 @@ export default function MergedVideoModal({ open, onClose, mergedVideoUrl, sessio
 
         <Divider orientation="vertical" />
 
-        {/* ── Right: session list ─────────────────────────────────────────────── */}
         <Box
           ref={listRef}
           sx={{ flex: 1, overflow: 'auto', p: 2, display: 'flex', flexDirection: 'column', gap: 1 }}
@@ -209,10 +203,13 @@ export default function MergedVideoModal({ open, onClose, mergedVideoUrl, sessio
             const startTime = durationsReady ? cumulative[i] : null
             const dur       = durationsReady ? (durations[i] || 0) : null
 
-            // Progress within this session
             const sessionProgress = durationsReady && isActive && dur > 0
               ? Math.min(100, ((currentTime - cumulative[i]) / dur) * 100)
               : isDone ? 100 : 0
+
+            const activeBg  = isDark ? `${theme.palette.primary.main}14` : `${theme.palette.primary.main}08`
+            const dotBg     = isActive ? theme.palette.primary.main : isDone ? `${theme.palette.primary.main}60` : isDark ? 'rgba(255,255,255,0.1)' : '#e5e7eb'
+            const promptColor = isDone ? theme.palette.text.secondary : theme.palette.text.primary
 
             return (
               <Box
@@ -222,9 +219,7 @@ export default function MergedVideoModal({ open, onClose, mergedVideoUrl, sessio
                 sx={{
                   p: 1.5, borderRadius: '8px', cursor: 'pointer',
                   border: `1.5px solid ${isActive ? theme.palette.primary.main : theme.palette.divider}`,
-                  bgcolor: isActive
-                    ? isDark ? `${theme.palette.primary.main}14` : `${theme.palette.primary.main}08`
-                    : isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.015)',
+                  bgcolor: isActive ? activeBg : isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.015)',
                   transition: 'border-color 0.25s, background-color 0.25s',
                   '&:hover': {
                     borderColor: theme.palette.primary.main,
@@ -232,11 +227,10 @@ export default function MergedVideoModal({ open, onClose, mergedVideoUrl, sessio
                   },
                 }}
               >
-                {/* Row: number badge + prompt + time */}
                 <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
                   <Box sx={{
                     width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
-                    bgcolor: isActive ? theme.palette.primary.main : isDone ? `${theme.palette.primary.main}60` : isDark ? 'rgba(255,255,255,0.1)' : '#e5e7eb',
+                    bgcolor: dotBg,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     transition: 'background-color 0.3s',
                   }}>
@@ -249,7 +243,7 @@ export default function MergedVideoModal({ open, onClose, mergedVideoUrl, sessio
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Typography sx={{
                       fontSize: 11.5, fontWeight: isActive ? 600 : 400, lineHeight: 1.45,
-                      color: isActive ? theme.palette.text.primary : isDone ? theme.palette.text.secondary : theme.palette.text.primary,
+                      color: promptColor,
                       overflow: 'hidden', display: '-webkit-box',
                       WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
                     }}>
@@ -267,7 +261,6 @@ export default function MergedVideoModal({ open, onClose, mergedVideoUrl, sessio
                   )}
                 </Box>
 
-                {/* Progress bar — only shown when active or done */}
                 {(isActive || isDone) && dur > 0 && (
                   <LinearProgress
                     variant="determinate"
