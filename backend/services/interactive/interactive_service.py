@@ -2,12 +2,14 @@
 Interactive Mode pipeline — produces a Scene IR via SSE events.
 
 SSE event sequence:
-  { type: "content", title, text, follow_ups }  ← emitted right after scene planning
-  { type: "entity",  entity: SceneEntity.dict() } ← one per entity (delayed if freeform_html)
-  { type: "done",    session_id }
+  { type: "meta",  title, follow_ups }          ← emitted right after scene planning
+  { type: "block", block: { id, type, ... } }   ← one per block in order; freeform_html
+                                                    blocks are delayed until codegen finishes
+  { type: "done",  session_id }
 
-Adding a new entity type: add its component to the frontend registry and its
-prop schema to component_catalog.md. No changes needed in this file.
+Adding a new entity type: add its component to the frontend registry, its prop
+schema to component_catalog.md, and one line to SceneBlock.validate_block.
+No changes needed in this file.
 """
 
 import asyncio
@@ -18,7 +20,7 @@ import os
 from typing import AsyncGenerator
 
 from services.frame_generation.planner import classify_intent, _extract_json, request_llm_service
-from services.interactive.scene_ir import SceneEntity, SceneIR
+from services.interactive.scene_ir import SceneBlock, SceneIR
 from services.llm_service import default_llm_service
 
 logger = logging.getLogger(__name__)
@@ -71,7 +73,6 @@ async def _run_codegen(spec: str, user_prompt: str) -> str:
     result, _ = raw if isinstance(raw, tuple) else (raw, {})
     if result is None:
         raise RuntimeError("Codegen LLM returned None")
-    # Strip accidental markdown fences the model may add despite instructions
     result = result.strip()
     if result.startswith("```"):
         result = result.split("\n", 1)[-1]
@@ -89,10 +90,8 @@ async def _plan_scene(
     domain_ctx = _load_domain_file(domain)
     catalog = _load_prompt("component_catalog.md")
 
-    # System: all instructions (base schema + domain guidance + component catalog)
     system_prompt = "\n\n".join(filter(None, [base, domain_ctx, catalog]))
 
-    # User: conversation history + question
     context_block = (
         f"Conversation context:\n{conversation_context}\n\n"
         if conversation_context else ""
@@ -112,7 +111,6 @@ async def _plan_scene(
     try:
         return SceneIR(**data)
     except Exception as exc:
-        # If entity validation fails (missing required prop), log and re-raise
         logger.error("Scene IR validation failed: %s | raw=%s", exc, raw[:500])
         raise
 
@@ -146,29 +144,27 @@ async def run_interactive_pipeline(
     # Stage 2: Plan scene IR
     scene = await _plan_scene(message, domain, conversation_context)
 
-    # Stage 3: Emit explanation immediately
+    # Stage 3: Emit title + follow_ups immediately — UI shows these before blocks arrive
     yield {
-        "type": "content",
+        "type": "meta",
         "title": scene.title,
-        "text": scene.explanation,
         "follow_ups": scene.follow_ups,
     }
 
-    # Stage 4: Emit each entity; codegen blocks for freeform_html
-    for entity in scene.entities:
-        if entity.type == "freeform_html":
-            spec = entity.props.get("spec", "an interactive widget")
+    # Stage 4: Emit blocks in order.
+    # Pre-built entity blocks emit instantly; freeform_html blocks wait for codegen.
+    for block in scene.blocks:
+        if block.type == "entity" and block.entity_type == "freeform_html":
+            spec = block.props.get("spec", "an interactive widget")
             try:
                 raw_html = await _run_codegen(spec, message)
-                entity.html = _wrap_in_sandbox(raw_html)
+                block.html = _wrap_in_sandbox(raw_html)
             except Exception as exc:
-                logger.error(
-                    "Codegen failed for entity %s: %s", entity.id, exc
-                )
-                entity.html = _wrap_in_sandbox(
+                logger.error("Codegen failed for block %s: %s", block.id, exc)
+                block.html = _wrap_in_sandbox(
                     "<p style='color:#f03e3e;font-family:system-ui'>Widget generation failed.</p>"
                 )
-        yield {"type": "entity", "entity": entity.dict()}
+        yield {"type": "block", "block": block.dict()}
 
     # Stage 5: Persist and finish
     try:

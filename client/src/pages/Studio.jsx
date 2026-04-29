@@ -16,7 +16,7 @@ import ConversationMiniTree from '../components/Studio/ConversationMiniTree'
 import { api } from '../services/api'
 import { useToast } from '../contexts/ToastContext'
 import { DEFAULT_MODEL, DEFAULT_RENDER_MODE, FOLLOWUP_SUGGESTIONS } from '../components/Studio/constants'
-import { createTempTurn, normalizeFramesData } from '../components/Studio/studioUtils'
+import { createTempTurn, normalizeFramesData, migrateOldSceneIR } from '../components/Studio/studioUtils'
 
 export default function Studio({ activeConvId, activeConvTitle, activeConvStarred, onActiveConvIdChange, onConversationsRefresh, onRenameConv, onStarConv, onDeleteConv }) {
   const theme  = useTheme()
@@ -169,10 +169,9 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
         parentFrameIndex: t.parent_frame_index ?? null,
         // Interactive turns: populated once scene_ir.json loads via getFramesMeta
         ...(t.render_path === 'interactive' && {
-          explanationText: '',
-          title:           '',
-          followUps:       [],
-          entities:        [],
+          title:     '',
+          followUps: [],
+          blocks:    [],
         }),
       }))
 
@@ -184,13 +183,13 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
           if (loadSignal.aborted) return
           if (!raw) return
           if (turn.render_path === 'interactive') {
-            // raw is scene_ir.json: { title, explanation, follow_ups, entities, ... }
+            // raw is scene_ir.json — new format has blocks[], old format has explanation+entities
+            const blocks = raw.blocks ?? migrateOldSceneIR(raw)
             setTurns((prev) => prev.map((t) => t.id === turn.id ? {
               ...t,
-              explanationText: raw.explanation ?? '',
-              title:           raw.title       ?? '',
-              followUps:       raw.follow_ups  ?? [],
-              entities:        raw.entities    ?? [],
+              title:     raw.title      ?? '',
+              followUps: raw.follow_ups ?? [],
+              blocks,
             } : t))
           } else {
             const framesData = normalizeFramesData(raw)
@@ -305,7 +304,7 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
           setTurns(prev => prev.map(t => t.tempId === tempId ? { ...t, ...updates } : t))
 
         if (!isFirstTurn) {
-          updateTurn({ render_path: 'interactive', explanationText: '', title: '', followUps: [], entities: [] })
+          updateTurn({ render_path: 'interactive', title: '', followUps: [], blocks: [] })
         }
 
         let resolvedConvId = activeConvId
@@ -319,11 +318,10 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
           },
           (event) => {
             if (isStale()) return
-            if (event.type === 'content') {
+            if (event.type === 'meta') {
               const baseTurnData = {
                 render_path: 'interactive', isLoading: true,
-                explanationText: event.text ?? '', title: event.title ?? '',
-                followUps: event.follow_ups ?? [], entities: [],
+                title: event.title ?? '', followUps: event.follow_ups ?? [], blocks: [],
               }
               if (isFirstTurn) {
                 setTurns([{
@@ -338,9 +336,9 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
                 updateTurn(baseTurnData)
               }
             }
-            if (event.type === 'entity') {
+            if (event.type === 'block') {
               setTurns(prev => prev.map(t => t.tempId === tempId
-                ? { ...t, entities: [...(t.entities ?? []), event.entity] }
+                ? { ...t, blocks: [...(t.blocks ?? []), event.block] }
                 : t))
             }
             if (event.type === 'done') {
@@ -764,7 +762,6 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
                 turns={turns}
                 onPauseAsk={handlePauseAsk}
                 onRetryTurn={handleRetryTurn}
-                onSuggestionClick={handleSuggestionClick}
               />
 
               {followUpSuggestions.length > 0 && (

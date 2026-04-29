@@ -17,6 +17,14 @@ function initMermaid(isDark) {
 
 let _idCounter = 0
 
+// LLMs sometimes emit \n (literal backslash-n) inside Mermaid labels instead
+// of <br/>. Mermaid silently ignores \n, so we convert it before rendering.
+function fixNewlines(src) {
+  return src
+    .replace(/"([^"]*)"/g,    (_, s) => `"${s.replace(/\\n/g, '<br/>')}"`)
+    .replace(/\[([^\]]*)\]/g, (_, s) => `[${s.replace(/\\n/g, '<br/>')}]`)
+}
+
 export default function MermaidViewer({ entityId, diagram, caption }) {
   const [svg, setSvg]     = useState(null)
   const [error, setError] = useState(null)
@@ -28,7 +36,7 @@ export default function MermaidViewer({ entityId, diagram, caption }) {
     setError(null)
     setSvg(null)
 
-    mermaid.render(idRef.current, diagram)
+    mermaid.render(idRef.current, fixNewlines(diagram))
       .then(({ svg: rendered }) => setSvg(rendered))
       .catch(err => {
         console.error('MermaidViewer render error:', err)

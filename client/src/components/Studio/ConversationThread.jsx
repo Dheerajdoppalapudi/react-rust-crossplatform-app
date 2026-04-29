@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Box, Typography, Button, CircularProgress, Skeleton, useTheme } from '@mui/material'
+import { Box, Typography, Button, CircularProgress, useTheme } from '@mui/material'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import ErrorBoundary from '../error/ErrorBoundary'
 import SessionView from './SessionView'
@@ -7,8 +7,7 @@ import LoadingView from './LoadingView'
 import NotesPanel from './NotesPanel'
 import { isTextTurn } from './studioUtils'
 import { BRAND, PALETTE } from '../../theme/tokens.js'
-import ExplanationPanel from '../Interactive/ExplanationPanel'
-import SceneRenderer    from '../Interactive/SceneRenderer'
+import BlockRenderer from '../Interactive/BlockRenderer'
 
 function ContentColumn({ children }) {
   return (
@@ -79,7 +78,7 @@ function RetryBanner({ turn, onRetry }) {
   )
 }
 
-function TurnView({ turn, onPauseAsk, onRetryTurn, onSuggestionClick }) {
+function TurnView({ turn, onPauseAsk, onRetryTurn }) {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
 
@@ -89,21 +88,18 @@ function TurnView({ turn, onPauseAsk, onRetryTurn, onSuggestionClick }) {
         <UserBubble prompt={turn.prompt} />
 
         {turn.render_path === 'interactive' ? (
-          <>
-            {turn.explanationText ? (
-              <ExplanationPanel
-                title={turn.title}
-                text={turn.explanationText}
-              />
-            ) : (
-              <LoadingView stage={turn.stage || 'planning'} compact />
-            )}
-            <SceneRenderer entities={turn.entities ?? []} />
-            {turn.isLoading && (turn.entities ?? []).length > 0 && (
-              <Skeleton variant="rectangular" sx={{ width: '100%', height: 80, borderRadius: 2, mt: 1.5 }} animation="wave" />
-            )}
-          </>
+          // ── Interactive mode ──────────────────────────────────────────────
+          (turn.title || (turn.blocks ?? []).length > 0) ? (
+            <BlockRenderer
+              title={turn.title}
+              blocks={turn.blocks ?? []}
+              isLoading={turn.isLoading}
+            />
+          ) : (
+            <LoadingView stage={turn.stage || 'planning'} compact />
+          )
         ) : turn.isLoading ? (
+          // ── Video mode: in-progress ────────────────────────────────────────
           <LoadingView stage={turn.stage || 'planning'} compact textMode={turn.textMode} />
         ) : turn.videoPhase === 'error' && !turn.id ? (
           <Box sx={{
@@ -136,19 +132,19 @@ function TurnView({ turn, onPauseAsk, onRetryTurn, onSuggestionClick }) {
   )
 }
 
-function TurnWithBoundary({ turn, onPauseAsk, onRetryTurn, onSuggestionClick }) {
+function TurnWithBoundary({ turn, onPauseAsk, onRetryTurn }) {
   return (
     <ErrorBoundary level="component" key={`${turn.tempId}-boundary`}>
-      <TurnView turn={turn} onPauseAsk={onPauseAsk} onRetryTurn={onRetryTurn} onSuggestionClick={onSuggestionClick} />
+      <TurnView turn={turn} onPauseAsk={onPauseAsk} onRetryTurn={onRetryTurn} />
     </ErrorBoundary>
   )
 }
 
-export default function ConversationThread({ turns, onPauseAsk, onRetryTurn, onSuggestionClick }) {
+export default function ConversationThread({ turns, onPauseAsk, onRetryTurn }) {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', pt: 1, pb: 1 }}>
       {turns.map((turn) => (
-        <TurnWithBoundary key={turn.tempId} turn={turn} onPauseAsk={onPauseAsk} onRetryTurn={onRetryTurn} onSuggestionClick={onSuggestionClick} />
+        <TurnWithBoundary key={turn.tempId} turn={turn} onPauseAsk={onPauseAsk} onRetryTurn={onRetryTurn} />
       ))}
     </Box>
   )

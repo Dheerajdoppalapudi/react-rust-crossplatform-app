@@ -24,6 +24,25 @@ export function normalizeFramesData(data) {
   }
 }
 
+// Converts old scene_ir.json format ({ explanation, entities }) to the new blocks[] format.
+// Needed for sessions saved before the blocks IR was introduced.
+export function migrateOldSceneIR(raw) {
+  const blocks = []
+  if (raw.explanation) {
+    blocks.push({ id: 'b0', type: 'text', content: raw.explanation })
+  }
+  for (const entity of raw.entities ?? []) {
+    blocks.push({
+      id:          entity.id,
+      type:        'entity',
+      entity_type: entity.type,
+      props:       entity.props ?? {},
+      html:        entity.html  ?? null,
+    })
+  }
+  return blocks
+}
+
 export function createTempTurn({ tempId, prompt, videoEnabled, parentSessionId, parentFrameIndex = null }) {
   return {
     tempId,

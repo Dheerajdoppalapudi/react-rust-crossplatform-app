@@ -3,7 +3,7 @@ import { Box, Typography, Collapse, IconButton, Tooltip, useTheme } from '@mui/m
 import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import ContentCopyIcon  from '@mui/icons-material/ContentCopy'
 import CheckIcon        from '@mui/icons-material/Check'
-import { parseNotes }   from './studioUtils'
+import MarkdownText     from '../Interactive/MarkdownText'
 
 export default function NotesPanel({ notes }) {
   const theme  = useTheme()
@@ -14,12 +14,10 @@ export default function NotesPanel({ notes }) {
 
   useEffect(() => () => clearTimeout(copyTimerRef.current), [])
 
-  if (!notes) return null
-  const bullets = parseNotes(notes)
-  if (bullets.length === 0) return null
+  if (!notes?.trim()) return null
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(bullets.map((b) => `• ${b}`).join('\n'))
+    navigator.clipboard.writeText(notes)
     setCopied(true)
     clearTimeout(copyTimerRef.current)
     copyTimerRef.current = setTimeout(() => setCopied(false), 1800)
@@ -27,7 +25,6 @@ export default function NotesPanel({ notes }) {
 
   const mutedText = isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)'
   const bodyText  = isDark ? 'rgba(255,255,255,0.82)' : 'rgba(0,0,0,0.8)'
-  const bulletDot = isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.22)'
 
   return (
     <Box sx={{ pt: 2.5, pb: 1 }}>
@@ -41,9 +38,6 @@ export default function NotesPanel({ notes }) {
           <Typography sx={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: mutedText, lineHeight: 1 }}>
             Lesson Notes
           </Typography>
-          <Box sx={{ px: 0.9, py: 0.15, borderRadius: '20px', backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)', lineHeight: 1 }}>
-            <Typography sx={{ fontSize: 10.5, color: mutedText, fontWeight: 500 }}>{bullets.length}</Typography>
-          </Box>
         </Box>
 
         {open && (
@@ -56,14 +50,7 @@ export default function NotesPanel({ notes }) {
       </Box>
 
       <Collapse in={open} unmountOnExit>
-        <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-          {bullets.map((point, i) => (
-            <Box key={i} sx={{ display: 'flex', gap: 1.5, alignItems: 'baseline', py: 0.55 }}>
-              <Box sx={{ width: 4, height: 4, borderRadius: '50%', flexShrink: 0, mt: '9px', backgroundColor: bulletDot }} />
-              <Typography sx={{ fontSize: 13.5, lineHeight: 1.75, color: bodyText, fontWeight: 400 }}>{point}</Typography>
-            </Box>
-          ))}
-        </Box>
+        <MarkdownText content={notes} sx={{ color: bodyText }} />
       </Collapse>
     </Box>
   )
