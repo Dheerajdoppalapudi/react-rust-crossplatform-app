@@ -298,7 +298,7 @@ async def run_text_pipeline(
     """
     _log({"event": "stage_start", "stage": "text_classify"})
 
-    intent_type, frame_count, notes_list, followups = await classify_intent(
+    intent_type, frame_count, notes_list, followups, _domain = await classify_intent(
         message, conversation_context
     )
     notes = "\n".join(notes_list) if notes_list else ""
@@ -363,7 +363,7 @@ async def run_generation_pipeline(
 
     # Always run classify — it produces notes/followups cheaply.
     # If the user forced a render mode, we override intent_type/frame_count after.
-    intent_type, frame_count, notes_list, followups = await classify_intent(
+    intent_type, frame_count, notes_list, followups, _domain = await classify_intent(
         message, conversation_context
     )
     notes = "\n".join(notes_list) if notes_list else ""

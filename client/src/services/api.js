@@ -354,6 +354,83 @@ export const api = {
       })
   },
 
+  // ── Interactive generation (SSE) ─────────────────────────────────────────────
+  //
+  // SSE event types:
+  //   { type: "content", title, text, follow_ups }
+  //   { type: "entity",  entity: {...} }
+  //   { type: "done",    session_id, conversation_id, turn_index }
+  //   { type: "error",   message }
+
+  interactiveGeneration: ({ message, conversationId, provider, model }, onEvent, signal) => {
+    const body = new FormData()
+    body.append('message', message)
+    if (conversationId) body.append('conversation_id', conversationId)
+    if (provider)       body.append('provider', provider)
+    if (model)          body.append('model', model)
+
+    const token = getAccessToken()
+    return fetch(`${API_BASE}/api/interactive_generation`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body,
+      signal,
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          let message = `HTTP ${res.status}`
+          try { const b = await res.json(); message = b.error || b.detail || message } catch {}
+          onEvent({ type: 'error', message })
+          return
+        }
+
+        const reader  = res.body.getReader()
+        const decoder = new TextDecoder()
+        let buffer       = ''
+        let terminalSeen = false
+
+        const processLine = (line) => {
+          if (!line.startsWith('data: ')) return
+          try {
+            const event = JSON.parse(line.slice(6))
+            if (event.type === 'done' || event.type === 'error') terminalSeen = true
+            onEvent(event)
+          } catch {}
+        }
+
+        try {
+          while (true) {
+            const { done, value } = await reader.read()
+            if (value) {
+              buffer += decoder.decode(value, { stream: !done })
+              const lines = buffer.split('\n')
+              buffer = done ? '' : (lines.pop() ?? '')
+              for (const line of lines) processLine(line)
+            }
+            if (done) {
+              if (buffer) { for (const line of buffer.split('\n')) processLine(line) }
+              break
+            }
+          }
+          if (!terminalSeen) {
+            onEvent({ type: 'error', message: 'Stream ended unexpectedly. Please try again.' })
+          }
+        } catch (err) {
+          if (err.name !== 'AbortError') {
+            onEvent({ type: 'error', message: 'Stream interrupted. Please try again.' })
+          }
+        } finally {
+          reader.releaseLock()
+        }
+      })
+      .catch((err) => {
+        if (err.name !== 'AbortError') {
+          onEvent({ type: 'error', message: 'Connection failed. Please try again.' })
+        }
+      })
+  },
+
   // ── Media token endpoints (CRIT-2) ────────────────────────────────────────────
   //
   // Fetches a short-lived, session-scoped media token so that <video src> and

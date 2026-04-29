@@ -2,12 +2,13 @@
 Pydantic schemas for the generation pipeline endpoints.
 
 Hierarchy (Base → specialised):
-  GenerationResponse        — common fields returned by /api/image_generation
-  SVGGenerationResponse     — SVG / Manim paths (has `images`)
-  ExcalidrawGenerationResponse — Mermaid / slim_json paths (has `excalidraw`)
+  GenerationResponse            — common fields returned by /api/image_generation
+  SVGGenerationResponse         — SVG / Manim paths (has `images`)
+  ExcalidrawGenerationResponse  — Mermaid / slim_json paths (has `excalidraw`)
+  InteractiveGenerationResponse — Interactive mode (has `scene_ir`)
 """
 
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 from pydantic import BaseModel
 
 
@@ -33,3 +34,13 @@ class SVGGenerationResponse(GenerationResponse):
 class ExcalidrawGenerationResponse(GenerationResponse):
     excalidraw:     dict[str, Any]
     elements_count: int
+
+
+class InteractiveGenerationResponse(BaseModel):
+    """Returned in the SSE `done` event for interactive mode sessions."""
+    session_id:      str
+    render_path:     Literal["interactive"] = "interactive"
+    conversation_id: str
+    turn_index:      int
+    domain:          str
+    title:           str

@@ -108,18 +108,28 @@ def get_session_log(session_id: str, current_user: User = Depends(get_current_us
 
 @router.get("/api/sessions/{session_id}/frames-meta")
 def get_session_frames_meta(session_id: str, current_user: User = Depends(get_current_user)):
-    """Return the frames.json content (image paths, captions, render_path)."""
+    """Return the frames metadata for a session.
+
+    For video/text sessions this is frames.json.
+    For interactive sessions this is scene_ir.json (saved by interactive_service).
+    """
     with get_db() as conn:
         row = conn.execute(
-            "SELECT output_dir FROM sessions WHERE id = ? AND user_id = ?",
+            "SELECT output_dir, render_path FROM sessions WHERE id = ? AND user_id = ?",
             (session_id, current_user.id),
         ).fetchone()
 
     if not row or not row["output_dir"]:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    # CRIT-3: validate directory, then build child path
-    safe_dir    = _safe_path(row["output_dir"], "output_dir")
+    safe_dir = _safe_path(row["output_dir"], "output_dir")
+
+    if row["render_path"] == "interactive":
+        scene_path = safe_dir / "scene_ir.json"
+        if not scene_path.exists():
+            raise HTTPException(status_code=404, detail="scene_ir.json not found")
+        return success(json.loads(scene_path.read_text()))
+
     frames_path = safe_dir / "frames.json"
     if not frames_path.exists():
         raise HTTPException(status_code=404, detail="frames.json not found")

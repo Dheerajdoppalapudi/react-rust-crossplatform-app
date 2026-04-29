@@ -77,3 +77,9 @@ COOKIE_SAMESITE: str  = "lax"
 MERMAID_INTENT_TYPES: frozenset[str] = frozenset({"process", "architecture", "timeline"})
 MANIM_INTENT_TYPES: frozenset[str]   = frozenset({"math"})
 SVG_INTENT_TYPES: frozenset[str]     = frozenset({"illustration", "concept_analogy", "comparison"})
+
+# ── Interactive mode ──────────────────────────────────────────────────────────
+# Domains that have a dedicated domain guidance file in
+# services/interactive/prompts/domains/{domain}.md.
+# Add a new domain here + create the .md file — no other code change needed.
+INTERACTIVE_DOMAINS: frozenset[str] = frozenset({"physics", "cs", "chemistry", "biology", "math", "history"})

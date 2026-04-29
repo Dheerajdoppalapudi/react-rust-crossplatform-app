@@ -70,7 +70,8 @@
       "Bash(mv _frame_generation_tmp frame_generation)",
       "Bash(mv video *)",
       "Bash(mv _video_generation_tmp video_generation)",
-      "Bash(grep -E '\\\\.\\(jsx|js\\)$')"
+      "Bash(grep -E '\\\\.\\(jsx|js\\)$')",
+      "Bash(npm list *)"
     ]
   }
 }

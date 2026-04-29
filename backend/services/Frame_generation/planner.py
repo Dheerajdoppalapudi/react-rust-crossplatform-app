@@ -280,10 +280,10 @@ def _extract_json(text: str) -> dict:
 
 async def classify_intent(
     user_prompt: str, conversation_context: str = ""
-) -> tuple[str, int, list, list]:
+) -> tuple[str, int, list, list, str]:
     """
     Call 1 — classification + notes.
-    Returns (intent_type, frame_count, notes, suggested_followups).
+    Returns (intent_type, frame_count, notes, suggested_followups, domain).
     Always uses Haiku (_classify_service) regardless of the per-request model.
     """
     _prompts_dir = os.path.join(os.path.dirname(__file__), "prompts")
@@ -307,7 +307,8 @@ async def classify_intent(
     frame_count = max(2, min(8, int(data.get("frame_count", 3))))
     notes = data.get("notes", [])
     suggested_followups = data.get("suggested_followups", [])
-    return intent_type, frame_count, notes, suggested_followups
+    domain = data.get("domain", "general")
+    return intent_type, frame_count, notes, suggested_followups, domain
 
 
 async def create_vocab_plan(

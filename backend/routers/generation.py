@@ -16,6 +16,7 @@ import uuid
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
@@ -37,6 +38,7 @@ from services.generation_service import (
     build_conversation_context,
     count_llm_calls,
 )
+from services.interactive.interactive_service import run_interactive_pipeline
 from services.llm_service import LLMService, OpenAIProvider, ClaudeProvider
 from dependencies.auth import get_current_user
 
@@ -210,3 +212,104 @@ async def image_generation(
         request_log.reset(log_token)
         token_usage.reset(usage_token)
         request_llm_service.reset(svc_token)
+
+
+@router.post("/api/interactive_generation")
+async def interactive_generation(
+    message:         str           = Form(""),
+    conversation_id: Optional[str] = Form(None),
+    provider:        str           = Form("claude"),
+    model:           Optional[str] = Form(None),
+    current_user:    User          = Depends(get_current_user),
+):
+    """
+    Interactive mode SSE endpoint.
+
+    SSE event sequence:
+      { type: "content", title, text, follow_ups }
+      { type: "entity",  entity: {...} }   ← one per entity
+      { type: "done",    session_id, conversation_id, turn_index }
+    """
+    session_id = uuid.uuid4().hex
+    output_dir = session_output_dir(session_id)
+    start_time = time.time()
+
+    # Resolve / create conversation
+    if not conversation_id:
+        conversation_id = uuid.uuid4().hex
+        insert_conversation(conversation_id, message[:80], user_id=current_user.id)
+        turn_index = 1
+    else:
+        with get_db() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) AS cnt FROM sessions WHERE conversation_id = ? AND user_id = ?",
+                (conversation_id, current_user.id),
+            ).fetchone()
+            turn_index = (row["cnt"] or 0) + 1
+
+    insert_session(
+        session_id, message, conversation_id, turn_index,
+        user_id=current_user.id,
+    )
+    touch_conversation(conversation_id)
+
+    conversation_context = ""
+    if turn_index > 1:
+        conversation_context = build_conversation_context(
+            conversation_id=conversation_id,
+            current_session_id=session_id,
+        )
+
+    _llm_provider_kwargs = {"provider": provider, "model": model}
+
+    async def event_stream():
+        # ContextVar must be set inside the generator — StreamingResponse runs it in a
+        # separate asyncio context so tokens from the route handler cannot be reset here.
+        _provider = (
+            OpenAIProvider(model=_llm_provider_kwargs["model"]) if _llm_provider_kwargs["provider"] == "openai"
+            else ClaudeProvider(model=_llm_provider_kwargs["model"])
+        ) if _llm_provider_kwargs["model"] else (
+            OpenAIProvider() if _llm_provider_kwargs["provider"] == "openai" else ClaudeProvider()
+        )
+        svc_token = request_llm_service.set(LLMService(provider=_provider))
+        try:
+            async for event in run_interactive_pipeline(
+                message=message,
+                session_id=session_id,
+                output_dir=output_dir,
+                conversation_context=conversation_context,
+            ):
+                if event["type"] == "done":
+                    # Enrich done event with conversation metadata
+                    event.update({
+                        "conversation_id": conversation_id,
+                        "turn_index": turn_index,
+                    })
+                    update_session(
+                        session_id,
+                        status="done",
+                        render_path="interactive",
+                        output_dir=output_dir,
+                    )
+                yield f"data: {json.dumps(event)}\n\n"
+        except Exception as exc:
+            logger.error(
+                "interactive_generation_failed  session=%s  error=%s",
+                session_id, exc, exc_info=True,
+            )
+            update_session(session_id, status="error")
+            yield f"data: {json.dumps({'type': 'error', 'message': 'Generation failed. Please try again.'})}\n\n"
+        finally:
+            request_llm_service.reset(svc_token)
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Content-Security-Policy": (
+                "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'"
+            ),
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",  # disable nginx buffering for SSE
+        },
+    )

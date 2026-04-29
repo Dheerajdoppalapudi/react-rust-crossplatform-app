@@ -162,11 +162,18 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
         frame_count:      t.frame_count,
         isLoading:        false,
         framesData:       null,
-        videoPhase:       t.render_path === 'text'
+        videoPhase:       t.render_path === 'text' || t.render_path === 'interactive'
           ? 'disabled'
           : (t.video_path ? 'ready' : (t.status === 'error' ? 'error' : 'generating')),
         parentSessionId:  t.parent_session_id  ?? null,
         parentFrameIndex: t.parent_frame_index ?? null,
+        // Interactive turns: populated once scene_ir.json loads via getFramesMeta
+        ...(t.render_path === 'interactive' && {
+          explanationText: '',
+          title:           '',
+          followUps:       [],
+          entities:        [],
+        }),
       }))
 
       setTurns(loadedTurns)
@@ -175,7 +182,17 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
         loadedTurns.map(async (turn) => {
           const raw = await api.getFramesMeta(turn.id, loadSignal)
           if (loadSignal.aborted) return
-          if (raw) {
+          if (!raw) return
+          if (turn.render_path === 'interactive') {
+            // raw is scene_ir.json: { title, explanation, follow_ups, entities, ... }
+            setTurns((prev) => prev.map((t) => t.id === turn.id ? {
+              ...t,
+              explanationText: raw.explanation ?? '',
+              title:           raw.title       ?? '',
+              followUps:       raw.follow_ups  ?? [],
+              entities:        raw.entities    ?? [],
+            } : t))
+          } else {
             const framesData = normalizeFramesData(raw)
             setTurns((prev) => prev.map((t) => t.id === turn.id ? { ...t, framesData } : t))
           }
@@ -282,11 +299,85 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
     setPauseContext(null)
 
     try {
+      if (!videoEnabled) {
+        // ── INTERACTIVE MODE ──────────────────────────────────────────────────
+        const updateTurn = (updates) =>
+          setTurns(prev => prev.map(t => t.tempId === tempId ? { ...t, ...updates } : t))
+
+        if (!isFirstTurn) {
+          updateTurn({ render_path: 'interactive', explanationText: '', title: '', followUps: [], entities: [] })
+        }
+
+        let resolvedConvId = activeConvId
+
+        await api.interactiveGeneration(
+          {
+            message:        submittedPrompt,
+            conversationId: activeConvId,
+            provider:       selectedModel.provider,
+            model:          selectedModel.model,
+          },
+          (event) => {
+            if (isStale()) return
+            if (event.type === 'content') {
+              const baseTurnData = {
+                render_path: 'interactive', isLoading: true,
+                explanationText: event.text ?? '', title: event.title ?? '',
+                followUps: event.follow_ups ?? [], entities: [],
+              }
+              if (isFirstTurn) {
+                setTurns([{
+                  tempId, id: null, prompt: submittedPrompt,
+                  stage: null, framesData: null, videoPhase: 'disabled',
+                  parentSessionId, parentFrameIndex: capturedPauseContext?.frameIndex ?? null,
+                  ...baseTurnData,
+                }])
+                setIsBootstrapping(false)
+                setBootstrapFrames(null)
+              } else {
+                updateTurn(baseTurnData)
+              }
+            }
+            if (event.type === 'entity') {
+              setTurns(prev => prev.map(t => t.tempId === tempId
+                ? { ...t, entities: [...(t.entities ?? []), event.entity] }
+                : t))
+            }
+            if (event.type === 'done') {
+              resolvedConvId = event.conversation_id || resolvedConvId
+              setTurns(prev => prev.map(t => t.tempId === tempId
+                ? { ...t, isLoading: false, id: event.session_id,
+                    conversation_id: event.conversation_id }
+                : t))
+            }
+            if (event.type === 'error') {
+              toast.error(event.message || 'Generation failed. Please try again.')
+              if (isFirstTurn) {
+                setIsBootstrapping(false)
+                setTurns([])
+                onActiveConvIdChange(null)
+              } else {
+                updateTurn({ isLoading: false, videoPhase: 'error' })
+              }
+            }
+          },
+          genController.signal,
+        )
+
+        if (isFirstTurn && resolvedConvId) {
+          loadedConvIdRef.current = resolvedConvId
+          onActiveConvIdChange(resolvedConvId)
+        }
+        await onConversationsRefresh()
+        return
+      }
+
+      // ── VIDEO MODE (existing, unchanged) ─────────────────────────────────────
       const renderModeId = selectedRenderMode?.id !== 'auto' ? selectedRenderMode.id : null
       const data = await api.imageGeneration(
         submittedPrompt, activeConvId, capturedPauseContext,
         notesEnabled, selectedModel.provider, selectedModel.model,
-        genController.signal, renderModeId, parentSessionId, !videoEnabled,
+        genController.signal, renderModeId, parentSessionId, false,
       )
 
       if (isStale()) return
@@ -381,11 +472,13 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
     inputRef.current?.focus()
   }, [turns])
 
-  const lastTurn = turns.filter((t) => t.intent_type).at(-1) ?? null
+  const lastTurn = turns.at(-1) ?? null
   const activeConversationMeta = useMemo(() => activeConvId ? {
     id:                  activeConvId,
     intent_type:         lastTurn?.intent_type  ?? null,
-    suggested_followups: lastTurn?.framesData?.suggested_followups ?? [],
+    suggested_followups: lastTurn?.render_path === 'interactive'
+      ? (lastTurn?.followUps ?? [])
+      : (lastTurn?.framesData?.suggested_followups ?? []),
   } : null, [activeConvId, lastTurn])
 
   const isAnyGenerating = isBootstrapping || turns.some((t) => t.isLoading)
