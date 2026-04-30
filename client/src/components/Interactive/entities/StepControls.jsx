@@ -1,9 +1,21 @@
-import { Box, IconButton, Typography, LinearProgress, useTheme } from '@mui/material'
+import { useState, useEffect, useCallback } from 'react'
+import { Box, IconButton, Typography, LinearProgress, Tooltip, useTheme } from '@mui/material'
 import SkipPreviousIcon from '@mui/icons-material/SkipPrevious'
 import SkipNextIcon     from '@mui/icons-material/SkipNext'
+import PlayArrowIcon    from '@mui/icons-material/PlayArrow'
+import PauseIcon        from '@mui/icons-material/Pause'
+import ReplayIcon       from '@mui/icons-material/Replay'
 import { useSceneStore } from '../useSceneStore'
 
-export default function StepControls({ entityId, steps = [], targetEntityId }) {
+export default function StepControls({
+  entityId,
+  steps          = [],
+  targetEntityId,
+  autoPlay       = false,
+  interval       = 2000,
+  loop           = false,
+  showPlayButton = true,
+}) {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
 
@@ -12,21 +24,60 @@ export default function StepControls({ entityId, steps = [], targetEntityId }) {
   const setStep        = useSceneStore(s => s.setStep)
 
   const total    = steps.length
+  const atStart  = step === 0
+  const atEnd    = step === total - 1
   const label    = steps[step] ?? `Step ${step + 1}`
   const progress = total > 1 ? (step / (total - 1)) * 100 : 100
 
-  const prev = () => setStep(resolvedTarget, Math.max(0, step - 1))
-  const next = () => setStep(resolvedTarget, Math.min(total - 1, step + 1))
+  const [isPlaying, setIsPlaying] = useState(autoPlay)
+
+  const advance = useCallback(() => {
+    setStep(resolvedTarget, (prev) => {
+      if (prev >= total - 1) {
+        if (loop) return 0
+        setIsPlaying(false)
+        return prev
+      }
+      return prev + 1
+    })
+  }, [resolvedTarget, setStep, total, loop])
+
+  useEffect(() => {
+    if (!isPlaying) return
+    const id = setInterval(advance, interval)
+    return () => clearInterval(id)
+  }, [isPlaying, advance, interval])
+
+  // Pause when manually navigating
+  const prev = () => { setIsPlaying(false); setStep(resolvedTarget, Math.max(0, step - 1)) }
+  const next = () => { setIsPlaying(false); setStep(resolvedTarget, Math.min(total - 1, step + 1)) }
+  const restart = () => { setStep(resolvedTarget, 0); setIsPlaying(true) }
+
+  const finished = atEnd && !loop && !isPlaying && step > 0
 
   return (
-    <Box
-      sx={{
-        border: '1px solid', borderColor: 'divider', borderRadius: 2,
-        p: 1.5, display: 'flex', alignItems: 'center', gap: 1.5,
-        backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
-      }}
-    >
-      <IconButton size="small" onClick={prev} disabled={step === 0} aria-label="Previous step">
+    <Box sx={{
+      border: '1px solid', borderColor: 'divider', borderRadius: 2,
+      p: 1.5, display: 'flex', alignItems: 'center', gap: 1,
+      backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
+    }}>
+      {showPlayButton && (
+        finished ? (
+          <Tooltip title="Restart">
+            <IconButton size="small" onClick={restart} aria-label="Restart">
+              <ReplayIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        ) : (
+          <Tooltip title={isPlaying ? 'Pause' : 'Play'}>
+            <IconButton size="small" onClick={() => setIsPlaying(p => !p)} aria-label={isPlaying ? 'Pause' : 'Play'}>
+              {isPlaying ? <PauseIcon fontSize="small" /> : <PlayArrowIcon fontSize="small" />}
+            </IconButton>
+          </Tooltip>
+        )
+      )}
+
+      <IconButton size="small" onClick={prev} disabled={atStart} aria-label="Previous step">
         <SkipPreviousIcon fontSize="small" />
       </IconButton>
 
@@ -49,7 +100,7 @@ export default function StepControls({ entityId, steps = [], targetEntityId }) {
         {step + 1}/{total}
       </Typography>
 
-      <IconButton size="small" onClick={next} disabled={step === total - 1} aria-label="Next step">
+      <IconButton size="small" onClick={next} disabled={atEnd && !loop} aria-label="Next step">
         <SkipNextIcon fontSize="small" />
       </IconButton>
     </Box>

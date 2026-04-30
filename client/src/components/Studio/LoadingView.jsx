@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react'
 import { Box, Typography, useTheme } from '@mui/material'
 import CheckCircleOutlineIcon    from '@mui/icons-material/CheckCircleOutline'
 import MovieCreationOutlinedIcon from '@mui/icons-material/MovieCreationOutlined'
@@ -103,11 +104,87 @@ const STEPS = [
 
 const TEXT_STEPS = [{ key: 'planning', label: 'Thinking' }]
 
-export default function LoadingView({ stage, compact = false, framesData = null, textMode = false }) {
+const INTERACTIVE_STEPS = [
+  { key: 'planning',  label: 'Analyzing your question' },
+  { key: 'designing', label: 'Designing the lesson'    },
+  { key: 'building',  label: 'Building blocks'         },
+]
+
+// Three skeleton blocks hinting at the lesson layout being assembled
+function BlockSkeletonPreview({ isDark }) {
+  const BLOCKS = [
+    { type: 'text',   lines: [1, 0.82, 0.58] },
+    { type: 'entity', lines: []               },
+    { type: 'text',   lines: [1, 0.68]        },
+  ]
+  return (
+    <Box sx={{ mt: 1.5, display: 'flex', flexDirection: 'column', gap: 1, width: '100%', maxWidth: 340 }}>
+      {BLOCKS.map((block, i) => (
+        <Box key={i} sx={{
+          borderRadius: '8px',
+          border: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)'}`,
+          backgroundColor: skeletonBg(isDark),
+          overflow: 'hidden', position: 'relative',
+          animation: `${fadeIn} 0.5s ease both`,
+          animationDelay: `${i * 0.22}s`,
+        }}>
+          {/* shimmer sweep */}
+          <Box sx={{
+            position: 'absolute', inset: 0,
+            background: `linear-gradient(90deg, transparent 0%, ${shimmerBg(isDark)} 50%, transparent 100%)`,
+            animation: `${shimmer} 1.8s ease-in-out infinite`,
+            animationDelay: `${i * 0.3}s`,
+          }} />
+          {block.type === 'text' ? (
+            <Box sx={{ px: 1.5, py: 1.25, display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+              {block.lines.map((w, li) => (
+                <Box key={li} sx={{
+                  height: 7, borderRadius: '3px',
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
+                  width: `${w * 100}%`,
+                }} />
+              ))}
+            </Box>
+          ) : (
+            // entity block placeholder — diagram icon grid
+            <Box sx={{ height: 112, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Box sx={{ opacity: 0.09, display: 'flex', flexDirection: 'column', gap: 0.75, alignItems: 'center' }}>
+                <Box sx={{ display: 'flex', gap: 1.5 }}>
+                  <Box sx={{ width: 28, height: 18, borderRadius: '4px', backgroundColor: isDark ? '#fff' : '#000' }} />
+                  <Box sx={{ width: 28, height: 18, borderRadius: '4px', backgroundColor: isDark ? '#fff' : '#000' }} />
+                </Box>
+                <Box sx={{ width: 2, height: 14, backgroundColor: isDark ? '#fff' : '#000' }} />
+                <Box sx={{ width: 52, height: 18, borderRadius: '4px', backgroundColor: isDark ? '#fff' : '#000' }} />
+              </Box>
+            </Box>
+          )}
+        </Box>
+      ))}
+    </Box>
+  )
+}
+
+export default function LoadingView({ stage, compact = false, framesData = null, textMode = false, mode }) {
   const theme   = useTheme()
   const isDark  = theme.palette.mode === 'dark'
-  const steps   = textMode ? TEXT_STEPS : STEPS
-  const current = steps.findIndex((s) => s.key === stage)
+  const isInteractive = mode === 'interactive'
+
+  // Timer-based auto-advance: planning → designing after 1.4s so something
+  // visually changes during the LLM planning wait even with no server events.
+  const [timerFired, setTimerFired] = useState(false)
+
+  useEffect(() => {
+    if (!isInteractive || stage !== 'planning') return
+    const t = setTimeout(() => setTimerFired(true), 1400)
+    return () => clearTimeout(t)
+  }, [stage, isInteractive])
+
+  // Derivation guards with `stage === 'planning'` so stale timerFired never bleeds
+  // into non-planning stages — no explicit reset needed.
+  const effectiveStage = (isInteractive && stage === 'planning' && timerFired) ? 'designing' : stage
+
+  const steps   = isInteractive ? INTERACTIVE_STEPS : (textMode ? TEXT_STEPS : STEPS)
+  const current = steps.findIndex((s) => s.key === effectiveStage)
 
   const mutedColor   = isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)'
   const activeColor  = isDark ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.8)'
@@ -117,7 +194,7 @@ export default function LoadingView({ stage, compact = false, framesData = null,
   return (
     <Box role="status" aria-live="polite" aria-atomic="false" sx={{
       position: 'relative', display: 'flex', alignItems: 'flex-start',
-      minHeight: compact ? 80 : (textMode ? 80 : 240),
+      minHeight: compact ? 80 : (textMode || isInteractive ? 80 : 240),
       py: compact ? 1.5 : 3,
       px: compact ? 0   : 4,
     }}>
@@ -136,8 +213,11 @@ export default function LoadingView({ stage, compact = false, framesData = null,
           const showSkeletons     = (step.key === 'generating' || step.key === 'rendering') && status === 'active'
           const showFrames        = step.key === 'frames' && status !== 'pending'
           const showVideoSkeleton = step.key === 'video' && status === 'active'
-          const showCards         = showSkeletons || showFrames || showVideoSkeleton
-          const lineH             = showCards ? (showVideoSkeleton ? 128 : 96) : (compact ? 18 : 22)
+          const showBlockSketons  = isInteractive && step.key === 'designing' && status === 'active'
+          const showCards         = showSkeletons || showFrames || showVideoSkeleton || showBlockSketons
+          const lineH             = showCards
+            ? (showVideoSkeleton ? 128 : showBlockSketons ? 260 : 96)
+            : (compact ? 18 : 22)
 
           return (
             <Box key={step.key} sx={{
@@ -167,6 +247,7 @@ export default function LoadingView({ stage, compact = false, framesData = null,
                   : <FrameSkeletonCards isDark={isDark} />
                 )}
                 {showVideoSkeleton && <VideoSkeletonCard isDark={isDark} />}
+                {showBlockSketons  && <BlockSkeletonPreview isDark={isDark} />}
               </Box>
             </Box>
           )

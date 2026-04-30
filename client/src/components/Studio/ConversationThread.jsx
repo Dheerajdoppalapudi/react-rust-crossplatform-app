@@ -96,7 +96,7 @@ function TurnView({ turn, onPauseAsk, onRetryTurn }) {
               isLoading={turn.isLoading}
             />
           ) : (
-            <LoadingView stage={turn.stage || 'planning'} compact />
+            <LoadingView stage={turn.stage || 'planning'} compact mode="interactive" />
           )
         ) : turn.isLoading ? (
           // ── Video mode: in-progress ────────────────────────────────────────

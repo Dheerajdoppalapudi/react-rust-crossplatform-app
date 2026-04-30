@@ -71,7 +71,19 @@
       "Bash(mv video *)",
       "Bash(mv _video_generation_tmp video_generation)",
       "Bash(grep -E '\\\\.\\(jsx|js\\)$')",
-      "Bash(npm list *)"
+      "Bash(npm list *)",
+      "Bash(xargs -I{} ls \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/outputs/{}\")",
+      "Bash(read sid *)",
+      "Bash(sqlite3 '/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/database.sqlite' 'SELECT id, status, render_path, output_dir IS NOT NULL as has_dir FROM sessions WHERE render_path='\\\\''interactive'\\\\'' ORDER BY created_at DESC LIMIT 10;')",
+      "Bash(sqlite3 \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/database.sqlite\" \"DELETE FROM sessions; DELETE FROM conversations; SELECT 'sessions remaining: ' || COUNT\\(*\\) FROM sessions;\")",
+      "Bash(sqlite3 \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/database.sqlite\" \"DELETE FROM conversation_notes; SELECT 'notes remaining: ' || COUNT\\(*\\) FROM conversation_notes;\")",
+      "Bash(curl -L --max-time 15 -o \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/client/public/3Dmol-nojquery.min.js\" \"https://3dmol.org/build/3Dmol-nojquery.min.js\")",
+      "Bash(curl -L --max-time 15 -sI \"https://unpkg.com/3dmol/build/3Dmol-nojquery.min.js\")",
+      "Bash(curl -L --max-time 15 -sI \"https://cdn.jsdelivr.net/npm/3dmol/build/3Dmol-nojquery.min.js\")",
+      "Bash(grep -o '\\\\$3Dmol\\\\|window\\\\.\\\\$3Dmol\\\\|global\\\\.\\\\$3Dmol\\\\|exports\\\\.\\\\$3Dmol\\\\|createViewer' \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/client/public/3Dmol-nojquery.min.js\")",
+      "Bash(grep -o 'window\\\\[.\\\\+\\\\]=.\\\\{0,40\\\\}\\\\$3Dmol\\\\|e\\\\[.\\\\+\\\\]=.\\\\{0,40\\\\}\\\\$3Dmol\\\\|\\\\$3Dmol=\\\\|global\\\\.\\\\$3Dmol\\\\|t\\\\.\\\\$3Dmol' \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/client/public/3Dmol-nojquery.min.js\")",
+      "Bash(grep -o 'e\\\\[\".\\\\+\"\\\\]=.\\\\{0,60\\\\}')",
+      "Bash(grep -c 'window\\\\.\\\\$3Dmol' \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/client/public/3Dmol-nojquery.min.js\")"
     ]
   }
 }

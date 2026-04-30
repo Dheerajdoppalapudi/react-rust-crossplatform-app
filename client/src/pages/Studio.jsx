@@ -748,7 +748,7 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
                   <UserBubble prompt={bootstrapPrompt} />
                 </Box>
               )}
-              <LoadingView stage={bootstrapStage} framesData={bootstrapFrames} textMode={!videoEnabled} />
+              <LoadingView stage={bootstrapStage} framesData={bootstrapFrames} mode={!videoEnabled ? 'interactive' : undefined} textMode={false} />
             </Box>
           )}
 

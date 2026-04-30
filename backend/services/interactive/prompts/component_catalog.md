@@ -106,6 +106,282 @@ Every entity block in `blocks[]` MUST have ALL THREE fields:
 
 ---
 
+## math_formula
+
+**Use when**: displaying mathematical equations, derivations, proofs, physics formulas, chemistry equilibria, or any LaTeX content — especially step-by-step derivations.
+
+**Props**:
+- `latex` (string, required unless `steps` provided): LaTeX formula string (no surrounding `$$`).
+- `displayMode` (boolean, optional, default `true`): `true` = block/centered; `false` = inline.
+- `steps` (array of `{ "latex": string, "label": string }`, optional): derivation sequence — pairs with a `step_controls` block for interactive stepping.
+- `highlights` (array of `{ "term": string, "color": string, "tooltip": string }`, optional): color-highlight specific TeX tokens in the rendered output.
+- `caption` (string, optional): muted label below the formula.
+- `fontSize` (string, optional, default `"1.2rem"`): CSS font-size override.
+
+**Rules**:
+- Either `latex` OR `steps` must be present (not both required, but at least one).
+- When using `steps`, always pair with a `step_controls` block immediately after.
+- Do NOT wrap latex in `$$` or `\[` — the component adds delimiters.
+
+**Example — single formula with highlights**:
+```json
+{
+  "id":          "b2",
+  "type":        "entity",
+  "entity_type": "math_formula",
+  "props": {
+    "latex":    "E = mc^2",
+    "highlights": [
+      { "term": "mc^2", "color": "#4B72FF", "tooltip": "Rest-mass energy" }
+    ],
+    "caption": "Einstein's mass-energy equivalence"
+  }
+}
+```
+
+**Example — derivation steps**:
+```json
+{
+  "id":          "b3",
+  "type":        "entity",
+  "entity_type": "math_formula",
+  "props": {
+    "steps": [
+      { "latex": "ax^2 + bx + c = 0",               "label": "Start with standard form" },
+      { "latex": "x^2 + \\frac{b}{a}x = -\\frac{c}{a}", "label": "Divide by a" },
+      { "latex": "x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}", "label": "Apply quadratic formula" }
+    ]
+  }
+}
+```
+
+---
+
+## chart
+
+**Use when**: visualizing quantitative data — comparisons, trends, distributions, proportions, correlations, or mixed series.
+
+**Props**:
+- `type` (string, **required**): `"bar"` | `"line"` | `"area"` | `"scatter"` | `"pie"` | `"radar"` | `"composed"`
+- `data` (array, **required**): array of row objects, e.g. `[{ "month": "Jan", "revenue": 4000 }]`
+- `series` (array of `{ "dataKey": string, "name": string, "color": string, "type": string }`, required except pie): what to plot; for composed chart, each item has `type: "bar"|"line"|"area"`.
+- `xKey` (string, required except pie): data key for x-axis.
+- `pieKey` (string, default `"value"`): value key for pie charts.
+- `nameKey` (string, default `"name"`): label key for pie charts.
+- `title` (string, optional): chart title above the chart.
+- `xLabel` / `yLabel` (string, optional): axis labels.
+- `height` (number, optional, default `280`).
+- `stacked` (boolean, optional): stack bar/area series.
+- `layout` (string, optional): `"horizontal"` (default) | `"vertical"` for bar charts.
+- `logScale` (boolean, optional): log scale on y-axis.
+- `showLegend` / `showGrid` (boolean, optional, default `true`).
+- `referenceLines` (array of `{ "value": number, "label": string, "axis": "x"|"y", "color": string }`, optional).
+- `colors` (string[], optional): override color rotation.
+- `caption` (string, optional).
+
+**Example — bar chart**:
+```json
+{
+  "id":          "b4",
+  "type":        "entity",
+  "entity_type": "chart",
+  "props": {
+    "type":   "bar",
+    "data":   [
+      { "month": "Jan", "revenue": 4200, "cost": 2800 },
+      { "month": "Feb", "revenue": 5100, "cost": 3100 },
+      { "month": "Mar", "revenue": 4700, "cost": 2600 }
+    ],
+    "series": [
+      { "dataKey": "revenue", "name": "Revenue" },
+      { "dataKey": "cost",    "name": "Cost" }
+    ],
+    "xKey": "month",
+    "title": "Q1 Revenue vs Cost",
+    "referenceLines": [{ "value": 3000, "label": "Break-even", "axis": "y" }],
+    "caption": "Monthly figures in USD"
+  }
+}
+```
+
+**Example — pie chart**:
+```json
+{
+  "id":          "b5",
+  "type":        "entity",
+  "entity_type": "chart",
+  "props": {
+    "type":    "pie",
+    "data":    [
+      { "name": "Proteins", "value": 35 },
+      { "name": "Fats",     "value": 30 },
+      { "name": "Carbs",    "value": 35 }
+    ],
+    "pieKey":  "value",
+    "nameKey": "name",
+    "title":   "Macronutrient breakdown"
+  }
+}
+```
+
+---
+
+## graph_canvas
+
+**Use when**: the concept involves nodes and edges — trees, DAGs, state machines, dependency graphs, network topologies, call graphs, entity relationships.
+
+**Props**:
+- `nodes` (array, **required**): `[{ "id": string, "label": string, "type": "input"|"default"|"output", "x": number, "y": number }]`. `x`/`y` only needed when `layout: "manual"`.
+- `edges` (array, **required**): `[{ "id": string, "source": string, "target": string, "label": string, "animated": boolean }]`.
+- `layout` (string, optional, default `"dagre-lr"`): `"dagre-lr"` | `"dagre-tb"` | `"manual"`.
+- `directed` (boolean, optional, default `true`): show arrowheads.
+- `height` (number, optional, default `340`).
+- `showMinimap` / `showControls` (boolean, optional).
+- `stepHighlights` (array of `{ "nodes": string[], "edges": string[] }`, optional): per-step highlight sets — pairs with `step_controls`.
+- `nodeColors` (object `{ [nodeId]: colorString }`, optional): per-node color overrides.
+- `caption` (string, optional).
+
+**Example**:
+```json
+{
+  "id":          "b6",
+  "type":        "entity",
+  "entity_type": "graph_canvas",
+  "props": {
+    "nodes": [
+      { "id": "A", "label": "Request",  "type": "input"   },
+      { "id": "B", "label": "Auth",     "type": "default" },
+      { "id": "C", "label": "Handler",  "type": "default" },
+      { "id": "D", "label": "Response", "type": "output"  }
+    ],
+    "edges": [
+      { "id": "e1", "source": "A", "target": "B", "label": "JWT?" },
+      { "id": "e2", "source": "B", "target": "C" },
+      { "id": "e3", "source": "C", "target": "D" }
+    ],
+    "layout": "dagre-lr",
+    "stepHighlights": [
+      { "nodes": ["A"],           "edges": []           },
+      { "nodes": ["A","B"],       "edges": ["e1"]       },
+      { "nodes": ["A","B","C"],   "edges": ["e1","e2"]  },
+      { "nodes": ["A","B","C","D"],"edges": ["e1","e2","e3"] }
+    ],
+    "caption": "Request lifecycle"
+  }
+}
+```
+
+---
+
+## molecule_viewer
+
+**Use when**: displaying molecular structures — organic molecules (SMILES), proteins (PDB), drug-receptor complexes, crystal structures.
+
+**Props**:
+- `format` (string, **required**): `"smiles"` | `"pdb"` | `"sdf"` | `"mol2"` | `"xyz"` | `"cif"`.
+- `data` (string, **required**): molecule data in the specified format (e.g. `"CCO"` for ethanol in SMILES).
+- `style` (string, optional, default `"ballAndStick"`): `"ballAndStick"` | `"stick"` | `"sphere"` | `"line"` | `"cartoon"` | `"surface"`.
+- `colorScheme` (string, optional, default `"element"`): `"element"` | `"residue"` | `"chain"` | `"spectrum"` | `"ssPyMOL"` | `"rasmol"`.
+- `highlights` (array of `{ "selection": object, "style": string, "color": string }`, optional): extra style overlays for specific atoms/residues.
+- `labels` (array of `{ "selection": object, "text": string, "fontSize": number, "color": string }`, optional): floating atom labels.
+- `surfaces` (array of `{ "type": "VDW"|"SAS"|"SES", "opacity": number, "color": string }`, optional): molecular surface overlays.
+- `spin` (boolean, optional, default `false`): auto-rotate.
+- `spinSpeed` (number, optional, default `1`).
+- `zoom` (number, optional, default `1.0`): zoom multiplier.
+- `backgroundColor` (string, optional, default `"transparent"`).
+- `height` (number, optional, default `360`).
+- `caption` (string, optional).
+
+**Example**:
+```json
+{
+  "id":          "b7",
+  "type":        "entity",
+  "entity_type": "molecule_viewer",
+  "props": {
+    "format":      "smiles",
+    "data":        "CN1C=NC2=C1C(=O)N(C(=O)N2C)C",
+    "style":       "ballAndStick",
+    "colorScheme": "element",
+    "spin":        true,
+    "caption":     "Caffeine molecule"
+  }
+}
+```
+
+---
+
+## map_viewer
+
+**Use when**: geographic content — showing locations, routes, regions, city comparisons, historical spread, or any spatial data on a map.
+
+**Props**:
+- `center` (array `[lat, lng]`, **required**): map center coordinates.
+- `zoom` (number, optional, default `4`): initial zoom level (1=world, 10=city, 15=street).
+- `height` (number, optional, default `380`).
+- `tileLayer` (string, optional, default `"osm"`): `"osm"` | `"satellite"` | `"terrain"` | `"dark"` | `"light"` | `"none"`.
+- `markers` (array of `{ "lat": number, "lng": number, "label": string, "color": string, "tooltip": string }`, optional).
+- `paths` (array of `{ "points": [[lat,lng],...], "color": string, "weight": number, "label": string }`, optional): polylines/routes.
+- `polygons` (array of `{ "points": [[lat,lng],...], "fillColor": string, "opacity": number, "strokeColor": string, "label": string, "tooltip": string }`, optional): filled regions.
+- `circles` (array of `{ "lat": number, "lng": number, "radius": number, "color": string, "tooltip": string }`, optional): radius circles in meters.
+- `bounds` ([[lat,lng],[lat,lng]], optional): auto-fit map to these SW/NE bounds.
+- `caption` (string, optional).
+
+**Example**:
+```json
+{
+  "id":          "b8",
+  "type":        "entity",
+  "entity_type": "map_viewer",
+  "props": {
+    "center": [48.8566, 2.3522],
+    "zoom": 5,
+    "tileLayer": "light",
+    "markers": [
+      { "lat": 48.8566, "lng":  2.3522, "label": "Paris",  "color": "#4B72FF", "tooltip": "Capital of France" },
+      { "lat": 51.5074, "lng": -0.1278, "label": "London", "color": "#e879f9", "tooltip": "Capital of UK" },
+      { "lat": 52.5200, "lng": 13.4050, "label": "Berlin", "color": "#f59e0b", "tooltip": "Capital of Germany" }
+    ],
+    "caption": "Major European capitals"
+  }
+}
+```
+
+---
+
+## timeline
+
+**Use when**: chronological content — historical events, product roadmaps, biographies, scientific discoveries, project milestones.
+
+**Props**:
+- `events` (array, **required**): `[{ "date": string, "title": string, "description": string, "category": string, "color": string, "icon": string }]`. `date`, `title` required per event; others optional.
+- `orientation` (string, optional, default `"vertical"`): `"vertical"` | `"horizontal"`.
+- `stepReveal` (boolean, optional, default `false`): if true, reveals events one-by-one as step advances — pairs with `step_controls`.
+- `groupBy` (string, optional): field name to group events into labeled sections (e.g. `"category"`).
+- `caption` (string, optional).
+
+**Example**:
+```json
+{
+  "id":          "b9",
+  "type":        "entity",
+  "entity_type": "timeline",
+  "props": {
+    "events": [
+      { "date": "1905", "title": "Special Relativity",   "description": "Einstein publishes the special theory of relativity.", "category": "Physics",  "color": "#4B72FF", "icon": "⚡" },
+      { "date": "1907", "title": "Equivalence Principle","description": "Gravity and acceleration are indistinguishable.", "category": "Physics",  "color": "#4B72FF", "icon": "🍎" },
+      { "date": "1915", "title": "General Relativity",   "description": "Spacetime curves around mass and energy.",         "category": "Physics",  "color": "#e879f9", "icon": "🌌" },
+      { "date": "1921", "title": "Nobel Prize",          "description": "Awarded for the photoelectric effect discovery.",   "category": "Honours", "color": "#f59e0b", "icon": "🏅" }
+    ],
+    "orientation": "vertical",
+    "groupBy": "category",
+    "caption": "Einstein's major discoveries"
+  }
+}
+```
+
+---
+
 ## freeform_html (escape hatch)
 
 **Use when**: no pre-built type covers the need — for example, a physics simulation with a canvas animation, an interactive graph, or any bespoke visual requiring custom JavaScript. **Prefer pre-built types whenever they fit** — `freeform_html` adds 2–3 s of latency.

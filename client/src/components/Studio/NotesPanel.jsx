@@ -5,6 +5,25 @@ import ContentCopyIcon  from '@mui/icons-material/ContentCopy'
 import CheckIcon        from '@mui/icons-material/Check'
 import MarkdownText     from '../Interactive/MarkdownText'
 
+function toBullets(notes) {
+  // Split on newlines, strip any existing bullet chars, re-emit as markdown list
+  const lines = notes
+    .split('\n')
+    .map(l => l.trim().replace(/^[-•*]\s*/, ''))
+    .filter(Boolean)
+
+  // Already a single block of prose (no newlines) — split on sentences
+  if (lines.length === 1) {
+    return lines[0]
+      .split(/(?<=[.!?])\s+/)
+      .filter(Boolean)
+      .map(s => `- ${s}`)
+      .join('\n')
+  }
+
+  return lines.map(l => `- ${l}`).join('\n')
+}
+
 export default function NotesPanel({ notes }) {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
@@ -16,8 +35,10 @@ export default function NotesPanel({ notes }) {
 
   if (!notes?.trim()) return null
 
+  const bulletNotes = toBullets(notes)
+
   const handleCopy = () => {
-    navigator.clipboard.writeText(notes)
+    navigator.clipboard.writeText(bulletNotes)
     setCopied(true)
     clearTimeout(copyTimerRef.current)
     copyTimerRef.current = setTimeout(() => setCopied(false), 1800)
@@ -50,7 +71,7 @@ export default function NotesPanel({ notes }) {
       </Box>
 
       <Collapse in={open} unmountOnExit>
-        <MarkdownText content={notes} sx={{ color: bodyText }} />
+        <MarkdownText content={bulletNotes} sx={{ color: bodyText }} />
       </Collapse>
     </Box>
   )

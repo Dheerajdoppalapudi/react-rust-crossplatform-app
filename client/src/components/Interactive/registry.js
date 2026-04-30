@@ -12,12 +12,24 @@ import MermaidViewer   from './entities/MermaidViewer'
 import CodeWalkthrough from './entities/CodeWalkthrough'
 import StepControls    from './entities/StepControls'
 import SandboxedFrame  from './SandboxedFrame'
+import MathFormula     from './entities/MathFormula'
+import ChartViewer     from './entities/ChartViewer'
+import GraphCanvas     from './entities/GraphCanvas'
+import MoleculeViewer  from './entities/MoleculeViewer'
+import MapViewer       from './entities/MapViewer'
+import TimelineViewer  from './entities/TimelineViewer'
 
 export const REGISTRY = {
   mermaid_viewer:   MermaidViewer,
   code_walkthrough: CodeWalkthrough,
   step_controls:    StepControls,
   freeform_html:    SandboxedFrame,
+  math_formula:     MathFormula,
+  chart:            ChartViewer,
+  graph_canvas:     GraphCanvas,
+  molecule_viewer:  MoleculeViewer,
+  map_viewer:       MapViewer,
+  timeline:         TimelineViewer,
 }
 
 export function resolveEntity(type) {
