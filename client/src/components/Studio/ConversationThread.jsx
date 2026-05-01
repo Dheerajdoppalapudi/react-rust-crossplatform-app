@@ -78,7 +78,7 @@ function RetryBanner({ turn, onRetry }) {
   )
 }
 
-function TurnView({ turn, onPauseAsk, onRetryTurn }) {
+function TurnView({ turn, onPauseAsk, onRetryTurn, onRetryGeneration }) {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
 
@@ -107,9 +107,10 @@ function TurnView({ turn, onPauseAsk, onRetryTurn }) {
             backgroundColor: isDark ? '#1a1a1a' : '#fff8f8',
             border: `1px solid ${theme.palette.error.main}22`,
           }}>
-            <Typography sx={{ fontSize: 13.5, color: theme.palette.text.secondary, lineHeight: 1.5 }}>
+            <Typography sx={{ fontSize: 13.5, color: theme.palette.text.secondary, lineHeight: 1.5, mb: 1.5 }}>
               We couldn't generate a response this time. Please try asking again.
             </Typography>
+            <RetryBanner turn={turn} onRetry={onRetryGeneration} />
           </Box>
         ) : turn.id && turn.videoPhase === 'generating' ? (
           <LoadingView stage="video" compact framesData={{ sessionId: turn.id, framesData: turn.framesData }} />
@@ -132,19 +133,19 @@ function TurnView({ turn, onPauseAsk, onRetryTurn }) {
   )
 }
 
-function TurnWithBoundary({ turn, onPauseAsk, onRetryTurn }) {
+function TurnWithBoundary({ turn, onPauseAsk, onRetryTurn, onRetryGeneration }) {
   return (
     <ErrorBoundary level="component" key={`${turn.tempId}-boundary`}>
-      <TurnView turn={turn} onPauseAsk={onPauseAsk} onRetryTurn={onRetryTurn} />
+      <TurnView turn={turn} onPauseAsk={onPauseAsk} onRetryTurn={onRetryTurn} onRetryGeneration={onRetryGeneration} />
     </ErrorBoundary>
   )
 }
 
-export default function ConversationThread({ turns, onPauseAsk, onRetryTurn }) {
+export default function ConversationThread({ turns, onPauseAsk, onRetryTurn, onRetryGeneration }) {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', pt: 1, pb: 1 }}>
       {turns.map((turn) => (
-        <TurnWithBoundary key={turn.tempId} turn={turn} onPauseAsk={onPauseAsk} onRetryTurn={onRetryTurn} />
+        <TurnWithBoundary key={turn.tempId} turn={turn} onPauseAsk={onPauseAsk} onRetryTurn={onRetryTurn} onRetryGeneration={onRetryGeneration} />
       ))}
     </Box>
   )

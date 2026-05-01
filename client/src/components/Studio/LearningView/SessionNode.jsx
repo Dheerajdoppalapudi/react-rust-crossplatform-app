@@ -86,8 +86,13 @@ export default function SessionNode({ data }) {
           y: self.position.y + (NODE_H - ASK_H) / 2,
         },
         data: {
-          onSubmit: (q) => { removeGhost(); data.onAsk?.({ question: q, sessionId: turn.id }) },
-          onCancel: removeGhost,
+          onSubmit: ({ question, model, videoEnabled }) => {
+            removeGhost()
+            data.onAsk?.({ question, sessionId: turn.id, model, videoEnabled })
+          },
+          onCancel:           removeGhost,
+          defaultModel:       data.defaultModel,
+          defaultVideoEnabled: data.defaultVideoEnabled,
         },
         draggable:  true,
         selectable: false,

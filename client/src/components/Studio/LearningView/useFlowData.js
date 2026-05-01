@@ -23,7 +23,7 @@ function layoutWithDagre(nodes, edges) {
  * Converts the flat `turns` array into React Flow nodes + edges.
  * Dagre handles the hierarchical layout automatically.
  */
-export function useFlowData(turns, onAsk) {
+export function useFlowData(turns, onAsk, defaultModel, defaultVideoEnabled) {
   return useMemo(() => {
     // Include loading turns (id: null) using tempId as a placeholder node ID
     const valid = turns.filter((t) => t.id || t.isLoading)
@@ -38,7 +38,7 @@ export function useFlowData(turns, onAsk) {
       id:       nodeId(turn),
       type:     'sessionNode',
       position: { x: 0, y: 0 },   // dagre fills this in
-      data:     { turn, onAsk },
+      data:     { turn, onAsk, defaultModel, defaultVideoEnabled },
     }))
 
     const edges = valid

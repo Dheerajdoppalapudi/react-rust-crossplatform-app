@@ -119,6 +119,63 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
     runVideoGenerationForTurn(turn.tempId, turn.id)
   }, [setTurnVideoPhase, runVideoGenerationForTurn])
 
+  const handleRetryGeneration = useCallback(async (turn) => {
+    setTurns((prev) => prev.map((t) =>
+      t.tempId === turn.tempId
+        ? { ...t, isLoading: true, stage: 'planning', videoPhase: null, id: null }
+        : t
+    ))
+
+    const pauseCtx = turn.parentSessionId
+      ? { sessionId: turn.parentSessionId, frameIndex: turn.parentFrameIndex ?? undefined, caption: undefined }
+      : null
+
+    const it1 = videoEnabled ? setTimeout(() =>
+      setTurns((p) => p.map((t) => t.tempId === turn.tempId ? { ...t, stage: 'generating' } : t)), 2500) : null
+    const it2 = videoEnabled ? setTimeout(() =>
+      setTurns((p) => p.map((t) => t.tempId === turn.tempId ? { ...t, stage: 'rendering'  } : t)), 6000) : null
+
+    try {
+      const renderModeId = selectedRenderMode?.id !== 'auto' ? selectedRenderMode.id : null
+      const data = await api.imageGeneration(
+        turn.prompt, activeConvId, pauseCtx,
+        notesEnabled, selectedModel.provider, selectedModel.model,
+        null, renderModeId, null, !videoEnabled,
+      )
+      const framesData = normalizeFramesData(data)
+      const realTurn = {
+        tempId:           turn.tempId,
+        id:               data.session_id,
+        conversation_id:  data.conversation_id,
+        turn_index:       data.turn_index,
+        prompt:           turn.prompt,
+        intent_type:      data.intent_type,
+        render_path:      data.render_path,
+        frame_count:      data.frame_count,
+        isLoading:        false,
+        stage:            null,
+        framesData,
+        videoPhase:       videoEnabled ? 'generating' : 'disabled',
+        parentSessionId:  turn.parentSessionId ?? null,
+        parentFrameIndex: turn.parentFrameIndex ?? null,
+      }
+      setTurns((prev) => prev.map((t) => t.tempId === turn.tempId ? realTurn : t))
+      await onConversationsRefresh()
+      if (videoEnabled) runVideoGenerationForTurn(turn.tempId, data.session_id)
+    } catch (err) {
+      if (err?.name !== 'AbortError') {
+        toast.error('Generation failed. Please try again.')
+        setTurns((prev) => prev.map((t) =>
+          t.tempId === turn.tempId ? { ...t, isLoading: false, videoPhase: 'error' } : t
+        ))
+      }
+    } finally {
+      clearTimeout(it1)
+      clearTimeout(it2)
+    }
+  }, [activeConvId, notesEnabled, videoEnabled, selectedModel, selectedRenderMode,
+      onConversationsRefresh, runVideoGenerationForTurn, toast])
+
   useEffect(() => {
     threadBottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [turns.length])
@@ -486,12 +543,14 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
   const showThread      = !isBootstrapping && turns.length > 0
 
   const followUpSuggestions = useMemo(() => {
-    const isFollowUp = showThread && !!activeConvId && !isAnyGenerating && !pauseContext
+    const lastTurn = turns[turns.length - 1]
+    const lastTurnErrored = lastTurn && lastTurn.videoPhase === 'error'
+    const isFollowUp = showThread && !!activeConvId && !isAnyGenerating && !pauseContext && !lastTurnErrored
     if (!isFollowUp) return []
     return activeConversationMeta?.suggested_followups?.length
       ? activeConversationMeta.suggested_followups
       : (FOLLOWUP_SUGGESTIONS[activeConversationMeta?.intent_type] || FOLLOWUP_SUGGESTIONS.illustration)
-  }, [showThread, activeConvId, isAnyGenerating, pauseContext, activeConversationMeta])
+  }, [showThread, activeConvId, isAnyGenerating, pauseContext, activeConversationMeta, turns])
 
   const handleSuggestionClick = useCallback((s) => {
     setPrompt(s)
@@ -505,8 +564,11 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
     setTimeout(() => inputRef.current?.focus(), 120)
   }, [])
 
-  const handleLearnGenerate = useCallback(async ({ question, sessionId }) => {
+  const handleLearnGenerate = useCallback(async ({ question, sessionId, model: askModel, videoEnabled: askVideoEnabled }) => {
     if (!activeConvId || !question.trim()) return
+
+    const effectiveModel        = askModel        ?? selectedModel
+    const effectiveVideoEnabled = askVideoEnabled  ?? videoEnabled
 
     const thisGenId = ++generationIdRef.current
     const isStale   = () => generationIdRef.current !== thisGenId
@@ -521,22 +583,22 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
     setTurns((prev) => [...prev, createTempTurn({
       tempId,
       prompt:          question,
-      videoEnabled,
+      videoEnabled:    effectiveVideoEnabled,
       parentSessionId: sessionId ?? null,
       parentFrameIndex: null,
     })])
 
-    const it1 = videoEnabled ? setTimeout(() =>
+    const it1 = effectiveVideoEnabled ? setTimeout(() =>
       setTurns((p) => p.map((t) => t.tempId === tempId ? { ...t, stage: 'generating' } : t)), 2500) : null
-    const it2 = videoEnabled ? setTimeout(() =>
+    const it2 = effectiveVideoEnabled ? setTimeout(() =>
       setTurns((p) => p.map((t) => t.tempId === tempId ? { ...t, stage: 'rendering'  } : t)), 6000) : null
 
     try {
       const renderModeId = selectedRenderMode?.id !== 'auto' ? selectedRenderMode.id : null
       const data = await api.imageGeneration(
         question, activeConvId, capturedPauseCtx,
-        notesEnabled, selectedModel.provider, selectedModel.model,
-        genController.signal, renderModeId, null, !videoEnabled,
+        notesEnabled, effectiveModel.provider, effectiveModel.model,
+        genController.signal, renderModeId, null, !effectiveVideoEnabled,
       )
 
       if (isStale()) return
@@ -554,14 +616,14 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
         isLoading:        false,
         stage:            null,
         framesData,
-        videoPhase:       videoEnabled ? 'generating' : 'disabled',
+        videoPhase:       effectiveVideoEnabled ? 'generating' : 'disabled',
         parentSessionId:  capturedPauseCtx.sessionId ?? null,
         parentFrameIndex: null,
       }
 
       setTurns((prev) => prev.map((t) => t.tempId === tempId ? realTurn : t))
       await onConversationsRefresh()
-      if (videoEnabled) runVideoGenerationForTurn(tempId, data.session_id)
+      if (effectiveVideoEnabled) runVideoGenerationForTurn(tempId, data.session_id)
     } catch (err) {
       if (err?.name !== 'AbortError') {
         console.error('[Studio] handleLearnGenerate:', err)
@@ -591,6 +653,8 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
         onExit={handleExitLearnView}
         onAskFromLearn={handleLearnAsk}
         onGenerateFromCanvas={handleLearnGenerate}
+        defaultModel={selectedModel}
+        defaultVideoEnabled={videoEnabled}
       />
     )
   }
@@ -763,6 +827,7 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
                 turns={turns}
                 onPauseAsk={handlePauseAsk}
                 onRetryTurn={handleRetryTurn}
+                onRetryGeneration={handleRetryGeneration}
               />
 
               {followUpSuggestions.length > 0 && (

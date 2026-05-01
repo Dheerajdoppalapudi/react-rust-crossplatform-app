@@ -11,7 +11,7 @@ import { getConversationMediaToken } from '../../../services/mediaToken'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
-export default function LearningView({ turns, conversationId, onExit, onAskFromLearn, onGenerateFromCanvas }) {
+export default function LearningView({ turns, conversationId, onExit, onAskFromLearn, onGenerateFromCanvas, defaultModel, defaultVideoEnabled }) {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
 
@@ -32,8 +32,8 @@ export default function LearningView({ turns, conversationId, onExit, onAskFromL
     onAskFromLearn?.({ question, sessionId, frameIndex, caption })
   }, [onAskFromLearn])
 
-  const handleCanvasAsk = useCallback(({ question, sessionId }) => {
-    onGenerateFromCanvas?.({ question, sessionId })
+  const handleCanvasAsk = useCallback(({ question, sessionId, model, videoEnabled }) => {
+    onGenerateFromCanvas?.({ question, sessionId, model, videoEnabled })
   }, [onGenerateFromCanvas])
 
   const handleMerge = useCallback(async () => {
@@ -138,7 +138,7 @@ export default function LearningView({ turns, conversationId, onExit, onAskFromL
         </Button>
       </Box>
 
-      <Canvas turns={turns} onNodeClick={handleNodeClick} onAsk={handleCanvasAsk} />
+      <Canvas turns={turns} onNodeClick={handleNodeClick} onAsk={handleCanvasAsk} defaultModel={defaultModel} defaultVideoEnabled={defaultVideoEnabled} />
 
       {selectedNode && (
         <NodeModal

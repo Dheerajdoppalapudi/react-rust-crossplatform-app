@@ -210,26 +210,78 @@ export default function NodeModal({ node, onClose, onAsk }) {
           '&::-webkit-scrollbar': { width: 4 },
           '&::-webkit-scrollbar-thumb': { backgroundColor: theme.palette.divider, borderRadius: 2 },
         }}>
-          {node.videoPhase === 'generating' ? (
+          {node.render_path === 'text' || node.render_path === 'interactive' ? (
+            // Non-video node: show the prompt + notes content
+            <Box sx={{ flex: 1, overflow: 'auto',
+              '&::-webkit-scrollbar': { width: 4 },
+              '&::-webkit-scrollbar-thumb': { backgroundColor: theme.palette.divider, borderRadius: 2 },
+            }}>
+              <Box sx={{
+                mb: 2, px: 2, py: 1.5, borderRadius: '12px',
+                bgcolor: isDark ? 'rgba(255,255,255,0.04)' : '#f1f5f9',
+                border: `1px solid ${theme.palette.divider}`,
+              }}>
+                <Typography sx={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.palette.text.secondary, opacity: 0.55, mb: 0.75 }}>
+                  Prompt
+                </Typography>
+                <Typography sx={{ fontSize: 13.5, color: theme.palette.text.primary, lineHeight: 1.6 }}>
+                  {node.prompt}
+                </Typography>
+              </Box>
+
+              {loadingMeta && !noteLines.length ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', pt: 3 }}>
+                  <CircularProgress size={20} />
+                </Box>
+              ) : noteLines.length > 0 ? (
+                <Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1.25 }}>
+                    <NotesOutlinedIcon sx={{ fontSize: 13, color: theme.palette.text.secondary }} />
+                    <Typography sx={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.palette.text.secondary, opacity: 0.6 }}>
+                      Response
+                    </Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+                    {noteLines.map((line, i) => (
+                      <Box key={i} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.25 }}>
+                        <Box sx={{ width: 4, height: 4, borderRadius: '50%', flexShrink: 0, bgcolor: theme.palette.primary.main, opacity: 0.5, mt: 0.9 }} />
+                        <Typography sx={{ fontSize: 13, color: theme.palette.text.secondary, lineHeight: 1.65 }}>
+                          {line}
+                        </Typography>
+                      </Box>
+                    ))}
+                  </Box>
+                </Box>
+              ) : !loadingMeta ? (
+                <Typography sx={{ fontSize: 13, color: theme.palette.text.secondary, opacity: 0.45, fontStyle: 'italic' }}>
+                  No content for this session.
+                </Typography>
+              ) : null}
+            </Box>
+          ) : node.videoPhase === 'generating' ? (
             <VideoGeneratingPlaceholder isDark={isDark} theme={theme} />
           ) : (
             <VideoPanel sessionId={node.id} videoPhase={node.videoPhase} onPauseAsk={null} />
           )}
 
-          {loadingMeta && !captions.length && (
-            <Box sx={{ display: 'flex', justifyContent: 'center', pt: 3 }}>
-              <CircularProgress size={20} />
-            </Box>
-          )}
-          {captions.length > 0 && (
-            <FrameStrip
-              sessionId={node.id}
-              captions={captions}
-              activeFrame={activeFrame}
-              onSelect={setActiveFrame}
-              isDark={isDark}
-              theme={theme}
-            />
+          {node.render_path !== 'text' && node.render_path !== 'interactive' && (
+            <>
+              {loadingMeta && !captions.length && (
+                <Box sx={{ display: 'flex', justifyContent: 'center', pt: 3 }}>
+                  <CircularProgress size={20} />
+                </Box>
+              )}
+              {captions.length > 0 && (
+                <FrameStrip
+                  sessionId={node.id}
+                  captions={captions}
+                  activeFrame={activeFrame}
+                  onSelect={setActiveFrame}
+                  isDark={isDark}
+                  theme={theme}
+                />
+              )}
+            </>
           )}
         </Box>
 
