@@ -100,7 +100,7 @@ async def _plan_scene(
 
     svc = request_llm_service.get() or default_llm_service
     raw, _ = await asyncio.to_thread(
-        svc.make_system_user_request, system_prompt, user_msg, max_tokens=2000
+        svc.make_system_user_request, system_prompt, user_msg, max_tokens=4000
     )
     if raw is None:
         raise RuntimeError("Scene planner LLM returned None")

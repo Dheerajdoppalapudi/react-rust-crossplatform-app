@@ -362,12 +362,13 @@ export const api = {
   //   { type: "done",    session_id, conversation_id, turn_index }
   //   { type: "error",   message }
 
-  interactiveGeneration: ({ message, conversationId, provider, model }, onEvent, signal) => {
+  interactiveGeneration: ({ message, conversationId, parentSessionId, provider, model }, onEvent, signal) => {
     const body = new FormData()
     body.append('message', message)
-    if (conversationId) body.append('conversation_id', conversationId)
-    if (provider)       body.append('provider', provider)
-    if (model)          body.append('model', model)
+    if (conversationId)   body.append('conversation_id',    conversationId)
+    if (parentSessionId)  body.append('parent_session_id',  parentSessionId)
+    if (provider)         body.append('provider', provider)
+    if (model)            body.append('model', model)
 
     const token = getAccessToken()
     return fetch(`${API_BASE}/api/interactive_generation`, {

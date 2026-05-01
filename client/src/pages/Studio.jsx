@@ -311,10 +311,11 @@ export default function Studio({ activeConvId, activeConvTitle, activeConvStarre
 
         await api.interactiveGeneration(
           {
-            message:        submittedPrompt,
-            conversationId: activeConvId,
-            provider:       selectedModel.provider,
-            model:          selectedModel.model,
+            message:          submittedPrompt,
+            conversationId:   activeConvId,
+            parentSessionId:  parentSessionId,
+            provider:         selectedModel.provider,
+            model:            selectedModel.model,
           },
           (event) => {
             if (isStale()) return

@@ -36,6 +36,7 @@ from services.generation_service import (
     run_generation_pipeline,
     run_text_pipeline,
     build_conversation_context,
+    build_interactive_context,
     count_llm_calls,
 )
 from services.interactive.interactive_service import run_interactive_pipeline
@@ -102,10 +103,9 @@ async def image_generation(
 
     # ── Build conversation context for follow-up turns ─────────────────────────
     conversation_context = ""
-    if turn_index > 1:
+    if parent_session_id or pause_session_id:
         conversation_context = build_conversation_context(
-            conversation_id=conversation_id,
-            current_session_id=session_id,
+            parent_session_id=parent_session_id,
             pause_session_id=pause_session_id,
             pause_frame_index=pause_frame_index,
             pause_caption=pause_caption,
@@ -216,11 +216,12 @@ async def image_generation(
 
 @router.post("/api/interactive_generation")
 async def interactive_generation(
-    message:         str           = Form(""),
-    conversation_id: Optional[str] = Form(None),
-    provider:        str           = Form("claude"),
-    model:           Optional[str] = Form(None),
-    current_user:    User          = Depends(get_current_user),
+    message:           str           = Form(""),
+    conversation_id:   Optional[str] = Form(None),
+    parent_session_id: Optional[str] = Form(None),
+    provider:          str           = Form("claude"),
+    model:             Optional[str] = Form(None),
+    current_user:      User          = Depends(get_current_user),
 ):
     """
     Interactive mode SSE endpoint.
@@ -249,15 +250,15 @@ async def interactive_generation(
 
     insert_session(
         session_id, message, conversation_id, turn_index,
+        parent_session_id=parent_session_id,
         user_id=current_user.id,
     )
     touch_conversation(conversation_id)
 
     conversation_context = ""
-    if turn_index > 1:
-        conversation_context = build_conversation_context(
-            conversation_id=conversation_id,
-            current_session_id=session_id,
+    if parent_session_id:
+        conversation_context = build_interactive_context(
+            parent_session_id=parent_session_id,
         )
 
     _llm_provider_kwargs = {"provider": provider, "model": model}

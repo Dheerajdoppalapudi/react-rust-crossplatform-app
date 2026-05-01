@@ -21,6 +21,7 @@ from core.config import (
     MERMAID_INTENT_TYPES,
     MANIM_INTENT_TYPES,
     SVG_INTENT_TYPES,
+    INTERACTIVE_CONTEXT_TURNS,
 )
 from core.database import get_db
 from services.frame_generation.excalidraw_enhancer import enhance
@@ -187,27 +188,26 @@ def _append_summary_slide(
 
 
 def build_conversation_context(
-    conversation_id:    str,
-    current_session_id: str,
-    pause_session_id:   Optional[str] = None,
-    pause_frame_index:  Optional[int] = None,
-    pause_caption:      Optional[str] = None,
+    parent_session_id: Optional[str],
+    pause_session_id:  Optional[str] = None,
+    pause_frame_index: Optional[int] = None,
+    pause_caption:     Optional[str] = None,
 ) -> str:
     """
     Build the conversation context string injected into the planning prompt.
 
-    Strategy (sliding window):
-      - All prior turns except the most recent: prompt + captions only
-      - Most recent prior turn:                 prompt + full narration
-      - Pause context (if provided):            which frame + caption + narration at that frame
+    Walks the parent_session_id ancestor chain so branched follow-ups only see
+    their own lineage, not sibling branches.
+
+    Strategy:
+      - All ancestors except the most recent: prompt + frame captions only
+      - Most recent ancestor:                 prompt + full narration
+      - Pause context (if provided):          which frame + caption + narration at that frame
     """
-    with get_db() as conn:
-        prior_turns = conn.execute(
-            "SELECT id, prompt, turn_index, output_dir FROM sessions "
-            "WHERE conversation_id = ? AND id != ? AND status = 'done' "
-            "ORDER BY turn_index ASC",
-            (conversation_id, current_session_id),
-        ).fetchall()
+    if not parent_session_id:
+        return ""
+
+    prior_turns = _collect_ancestor_chain(parent_session_id, INTERACTIVE_CONTEXT_TURNS)
 
     if not prior_turns:
         return ""
@@ -273,6 +273,115 @@ def build_conversation_context(
             "Focus your new lesson on resolving the confusion or curiosity raised at this point.",
             "",
         ]
+
+    lines += [
+        "────────────────────────────────────────────────────────────────────",
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def _collect_ancestor_chain(
+    parent_session_id: Optional[str],
+    limit: int,
+) -> list:
+    """
+    Walk parent_session_id pointers up the tree, collecting up to `limit` ancestors.
+    Returns rows ordered oldest-first (root ancestor first, direct parent last).
+    """
+    chain: list = []
+    current_id = parent_session_id
+
+    with get_db() as conn:
+        while current_id and len(chain) < limit:
+            row = conn.execute(
+                "SELECT id, prompt, turn_index, output_dir, parent_session_id "
+                "FROM sessions WHERE id = ? AND status = 'done'",
+                (current_id,),
+            ).fetchone()
+            if not row:
+                break
+            chain.append(row)
+            current_id = row["parent_session_id"]
+
+    chain.reverse()  # oldest first
+    return chain
+
+
+def build_interactive_context(
+    parent_session_id: Optional[str],
+) -> str:
+    """
+    Build conversation context for interactive follow-up prompts.
+
+    Walks the parent_session_id ancestor chain (not all sessions in conversation)
+    so branched follow-ups only see their own lineage, not sibling branches.
+
+    Reads scene_ir.json from each ancestor and extracts:
+      - Text block content (what was actually explained)
+      - Entity block summaries (what widget was shown and its key props)
+
+    Capped at INTERACTIVE_CONTEXT_TURNS ancestors to stay within token budget.
+    """
+    if not parent_session_id:
+        return ""
+
+    prior_turns = _collect_ancestor_chain(parent_session_id, INTERACTIVE_CONTEXT_TURNS)
+
+    if not prior_turns:
+        return ""
+
+    lines: list[str] = [
+        "────────────────────────────────────────────────────────────────────",
+        "## CONVERSATION HISTORY — what has already been taught",
+        "",
+        "You are continuing an ongoing conversation. Build upon the lessons below.",
+        "Do NOT repeat concepts already covered. Connect new content to prior lessons where natural.",
+        "",
+    ]
+
+    for turn in prior_turns:
+        output_dir = turn["output_dir"] or ""
+        scene_ir_path = os.path.join(output_dir, "scene_ir.json")
+
+        lines.append(f"Turn {turn['turn_index']}: \"{turn['prompt']}\"")
+
+        if os.path.exists(scene_ir_path):
+            with open(scene_ir_path) as f:
+                scene = json.load(f)
+
+            lines.append(f"  Title: {scene.get('title', '')}")
+            lines.append(f"  Intent: {scene.get('intent', '')}")
+
+            for block in scene.get("blocks", []):
+                if block.get("type") == "text" and block.get("content"):
+                    lines.append(f"  Explanation: {block['content']}")
+                elif block.get("type") == "entity":
+                    entity_type = block.get("entity_type", "")
+                    props = block.get("props", {})
+                    # Summarise the entity without dumping all its data
+                    if entity_type == "mermaid_viewer":
+                        lines.append(f"  Widget: diagram — {props.get('caption', entity_type)}")
+                    elif entity_type == "code_walkthrough":
+                        lines.append(f"  Widget: code walkthrough ({props.get('language', '')})")
+                    elif entity_type == "math_formula":
+                        lines.append(f"  Widget: formula — {props.get('latex', props.get('caption', ''))}")
+                    elif entity_type == "chart":
+                        lines.append(f"  Widget: {props.get('type', 'chart')} chart — {props.get('title', props.get('caption', ''))}")
+                    elif entity_type == "graph_canvas":
+                        lines.append(f"  Widget: graph ({len(props.get('nodes', []))} nodes, {len(props.get('edges', []))} edges) — {props.get('caption', '')}")
+                    elif entity_type == "timeline":
+                        lines.append(f"  Widget: timeline ({len(props.get('events', []))} events) — {props.get('caption', '')}")
+                    elif entity_type == "map_viewer":
+                        lines.append(f"  Widget: map — {props.get('caption', '')}")
+                    elif entity_type == "molecule_viewer":
+                        lines.append(f"  Widget: molecule ({props.get('format', '')}: {props.get('data', '')[:40]})")
+                    elif entity_type == "freeform_html":
+                        lines.append(f"  Widget: interactive simulation — {props.get('spec', '')[:80]}")
+                    else:
+                        lines.append(f"  Widget: {entity_type}")
+
+        lines.append("")
 
     lines += [
         "────────────────────────────────────────────────────────────────────",

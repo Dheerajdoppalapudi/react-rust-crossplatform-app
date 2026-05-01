@@ -83,3 +83,7 @@ SVG_INTENT_TYPES: frozenset[str]     = frozenset({"illustration", "concept_analo
 # services/interactive/prompts/domains/{domain}.md.
 # Add a new domain here + create the .md file — no other code change needed.
 INTERACTIVE_DOMAINS: frozenset[str] = frozenset({"physics", "cs", "chemistry", "biology", "math", "history"})
+
+# How many prior interactive sessions to include in the follow-up context window.
+# Each session contributes its text blocks + entity summaries from scene_ir.json.
+INTERACTIVE_CONTEXT_TURNS: int = 3

@@ -67,14 +67,12 @@ Output ONLY a valid JSON object — no markdown fences, no prose before or after
 - The **first block must be `type: "text"`** — always introduce before showing a widget.
 - Never place two `entity` blocks consecutively — always put a `text` block between them.
 - `step_controls` must immediately follow its paired `code_walkthrough` (no text block between them unless the text explains the controls).
-- `freeform_html` may only appear as the **last** entity block — it adds 2–3 s of latency.
+- `freeform_html` may only appear as the **last** entity block.
 
 ---
 
 ## Text block rules
 
-- `content`: 80–180 words for the first block; 60–120 words for subsequent blocks.
-- Plain prose only — no markdown headings (`#`, `##`) or bullet lists inside `content`.
 - `**term**` bold is allowed for key terms on first use.
 - First block: end with one sentence pointing to the widget ("The diagram below traces…").
 - Later blocks: extract insight or add a new angle — never restate earlier content.
@@ -92,7 +90,7 @@ Output ONLY a valid JSON object — no markdown fences, no prose before or after
 ## Output rules (enforced)
 
 - Valid JSON only — no ``` fences, no `//` comments, no trailing commas.
-- `follow_ups`: exactly 3 strings.
+- `follow_ups`:  3-5 strings.
 - `blocks`: 2–6 items; first is always `text`.
 - Every entity block has both `"type": "entity"` AND `"entity_type": "<name>"`.
 - All `id` values are unique within the response (use `b1`, `b2`, `b3`, …).
