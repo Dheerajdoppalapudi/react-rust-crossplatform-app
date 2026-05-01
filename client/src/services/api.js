@@ -139,18 +139,105 @@ async function _request(url, options = {}) {
   return body.data ?? body
 }
 
+// ── Private SSE helper ─────────────────────────────────────────────────────────
+//
+// Shared by generateVideoStream and interactiveGeneration — both implement the
+// same "fetch → check response → reader loop → buffer split → processLine →
+// terminalSeen guard → error surfacing" pattern verbatim. Centralising it here
+// means the logic (partial-chunk buffering, final-flush, AbortError handling,
+// terminalSeen guard) only lives once.
+
+/**
+ * Drains an SSE ReadableStream reader, calling onEvent for each fully-parsed
+ * event object.  Handles partial chunks by buffering incomplete lines.
+ *
+ * Synthetic errors dispatched to onEvent:
+ *   - { type: 'error', message } when the stream closes without a terminal
+ *     'done' or 'error' event (e.g. unexpected server disconnect).
+ *   - { type: 'error', message } when a non-abort network exception occurs.
+ *
+ * AbortError is silently swallowed — callers update state via the abort path,
+ * not via onEvent.
+ *
+ * Always calls reader.releaseLock() in a finally block.
+ *
+ * @param {ReadableStreamDefaultReader} reader
+ * @param {(event: object) => void}     onEvent
+ */
+async function _readSSEStream(reader, onEvent) {
+  const decoder    = new TextDecoder()
+  let buffer       = ''
+  let terminalSeen = false   // true once 'done' or 'error' arrives
+
+  const processLine = (line) => {
+    if (!line.startsWith('data: ')) return
+    try {
+      const event = JSON.parse(line.slice(6))
+      if (event.type === 'done' || event.type === 'error') terminalSeen = true
+      onEvent(event)
+    } catch {
+      // Silently skip malformed JSON lines (comments, keep-alives, etc.).
+    }
+  }
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+
+      if (value) {
+        buffer += decoder.decode(value, { stream: !done })
+        const lines = buffer.split('\n')
+        // Retain the last (possibly incomplete) chunk in the buffer; flush
+        // everything on the final read where done === true.
+        buffer = done ? '' : (lines.pop() ?? '')
+        for (const line of lines) processLine(line)
+      }
+
+      if (done) {
+        // Final flush: the last SSE event may have arrived without a trailing \n.
+        for (const line of buffer.split('\n')) processLine(line)
+        break
+      }
+    }
+
+    // If the stream closed cleanly but never sent a terminal event the consumer
+    // would be stuck indefinitely — surface it as an error.
+    if (!terminalSeen) {
+      onEvent({ type: 'error', message: 'Stream ended unexpectedly. Please try again.' })
+    }
+  } catch (err) {
+    if (err.name !== 'AbortError') {
+      onEvent({ type: 'error', message: 'Stream interrupted. Please try again.' })
+    }
+  } finally {
+    reader.releaseLock()
+  }
+}
+
 // ── API surface ────────────────────────────────────────────────────────────────
 
 export const api = {
 
   // ── Generation ───────────────────────────────────────────────────────────────
 
+  // Options object (replaces the previous 10-positional-parameter signature).
   // signal: optional AbortSignal — pass controller.signal to cancel on navigation.
   // timeout: null — generation can run for 60-120+ seconds; no client-side timeout.
   // parentSessionId: for general follow-ups (no pause), the last completed session in
   //   the conversation — used to build the tree view edge. For pause follow-ups this is
   //   derived from pauseContext, so callers should leave it null in that case.
-  imageGeneration: async (message, conversationId = null, pauseContext = null, notesEnabled = false, provider = 'claude', model = null, signal = null, renderMode = null, parentSessionId = null, textOnly = false) => {
+  imageGeneration: async ({
+    message,
+    conversationId  = null,
+    pauseContext    = null,
+    notesEnabled    = false,
+    provider        = 'claude',
+    model           = null,
+    signal          = null,
+    renderMode      = null,
+    parentSessionId = null,
+    textOnly        = false,
+  }) => {
     const formData = new FormData()
     formData.append('message', message)
     formData.append('notes_enabled', String(notesEnabled))
@@ -275,83 +362,32 @@ export const api = {
 
   // CRIT-7: generateVideoStream returns an AbortController so the caller can
   // cancel the stream on component unmount. Pass controller.signal to abort.
-  generateVideoStream: (sessionId, onEvent, signal) => {
+  generateVideoStream: async (sessionId, onEvent, signal) => {
     const token = getAccessToken()
-    return fetch(`${API_BASE}/api/generate_video/${sessionId}?use_openai_tts=true`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-      signal,
-    })
-      .then(async (res) => {
-        if (!res.ok) {
-          // Pre-flight errors (404, 400, 503) come back as { status:"error", error:"..." }
-          let message = `HTTP ${res.status}`
-          try {
-            const body = await res.json()
-            message = body.error || body.detail || message
-          } catch {}
-          onEvent({ type: 'error', message })
-          return
-        }
-
-        const reader  = res.body.getReader()
-        const decoder = new TextDecoder()
-        let buffer       = ''
-        let terminalSeen = false  // tracks whether a 'done' or 'error' event arrived
-
-        const processLine = (line) => {
-          if (!line.startsWith('data: ')) return
-          try {
-            const event = JSON.parse(line.slice(6))
-            if (event.type === 'done' || event.type === 'error') terminalSeen = true
-            onEvent(event)
-          } catch {}
-        }
-
-        try {
-          while (true) {
-            const { done, value } = await reader.read()
-
-            if (value) {
-              buffer += decoder.decode(value, { stream: !done })
-              const lines = buffer.split('\n')
-              // Keep the last (potentially incomplete) line in the buffer,
-              // unless the stream is ending — then flush everything.
-              buffer = done ? '' : (lines.pop() ?? '')
-              for (const line of lines) processLine(line)
-            }
-
-            if (done) {
-              // Flush any remaining buffer content (handles the case where the
-              // final SSE event arrives in the last chunk without a trailing \n).
-              if (buffer) {
-                for (const line of buffer.split('\n')) processLine(line)
-                buffer = ''
-              }
-              break
-            }
-          }
-
-          // If the stream closed without a terminal event the video phase would
-          // stay as 'generating' forever — surface it as an error.
-          if (!terminalSeen) {
-            onEvent({ type: 'error', message: 'Stream ended unexpectedly. Please try again.' })
-          }
-        } catch (err) {
-          // AbortError means the caller cancelled — not an error to surface.
-          if (err.name !== 'AbortError') {
-            onEvent({ type: 'error', message: 'Stream interrupted. Please try again.' })
-          }
-        } finally {
-          reader.releaseLock()
-        }
+    let res
+    try {
+      res = await fetch(`${API_BASE}/api/generate_video/${sessionId}?use_openai_tts=true`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        signal,
       })
-      .catch((err) => {
-        if (err.name !== 'AbortError') {
-          onEvent({ type: 'error', message: 'Connection failed. Please try again.' })
-        }
-      })
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        onEvent({ type: 'error', message: 'Connection failed. Please try again.' })
+      }
+      return
+    }
+
+    if (!res.ok) {
+      // Pre-flight errors (404, 400, 503) come back as { status:"error", error:"..." }
+      let message = `HTTP ${res.status}`
+      try { const body = await res.json(); message = body.error || body.detail || message } catch {}
+      onEvent({ type: 'error', message })
+      return
+    }
+
+    await _readSSEStream(res.body.getReader(), onEvent)
   },
 
   // ── Interactive generation (SSE) ─────────────────────────────────────────────
@@ -362,74 +398,39 @@ export const api = {
   //   { type: "done",    session_id, conversation_id, turn_index }
   //   { type: "error",   message }
 
-  interactiveGeneration: ({ message, conversationId, parentSessionId, provider, model }, onEvent, signal) => {
-    const body = new FormData()
-    body.append('message', message)
-    if (conversationId)   body.append('conversation_id',    conversationId)
-    if (parentSessionId)  body.append('parent_session_id',  parentSessionId)
-    if (provider)         body.append('provider', provider)
-    if (model)            body.append('model', model)
+  interactiveGeneration: async ({ message, conversationId, parentSessionId, provider, model }, onEvent, signal) => {
+    const formBody = new FormData()
+    formBody.append('message', message)
+    if (conversationId)   formBody.append('conversation_id',   conversationId)
+    if (parentSessionId)  formBody.append('parent_session_id', parentSessionId)
+    if (provider)         formBody.append('provider', provider)
+    if (model)            formBody.append('model', model)
 
     const token = getAccessToken()
-    return fetch(`${API_BASE}/api/interactive_generation`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-      body,
-      signal,
-    })
-      .then(async (res) => {
-        if (!res.ok) {
-          let message = `HTTP ${res.status}`
-          try { const b = await res.json(); message = b.error || b.detail || message } catch {}
-          onEvent({ type: 'error', message })
-          return
-        }
-
-        const reader  = res.body.getReader()
-        const decoder = new TextDecoder()
-        let buffer       = ''
-        let terminalSeen = false
-
-        const processLine = (line) => {
-          if (!line.startsWith('data: ')) return
-          try {
-            const event = JSON.parse(line.slice(6))
-            if (event.type === 'done' || event.type === 'error') terminalSeen = true
-            onEvent(event)
-          } catch {}
-        }
-
-        try {
-          while (true) {
-            const { done, value } = await reader.read()
-            if (value) {
-              buffer += decoder.decode(value, { stream: !done })
-              const lines = buffer.split('\n')
-              buffer = done ? '' : (lines.pop() ?? '')
-              for (const line of lines) processLine(line)
-            }
-            if (done) {
-              if (buffer) { for (const line of buffer.split('\n')) processLine(line) }
-              break
-            }
-          }
-          if (!terminalSeen) {
-            onEvent({ type: 'error', message: 'Stream ended unexpectedly. Please try again.' })
-          }
-        } catch (err) {
-          if (err.name !== 'AbortError') {
-            onEvent({ type: 'error', message: 'Stream interrupted. Please try again.' })
-          }
-        } finally {
-          reader.releaseLock()
-        }
+    let res
+    try {
+      res = await fetch(`${API_BASE}/api/interactive_generation`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formBody,
+        signal,
       })
-      .catch((err) => {
-        if (err.name !== 'AbortError') {
-          onEvent({ type: 'error', message: 'Connection failed. Please try again.' })
-        }
-      })
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        onEvent({ type: 'error', message: 'Connection failed. Please try again.' })
+      }
+      return
+    }
+
+    if (!res.ok) {
+      let message = `HTTP ${res.status}`
+      try { const b = await res.json(); message = b.error || b.detail || message } catch {}
+      onEvent({ type: 'error', message })
+      return
+    }
+
+    await _readSSEStream(res.body.getReader(), onEvent)
   },
 
   // ── Media token endpoints (CRIT-2) ────────────────────────────────────────────

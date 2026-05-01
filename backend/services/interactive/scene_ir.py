@@ -53,7 +53,7 @@ class SceneBlock(BaseModel):
                 "code_walkthrough": ["code", "steps"],
                 "step_controls":    ["steps", "targetEntityId"],
                 "freeform_html":    ["spec"],
-                "chart":            ["type", "data", "series", "xKey"],
+                "chart":            ["type", "data"],   # series/xKey checked below per chart type
                 "graph_canvas":     ["nodes", "edges"],
                 "molecule_viewer":  ["format", "data"],
                 "map_viewer":       ["center"],
@@ -71,9 +71,13 @@ class SceneBlock(BaseModel):
                 if "latex" not in self.props and "steps" not in self.props:
                     raise ValueError("math_formula requires either 'latex' or 'steps' prop")
 
-            # pie chart doesn't use xKey/series — relax the chart validation
-            if self.entity_type == "chart" and self.props.get("type") in ("pie", "radar"):
-                pass  # xKey/series already present or not required for pie/radar
+            # pie / donut / radar don't use series or xKey
+            if self.entity_type == "chart":
+                chart_type = self.props.get("type", "")
+                if chart_type not in ("pie", "donut", "radar"):
+                    extra_missing = [k for k in ("series", "xKey") if k not in self.props]
+                    if extra_missing:
+                        raise ValueError(f"chart missing required props: {extra_missing}")
         return self
 
 

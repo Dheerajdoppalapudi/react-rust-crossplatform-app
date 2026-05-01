@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useRef, useEffect } from 'react'
 import dagre from 'dagre'
 
 export const NODE_W = 260
@@ -22,8 +22,19 @@ function layoutWithDagre(nodes, edges) {
 /**
  * Converts the flat `turns` array into React Flow nodes + edges.
  * Dagre handles the hierarchical layout automatically.
+ *
+ * Dep strategy:
+ *   - `turns`, `defaultModel`, `defaultVideoEnabled` are in the memo deps so
+ *     structural changes (new turn, model/video toggle) correctly re-layout.
+ *   - `onAsk` is kept behind a ref so useCallback churn in LearningView
+ *     (which recreates onAsk on every turn update) doesn't trigger unnecessary
+ *     dagre re-runs. Canvas.jsx's data-sync effect propagates the fresh ref
+ *     value to existing nodes without touching their positions.
  */
 export function useFlowData(turns, onAsk, defaultModel, defaultVideoEnabled) {
+  const onAskRef = useRef(onAsk)
+  useEffect(() => { onAskRef.current = onAsk }, [onAsk])
+
   return useMemo(() => {
     // Include loading turns (id: null) using tempId as a placeholder node ID
     const valid = turns.filter((t) => t.id || t.isLoading)
@@ -38,7 +49,7 @@ export function useFlowData(turns, onAsk, defaultModel, defaultVideoEnabled) {
       id:       nodeId(turn),
       type:     'sessionNode',
       position: { x: 0, y: 0 },   // dagre fills this in
-      data:     { turn, onAsk, defaultModel, defaultVideoEnabled },
+      data:     { turn, onAsk: onAskRef.current, defaultModel, defaultVideoEnabled },
     }))
 
     const edges = valid
@@ -52,5 +63,5 @@ export function useFlowData(turns, onAsk, defaultModel, defaultVideoEnabled) {
       }))
 
     return { nodes: layoutWithDagre(nodes, edges), edges }
-  }, [turns])
+  }, [turns, defaultModel, defaultVideoEnabled])
 }

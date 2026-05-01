@@ -100,7 +100,7 @@ function TurnView({ turn, onPauseAsk, onRetryTurn, onRetryGeneration }) {
           )
         ) : turn.isLoading ? (
           // ── Video mode: in-progress ────────────────────────────────────────
-          <LoadingView stage={turn.stage || 'planning'} compact textMode={turn.textMode} />
+          <LoadingView stage={turn.stage || 'planning'} compact textMode={turn.videoPhase === 'disabled'} />
         ) : turn.videoPhase === 'error' && !turn.id ? (
           <Box sx={{
             py: 2.5, px: 3, borderRadius: '12px',

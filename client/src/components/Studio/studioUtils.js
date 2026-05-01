@@ -53,8 +53,9 @@ export function createTempTurn({ tempId, prompt, videoEnabled, parentSessionId, 
     frame_count:      null,
     isLoading:        true,
     stage:            'planning',
-    textMode:         !videoEnabled,
     framesData:       null,
+    // videoPhase 'disabled' signals text/interactive mode — derive textMode from
+    // this at render time instead of storing a redundant dead field on every turn.
     videoPhase:       videoEnabled ? 'generating' : 'disabled',
     parentSessionId,
     parentFrameIndex,

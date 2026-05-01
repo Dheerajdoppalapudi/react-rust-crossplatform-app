@@ -110,7 +110,9 @@ export default function NodeModal({ node, onClose, onAsk }) {
     setActiveFrame(0)
     setQuestion('')
 
-    if (node.framesData?.captions?.length) {
+    if (node.framesData) {
+      // Use cached data even when captions is empty (e.g. text-only sessions
+      // have no captions but do have notes — we must not re-fetch in that case).
       setFramesData(node.framesData)
     } else {
       setFramesData(null)
