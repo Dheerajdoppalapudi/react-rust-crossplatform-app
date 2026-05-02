@@ -2,9 +2,9 @@
 Planner — pipeline orchestration for all render paths.
 
 Stage 1A — create_vocab_plan():
-  One LLM call routed by intent: planning_svg.md (illustration/concept_analogy/comparison),
-  planning_mermaid.md (process/architecture/timeline), planning_math.md (math).
-  Builds element_vocabulary with entity identity — no pixel coordinates.
+  One LLM call routed by intent: planning_svg.md (all non-math intents),
+  planning_math.md (math).
+  Builds element_vocabulary with entity identity and animation_behavior — no pixel coordinates.
 
 _vocab_plan_to_generation_plan():
   Pure Python conversion. Builds FramePlan objects from the vocab plan.
@@ -50,10 +50,10 @@ _VOCAB_PLAN_MAX_TOKENS: dict[str, int] = {
     "illustration":   3500,
     "concept_analogy":3500,
     "comparison":     3500,
-    # Mermaid-routed intents
-    "process":        2500,
-    "architecture":   2500,
-    "timeline":       2500,
+    # All non-math intents now route through SVG planning
+    "process":        3500,
+    "architecture":   3500,
+    "timeline":       3500,
 }
 
 
@@ -94,6 +94,8 @@ class VocabEntry(BaseModel):
     visual: str = ""               # free-text description for generic entities
     fill: str = "#a5d8ff"
     label: str = ""
+    animation_behavior: str = "enter"   # enter | loop | static
+    loop_speed: str = ""                # fast | medium | slow (only meaningful when animation_behavior=="loop")
 
 
 class VocabularyPlan(BaseModel):
@@ -129,6 +131,8 @@ class FramePlan(BaseModel):
     narration: str = ""
     spatial_plan: dict = {}
     intent_type: str = ""
+    reveal_order: list = []   # ordered list of entity_keys to animate in (planning_svg.md output)
+    animation_spec: dict = {} # {entity_key: {behavior, speed}} — derived from element_vocabulary
 
 
 class GenerationPlan(BaseModel):
@@ -319,8 +323,7 @@ async def create_vocab_plan(
 ) -> VocabularyPlan:
     """
     Call 2 — intent-specific planning.
-    Routes to planning_math.md (math), planning_svg.md (illustration/concept_analogy/comparison),
-    or planning_mermaid.md (process/architecture/timeline).
+    Routes to planning_math.md (math) or planning_svg.md (all non-math intents).
     intent_type and frame_count come from classify_intent() (Call 1).
     """
     _prompts_dir = os.path.join(os.path.dirname(__file__), "prompts")
@@ -328,11 +331,10 @@ async def create_vocab_plan(
 
     if intent_type == "math":
         prompt_file = "planning_math.md"
-    elif intent_type in {"illustration", "concept_analogy", "comparison"}:
-        prompt_file = "planning_svg.md"
     else:
-        # process, architecture, timeline → Mermaid
-        prompt_file = "planning_mermaid.md"
+        # All non-math intents (illustration, concept_analogy, comparison,
+        # process, architecture, timeline) → SVG animated path
+        prompt_file = "planning_svg.md"
 
     with open(os.path.join(_prompts_dir, prompt_file)) as f:
         template = f.read()
@@ -393,6 +395,18 @@ def _vocab_plan_to_generation_plan(vocab_plan: VocabularyPlan) -> GenerationPlan
     no pixel coordinates. Mermaid and Manim handle their own layout internally;
     slim JSON lets the LLM place elements without forced coord math.
     """
+    # Build animation_spec from element_vocabulary animation fields.
+    # {entity_key: {"behavior": "enter"|"loop"|"static", "speed": "fast"|"medium"|"slow"}}
+    animation_spec: dict = {}
+    for key, entry in vocab_plan.element_vocabulary.items():
+        if isinstance(entry, dict):
+            behavior = entry.get("animation_behavior", "enter")
+            speed    = entry.get("loop_speed", "")
+        else:
+            behavior = getattr(entry, "animation_behavior", "enter")
+            speed    = getattr(entry, "loop_speed", "")
+        animation_spec[key] = {"behavior": behavior, "speed": speed}
+
     frames = []
     for i, f in enumerate(vocab_plan.frames):
         entities = f.get("entities_used", [])
@@ -413,6 +427,8 @@ def _vocab_plan_to_generation_plan(vocab_plan: VocabularyPlan) -> GenerationPlan
             caption=f.get("caption", ""),
             narration=f.get("narration", ""),
             intent_type=vocab_plan.intent_type,
+            reveal_order=f.get("reveal_order", []),
+            animation_spec=animation_spec,
         ))
     return GenerationPlan(
         frame_count=vocab_plan.frame_count,

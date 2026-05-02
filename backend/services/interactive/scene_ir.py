@@ -58,6 +58,12 @@ class SceneBlock(BaseModel):
                 "molecule_viewer":  ["format", "data"],
                 "map_viewer":       ["center"],
                 "timeline":         ["events"],
+                "table_viewer":     ["columns", "rows"],
+                "terminal_output":  ["blocks"],
+                "diff_viewer":      ["before", "after"],
+                "p5_sketch":        ["spec"],
+                "quiz_block":       ["question", "options", "correctIndex"],
+                "flashcard_deck":   ["cards"],
             }
             missing = [
                 k for k in required.get(self.entity_type or "", [])

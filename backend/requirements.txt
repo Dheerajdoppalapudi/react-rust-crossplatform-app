@@ -18,6 +18,7 @@ manim
 cairosvg
 lxml
 requests
+playwright
 
 # Video pipeline
 moviepy

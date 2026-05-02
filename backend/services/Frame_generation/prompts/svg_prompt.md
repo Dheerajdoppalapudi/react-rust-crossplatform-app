@@ -28,6 +28,26 @@ If the frame is getting long, simplify elements rather than truncating a tag. A 
 
 **R6. End exactly at `</svg>`.** No extra characters after the closing tag.
 
+**R7. Entity group wrapper.** Wrap every vocabulary entity in a named `<g>` so the animation engine can address it:
+```svg
+<g id="ent-{entity_key}">
+  <!-- all shapes and the immediate label for this entity -->
+</g>
+```
+- Use ONLY for entities listed in the element_vocabulary (the recognisable icon-worthy actors).
+- Do NOT wrap: annotation boxes, step circles, arrow labels, background panels, dividers, title text.
+- The group wraps the icon shapes AND the entity's label text — nothing else.
+- Example: `<g id="ent-browser">` wraps the browser rect, its top bar, and the "Browser" label. The arrow leaving the browser is NOT inside this group.
+
+**R8. Flow path ID.** For any entity whose animation is "loop" (a flow arrow, current path, data stream), give its primary `<path>`, `<line>`, or `<polyline>` the attribute `id="flow-{entity_key}"`:
+```svg
+<line id="flow-query_arrow" x1="200" y1="300" x2="600" y2="300"
+      stroke="#1971c2" stroke-width="2" marker-end="url(#arrow)"/>
+```
+- If the flow entity has multiple segments, tag the longest or most representative one.
+- The `id="flow-..."` element must be INSIDE its `<g id="ent-...">` group.
+- Non-flow entities do NOT get `id="flow-..."`.
+
 ═══════════════════════════════════════════════
 ## PHASE 0 — VERIFY BEFORE WRITING
 ═══════════════════════════════════════════════

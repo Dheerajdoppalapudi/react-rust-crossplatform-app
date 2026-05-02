@@ -41,7 +41,6 @@ CLASSIFY_MODEL: str = os.getenv("CLASSIFY_MODEL", "claude-haiku-4-5-20251001")
 PROMPT_CACHE_ENABLED: bool = os.getenv("PROMPT_CACHE_ENABLED", "true").lower() != "false"
 
 # ── External services ─────────────────────────────────────────────────────────
-MERMAID_SIDECAR_URL: str = os.getenv("MERMAID_SIDECAR_URL", "http://localhost:3001")
 
 # ── Video / TTS ───────────────────────────────────────────────────────────────
 VIDEO_WIDTH: int  = 1920
@@ -74,9 +73,16 @@ COOKIE_SAMESITE: str  = "lax"
 # ── Feature flags ────────────────────────────────────────────────────────────
 
 # ── Intent routing ────────────────────────────────────────────────────────────
-MERMAID_INTENT_TYPES: frozenset[str] = frozenset({"process", "architecture", "timeline"})
-MANIM_INTENT_TYPES: frozenset[str]   = frozenset({"math"})
-SVG_INTENT_TYPES: frozenset[str]     = frozenset({"illustration", "concept_analogy", "comparison"})
+# process/architecture/timeline previously routed to mermaid — now handled by SVG.
+MANIM_INTENT_TYPES: frozenset[str] = frozenset({"math"})
+SVG_INTENT_TYPES: frozenset[str]   = frozenset({
+    "illustration", "concept_analogy", "comparison",
+    "process", "architecture", "timeline",
+})
+
+# ── SVG animation ─────────────────────────────────────────────────────────────
+# Set to "false" to revert to cairosvg static PNG (no Playwright needed).
+SVG_ANIMATION_ENABLED: bool = os.getenv("SVG_ANIMATION_ENABLED", "true").lower() != "false"
 
 # ── Interactive mode ──────────────────────────────────────────────────────────
 # Domains that have a dedicated domain guidance file in

@@ -26,6 +26,34 @@ This question is from computer science. Apply these preferences when selecting e
 - Place `code_walkthrough` + `step_controls` after, so the user builds intuition before seeing code
 - Keep entity count at 2–3; avoid 4 unless each adds distinct value
 
+- **CLI / shell / commands** (git, npm, Docker, bash scripting, build tools):
+  - Use `terminal_output` — show `command` blocks for each command and `output` blocks for results
+  - Add `comment` blocks to annotate what each command does
+  - Keep commands realistic and copy-pasteable
+
+- **Code before/after comparisons** (refactors, type annotations, API migrations, bug fixes):
+  - Use `diff_viewer` — set `before` and `after` as the two versions
+  - Choose `mode: "split"` for short snippets; `mode: "unified"` for longer diffs
+  - Always set `language` to match the code
+
+- **Comparisons and reference tables** (language features, algorithm complexity, framework differences, API options):
+  - Use `table_viewer` with sortable columns
+  - Use `highlightRows` to draw attention to the recommended or most important row
+
+- **Self-check questions** (end of topic, comprehension check):
+  - Use `quiz_block` with `type: "mcq"` for complex answers; `type: "true_false"` for yes/no claims
+  - Always include an `explanation` — it's the most educational part
+
+- **Memorising terms / definitions** (algorithm names, design patterns, language keywords):
+  - Use `flashcard_deck` — one card per concept, front = term, back = definition
+
+### Layout guidance
+
+- Place `mermaid_viewer` first if it provides the mental model
+- Place `code_walkthrough` + `step_controls` after, so the user builds intuition before seeing code
+- End with a `quiz_block` if the topic has a testable key insight
+- Keep entity count at 2–3; avoid 4 unless each adds distinct value
+
 ### Code style
 
 When writing `code` in `code_walkthrough`, prefer:

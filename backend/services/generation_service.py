@@ -18,25 +18,17 @@ from pathlib import Path
 from typing import Optional
 
 from core.config import (
-    MERMAID_INTENT_TYPES,
     MANIM_INTENT_TYPES,
     SVG_INTENT_TYPES,
     INTERACTIVE_CONTEXT_TURNS,
 )
 from core.database import get_db
-from services.frame_generation.excalidraw_enhancer import enhance
 from services.frame_generation.planner import (
     GenerationPlan,
     _vocab_plan_to_generation_plan,
     classify_intent,
     create_vocab_plan,
-    generate_all_frames,
     _log,
-)
-from services.frame_generation.combiner import combine_frames
-from services.frame_generation.mermaid.mermaid_generator import (
-    generate_mermaid_frames,
-    _sidecar_available,
 )
 from services.frame_generation.manim.manim_generator import generate_manim_frames, manim_available
 from services.frame_generation.svg.svg_generator import generate_svg_frames, svg_available
@@ -53,10 +45,8 @@ def _load_prompt(filename: str) -> str:
     return (_PROMPTS_DIR / filename).read_text(encoding="utf-8")
 
 
-_PROMPT_TEMPLATE         = _load_prompt("prompt_template.md")
-_MERMAID_PROMPT_TEMPLATE = _load_prompt("mermaid_prompt.md")
-_MANIM_PROMPT_TEMPLATE   = _load_prompt("manim_prompt.md")
-_SVG_PROMPT_TEMPLATE     = _load_prompt("svg_prompt.md")
+_MANIM_PROMPT_TEMPLATE = _load_prompt("manim_prompt.md")
+_SVG_PROMPT_TEMPLATE   = _load_prompt("svg_prompt.md")
 
 
 # ── Utilities ─────────────────────────────────────────────────────────────────
@@ -446,9 +436,8 @@ async def run_text_pipeline(
 
 # Maps frontend render_mode value → canonical intent_type for the planner
 _FORCED_INTENT: dict[str, str] = {
-    "manim":   "math",
-    "svg":     "illustration",
-    "mermaid": "process",
+    "manim": "math",
+    "svg":   "illustration",
 }
 
 
@@ -545,10 +534,10 @@ async def _run_frame_generation(
     notes:               str,
 ) -> tuple[dict, Optional[str]]:
     """
-    Dispatch to the correct frame renderer based on intent and availability.
+    Dispatch to the correct frame renderer: Manim (math) or SVG (everything else).
     Returns (result_payload, ui_output_file_path).
     """
-    ui_output_file: Optional[str] = None
+    accent = plan.shared_style.backgroundColor
 
     # ── Manim ─────────────────────────────────────────────────────────────────
     if plan.intent_type in MANIM_INTENT_TYPES and manim_available():
@@ -560,7 +549,6 @@ async def _run_frame_generation(
         png_paths = await generate_manim_frames(plan, _MANIM_PROMPT_TEMPLATE, manim_dir)
         _log({"event": "stage_complete", "stage": "frame_generation", "path": "manim"})
 
-        # Collect generated Python code from the lifecycle log
         from services.frame_generation.planner import request_log
         lifecycle_log = request_log.get() or []
         manim_calls   = [e for e in lifecycle_log if e.get("event") == "llm_call"]
@@ -573,7 +561,6 @@ async def _run_frame_generation(
         with open(ui_output_file, "w") as f:
             f.write(py_content)
 
-        accent = plan.shared_style.backgroundColor
         all_images, all_captions, all_narrations = _interleave_slides(
             png_paths, captions, frame_narrations, plan.slide_frames, output_dir, accent
         )
@@ -598,149 +585,49 @@ async def _run_frame_generation(
             "_narrations":         all_narrations,
         }, ui_output_file
 
-    # ── SVG ───────────────────────────────────────────────────────────────────
-    if plan.intent_type in SVG_INTENT_TYPES and svg_available():
-        logger.info("Render path → svg  session=%s  frames=%d", session_id, plan.frame_count)
-        _log({"event": "stage_start", "stage": "frame_generation", "path": "svg",
-              "frame_count": plan.frame_count})
+    # ── SVG (all non-math intents) ────────────────────────────────────────────
+    if not svg_available():
+        logger.error("cairosvg unavailable and no fallback — session=%s", session_id)
+        raise RuntimeError("SVG renderer (cairosvg) is not installed.")
 
-        svg_dir   = os.path.join(output_dir, "svg")
-        png_paths = await generate_svg_frames(plan, _SVG_PROMPT_TEMPLATE, svg_dir)
-        _log({"event": "stage_complete", "stage": "frame_generation", "path": "svg"})
+    if plan.intent_type in MANIM_INTENT_TYPES:
+        logger.warning("Manim not available — falling back to SVG  session=%s", session_id)
 
-        accent = plan.shared_style.backgroundColor
-        all_images, all_captions, all_narrations = _interleave_slides(
-            png_paths, captions, frame_narrations, plan.slide_frames, output_dir, accent
-        )
-        all_images, all_captions, all_narrations = _append_summary_slide(
-            all_images, all_captions, all_narrations, notes, accent, output_dir
-        )
-
-        ui_output_file = os.path.join(output_dir, "final_output.json")
-        with open(os.path.join(output_dir, "frames.json"), "w") as f:
-            json.dump({"render_path": "svg", "images": all_images, "captions": all_captions,
-                       "suggested_followups": suggested_followups, "notes": notes}, f, indent=2)
-        with open(ui_output_file, "w") as f:
-            json.dump({"render_path": "svg", "images": all_images, "captions": all_captions}, f, indent=2)
-
-        return {
-            "session_id":          session_id,
-            "render_path":         "svg",
-            "frame_count":         len(all_images),
-            "intent_type":         plan.intent_type,
-            "captions":            all_captions,
-            "images":              all_images,
-            "ui_file_type":        "images",
-            "suggested_followups": suggested_followups,
-            "notes":               notes,
-            "_narrations":         all_narrations,
-        }, ui_output_file
-
-    # ── Mermaid sidecar down → fall back to SVG ───────────────────────────────
-    if plan.intent_type in MERMAID_INTENT_TYPES and not _sidecar_available() and svg_available():
-        logger.warning("Mermaid sidecar unavailable — falling back to svg  session=%s", session_id)
-        _log({"event": "stage_start", "stage": "frame_generation", "path": "svg_fallback",
-              "frame_count": plan.frame_count})
-
-        svg_dir   = os.path.join(output_dir, "svg")
-        png_paths = await generate_svg_frames(plan, _SVG_PROMPT_TEMPLATE, svg_dir)
-        _log({"event": "stage_complete", "stage": "frame_generation", "path": "svg_fallback"})
-
-        accent = plan.shared_style.backgroundColor
-        all_images, all_captions, all_narrations = _interleave_slides(
-            png_paths, captions, frame_narrations, plan.slide_frames, output_dir, accent
-        )
-        all_images, all_captions, all_narrations = _append_summary_slide(
-            all_images, all_captions, all_narrations, notes, accent, output_dir
-        )
-
-        ui_output_file = os.path.join(output_dir, "final_output.json")
-        with open(os.path.join(output_dir, "frames.json"), "w") as f:
-            json.dump({"render_path": "svg", "images": all_images, "captions": all_captions,
-                       "suggested_followups": suggested_followups, "notes": notes}, f, indent=2)
-        with open(ui_output_file, "w") as f:
-            json.dump({"render_path": "svg", "images": all_images, "captions": all_captions}, f, indent=2)
-
-        return {
-            "session_id":          session_id,
-            "render_path":         "svg",
-            "frame_count":         len(all_images),
-            "intent_type":         plan.intent_type,
-            "captions":            all_captions,
-            "images":              all_images,
-            "ui_file_type":        "images",
-            "suggested_followups": suggested_followups,
-            "notes":               notes,
-            "_narrations":         all_narrations,
-        }, ui_output_file
-
-    # ── Mermaid or slim JSON ──────────────────────────────────────────────────
-    use_mermaid = plan.intent_type in MERMAID_INTENT_TYPES and _sidecar_available()
-    path_label  = "mermaid" if use_mermaid else "slim_json"
-
-    if not use_mermaid:
-        if plan.intent_type in MANIM_INTENT_TYPES:
-            logger.warning("Manim not available — falling back to slim_json  session=%s", session_id)
-        elif plan.intent_type in SVG_INTENT_TYPES:
-            logger.warning("cairosvg unavailable — falling back to slim_json  session=%s", session_id)
-        else:
-            logger.info("Render path → slim_json  session=%s  frames=%d", session_id, plan.frame_count)
-    else:
-        logger.info("Render path → mermaid  session=%s  frames=%d", session_id, plan.frame_count)
-
-    _log({"event": "stage_start", "stage": "frame_generation", "path": path_label,
+    logger.info("Render path → svg  session=%s  frames=%d  intent=%s",
+                session_id, plan.frame_count, plan.intent_type)
+    _log({"event": "stage_start", "stage": "frame_generation", "path": "svg",
           "frame_count": plan.frame_count})
 
-    if use_mermaid:
-        frame_slims = await generate_mermaid_frames(plan, _MERMAID_PROMPT_TEMPLATE)
-    else:
-        frame_slims = await generate_all_frames(plan, _PROMPT_TEMPLATE)
+    svg_dir    = os.path.join(output_dir, "svg")
+    frame_narrations_per_frame = [f.narration for f in plan.frames]
+    frame_paths = await generate_svg_frames(
+        plan, _SVG_PROMPT_TEMPLATE, svg_dir,
+        frame_narrations=frame_narrations_per_frame,
+    )
+    _log({"event": "stage_complete", "stage": "frame_generation", "path": "svg"})
 
-    _log({"event": "stage_complete", "stage": "frame_generation", "path": path_label})
-
-    # Stage 3: Combine
-    _log({"event": "stage_start", "stage": "combine_frames"})
-    combined_slim = combine_frames(frame_slims, captions)
-    _log({"event": "stage_complete", "stage": "combine_frames"})
-
-    with open(os.path.join(output_dir, "sample_slim.json"), "w") as f:
-        json.dump(combined_slim, f, indent=2)
-
-    # Stage 4: Enhance
-    _log({"event": "stage_start", "stage": "enhance_excalidraw"})
-    excalidraw_result = enhance(combined_slim)
-    _log({"event": "stage_complete", "stage": "enhance_excalidraw",
-          "elements_count": len(excalidraw_result.get("elements", []))})
-
-    ui_output_file = os.path.join(output_dir, "final_output.json")
-    with open(ui_output_file, "w") as f:
-        json.dump(excalidraw_result, f, indent=2)
-
-    # Interleave slides and summary for Mermaid/slim JSON paths too
-    # (diagram frames have None image paths — slides will have real PNGs)
-    none_images = [None] * plan.frame_count
-    accent = plan.shared_style.backgroundColor
     all_images, all_captions, all_narrations = _interleave_slides(
-        none_images, captions, frame_narrations, plan.slide_frames, output_dir, accent
+        frame_paths, captions, frame_narrations, plan.slide_frames, output_dir, accent
     )
     all_images, all_captions, all_narrations = _append_summary_slide(
         all_images, all_captions, all_narrations, notes, accent, output_dir
     )
 
+    ui_output_file = os.path.join(output_dir, "final_output.json")
     with open(os.path.join(output_dir, "frames.json"), "w") as f:
-        json.dump({"render_path": path_label, "images": all_images,
-                   "captions": all_captions, "suggested_followups": suggested_followups,
-                   "notes": notes}, f, indent=2)
+        json.dump({"render_path": "svg", "images": all_images, "captions": all_captions,
+                   "suggested_followups": suggested_followups, "notes": notes}, f, indent=2)
+    with open(ui_output_file, "w") as f:
+        json.dump({"render_path": "svg", "images": all_images, "captions": all_captions}, f, indent=2)
 
     return {
         "session_id":          session_id,
-        "excalidraw":          excalidraw_result,
-        "elements_count":      len(excalidraw_result["elements"]),
+        "render_path":         "svg",
         "frame_count":         len(all_images),
         "intent_type":         plan.intent_type,
-        "render_path":         path_label,
         "captions":            all_captions,
-        "ui_file_type":        "json",
+        "images":              all_images,
+        "ui_file_type":        "images",
         "suggested_followups": suggested_followups,
         "notes":               notes,
         "_narrations":         all_narrations,

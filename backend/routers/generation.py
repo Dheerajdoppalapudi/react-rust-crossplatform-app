@@ -72,7 +72,7 @@ async def image_generation(
     notes_enabled:       bool = Form(False),
     provider:            str  = Form("claude"),
     model:               Optional[str] = Form(None),
-    render_mode:         Optional[str] = Form(None),   # 'manim' | 'svg' | 'mermaid' | None
+    render_mode:         Optional[str] = Form(None),   # 'manim' | 'svg' | None
     text_only:           bool = Form(False),
     current_user:        User = Depends(get_current_user),
 ):

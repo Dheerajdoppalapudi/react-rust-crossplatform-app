@@ -41,10 +41,10 @@ const ChatWindow = () => {
         const res = await api.imageGeneration(text)
         const botMsg = {
           role: 'assistant',
-          content: res.excalidraw
-            ? `Diagram generated (${res.elements_count} elements)`
-            : res.status === 'api_not_implemented'
+          content: res.status === 'api_not_implemented'
             ? 'Image generation API is not yet connected.'
+            : res.images?.length
+            ? `Diagram generated (${res.images.length} frame${res.images.length > 1 ? 's' : ''})`
             : 'Something went wrong with image generation.',
         }
         setMessages((prev) => [...prev, botMsg])

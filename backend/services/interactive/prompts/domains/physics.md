@@ -19,9 +19,15 @@ This question is from physics. Apply these preferences when selecting entities:
   - Use `freeform_html` for particle simulations or PV diagrams
   - Use `mermaid_viewer` for process diagrams (Carnot cycle stages, etc.)
 
+- **Looping animations** (pendulums, springs, waves, orbital mechanics, particle systems, fluid flow):
+  - Use `p5_sketch` — it runs at 60fps using p5.js and is ideal for smooth continuous animations
+  - In `props.spec`: describe the objects drawn, the physics equations used, and 2–3 slider controls
+  - Prefer `p5_sketch` over `freeform_html` for physics: the p5.js API makes vector math and animation much cleaner
+  - Example spec: "Animate a spring-mass system. Draw a ceiling anchor, a vertical spring, and a circular mass. Use Hooke's law F=−kx with damping F=−bv. Slider for spring constant k (1–20 N/m), mass (0.1–2 kg), and damping coefficient b (0–2). Show displacement, velocity, and period as text overlays."
+
 - **Conceptual explanations** (laws, principles, thought experiments):
   - Use `mermaid_viewer` for a simple diagram if the concept has clear components
-  - Use `freeform_html` only if motion or dynamics are central
+  - Use `p5_sketch` if motion or dynamics are central (preferred over `freeform_html`)
 
 ### Layout guidance
 

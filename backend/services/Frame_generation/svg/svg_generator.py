@@ -1,31 +1,45 @@
 """
-SVG Generator — frame generation for illustration, concept_analogy, and comparison content.
+SVG Generator — frame generation for all non-math content.
 
-Pipeline per frame:
+Static (cairosvg) pipeline per frame:
   1. LLM call  → raw SVG string  (parallel, via asyncio.gather)
   2. Extract SVG markup from the LLM response
   3. Save .svg file to disk
-  4. Convert SVG → PNG using cairosvg  (output: 1200×900)
+  4. Convert SVG → PNG using cairosvg  (output: 1200×<svg_height>)
   5. If step 2 or 4 fails → one correction retry with the specific error
   6. Return absolute path to the PNG
 
-All N frames run in parallel. Failed frames return None (same graceful
-fallback pattern as manim_generator). Only frames that actually fail are
-retried — successful frames are never touched again.
+Animated (Playwright) pipeline per frame:
+  1-3. Same as above (LLM → SVG → disk)
+  4. Build HTML page with SVG + inline RAF animation engine
+  5. Playwright: install clock → setContent → tick msPerFrame × N → screenshot × N
+  6. ffmpeg: PNG sequence → MP4 clip
+  7. Return absolute path to the MP4
 
-Caller (main.py) routes here when intent_type is one of SVG_INTENT_TYPES
-("illustration", "concept_analogy", "comparison").
+Animation is driven by requestAnimationFrame — NOT CSS animation-duration or SVG SMIL.
+Playwright's page.clock.tick() controls only RAF; CSS/SMIL ignore it.
 
-Requires: pip install cairosvg
+All N frames run in parallel. Failed frames return None (same graceful fallback
+pattern as manim_generator). Only frames that actually fail are retried.
+
+Requires:
+  pip install cairosvg             (always needed)
+  pip install playwright           (for animated output)
+  playwright install chromium      (one-time ~150 MB download)
 """
 
 import asyncio
+import json
 import logging
+import math
 import os
 import re
+import subprocess
 from typing import Optional
 
 logger = logging.getLogger(__name__)
+
+# ── Optional dependency guards ────────────────────────────────────────────────
 
 try:
     import cairosvg
@@ -39,107 +53,55 @@ try:
 except ImportError:
     _LXML_AVAILABLE = False
 
+try:
+    from playwright.async_api import async_playwright   # noqa: F401 — just check import
+    _PLAYWRIGHT_AVAILABLE = True
+except ImportError:
+    _PLAYWRIGHT_AVAILABLE = False
+
 from services.frame_generation.planner import GenerationPlan, FramePlan, call_llm
 
 
-# ---------------------------------------------------------------------------
-# Availability check
-# ---------------------------------------------------------------------------
+# ── Animation constants ───────────────────────────────────────────────────────
+
+FPS = 24
+LOOP_PERIODS  = {"fast": 0.65, "medium": 1.0, "slow": 1.55}
+NUM_PARTICLES = 5
+
+
+# ── Availability checks ───────────────────────────────────────────────────────
 
 def svg_available() -> bool:
     """Return True if cairosvg is installed and the SVG path is usable."""
     return _CAIROSVG_AVAILABLE
 
 
-# ---------------------------------------------------------------------------
-# SVG sanitizer — strip attributes that crash cairosvg
-# ---------------------------------------------------------------------------
+# ── SVG sanitizer — strip attributes that crash cairosvg ─────────────────────
 
-# Attributes whose empty-string value causes cairosvg to throw a parse error.
-# The LLM sets these to "" to "reset" them, but cairosvg needs either a valid
-# value or the attribute to be absent entirely.
 _STRIP_IF_EMPTY = re.compile(
     r'\b(stroke-dasharray|marker-end|marker-start|marker-mid'
     r'|stroke-dashoffset|stroke-miterlimit|clip-path|filter|mask'
     r'|xlink:href|href)\s*=\s*""',
     re.IGNORECASE,
 )
-
-# Matches a bare & that is NOT already the start of a valid XML entity.
-# Valid entities: &amp; &lt; &gt; &quot; &apos; &#123; &#xAB;
-# Everything else (e.g. "AT&T", "R&D") must become &amp;
 _BARE_AMPERSAND = re.compile(
     r'&(?!(?:#\d+|#x[0-9a-fA-F]+|[a-zA-Z][a-zA-Z0-9]*);)'
 )
-
-# XML 1.0 forbids control characters except tab (0x09), newline (0x0A),
-# and carriage return (0x0D). LLMs occasionally emit these inside text or
-# attribute values — cairosvg's XML parser throws "invalid token" for them.
 _CONTROL_CHARS = re.compile(r'[\x00-\x08\x0B\x0C\x0E-\x1F]')
 
 
 def _fix_text_nodes(svg: str) -> str:
-    """
-    Escape bare < and > characters inside SVG text content.
-
-    Text nodes sit between a closing > and the next opening <.
-    The LLM sometimes writes things like:
-        <text>a < b</text>   or   <text>x > 0</text>
-    which are invalid XML tokens — cairosvg's parser rejects them.
-
-    We only touch content between tags (text nodes), never the tags themselves.
-    """
     def _escape(m: re.Match) -> str:
-        # Replace only bare < and > (& was already fixed before this runs)
         return m.group(0).replace('<', '&lt;').replace('>', '&gt;')
-
-    # Match text between > and <, excluding whitespace-only runs
     return re.sub(r'(?<=>)([^<]+)(?=<)', _escape, svg)
 
 
 def _sanitize_svg(svg: str) -> str:
-    """
-    Fix common LLM mistakes that cause cairosvg XML parse errors.
-
-    Four classes of fix, applied in order:
-
-    1. Strip empty presentation attributes  (e.g. stroke-dasharray="")
-       cairosvg tries to parse the empty string as a value and raises
-       ValueError.  Removing the attribute entirely is safe — the element
-       just inherits or uses the default.
-
-    2. Escape bare ampersands in text/attribute content  (e.g. AT&T → AT&amp;T)
-       & is only legal in XML as the start of an entity reference (&amp; etc.).
-       LLMs frequently emit raw company names, URLs, and formulas with bare &.
-
-    3. Escape bare < and > inside text nodes  (e.g. a < b → a &lt; b)
-       < is never legal outside a tag; > is legal but flagged as an error
-       by strict XML parsers like cairosvg.
-
-    4. lxml recovery pass — re-parse and re-serialise with lxml's recover=True
-       parser, which auto-closes unclosed tags, drops invalid tokens, and fixes
-       structural issues that the regex passes above can't catch. This eliminates
-       most "unclosed token" and "not well-formed" errors without needing a retry.
-
-    Runs on every SVG before cairosvg, so the LLM does not need to be
-    perfectly compliant — we catch the most common mistakes here.
-    """
-    # Step 0 — strip XML-illegal control characters (null bytes, BEL, etc.)
-    #           Must run first — these can hide inside any token and confuse
-    #           every subsequent regex.
     svg = _CONTROL_CHARS.sub("", svg)
-
-    # Step 1 — strip empty presentation attributes
     svg = _STRIP_IF_EMPTY.sub("", svg)
-
-    # Step 2 — fix bare ampersands (must run before step 3 so we don't
-    #           double-escape the & in &lt; / &gt; added by step 3)
     svg = _BARE_AMPERSAND.sub("&amp;", svg)
-
-    # Step 3 — fix bare < > in text nodes
     svg = _fix_text_nodes(svg)
 
-    # Step 4 — lxml structural repair (unclosed tags, invalid tokens, etc.)
     if _LXML_AVAILABLE:
         try:
             parser = _lxml_etree.XMLParser(
@@ -158,35 +120,19 @@ def _sanitize_svg(svg: str) -> str:
     return svg
 
 
-# ---------------------------------------------------------------------------
-# SVG extraction helper
-# ---------------------------------------------------------------------------
+# ── SVG extraction helper ─────────────────────────────────────────────────────
 
 def _extract_svg(text: str) -> str:
-    """
-    Pull raw SVG markup out of an LLM response.
-
-    Handles the three common cases:
-      1. Raw SVG (ideal — starts with <svg)
-      2. SVG wrapped in markdown fences (```svg ... ``` or ```xml ... ```)
-      3. SVG embedded in prose (search for the <svg> tag)
-    """
-    # Strip markdown fences if present
     fence = re.search(r"```(?:svg|xml)?\s*(<svg[\s>].*?</svg>)\s*```", text, re.DOTALL | re.IGNORECASE)
     if fence:
         return fence.group(1).strip()
-
-    # Search for raw SVG tag in the text
     raw = re.search(r"<svg[\s>].*?</svg>", text, re.DOTALL | re.IGNORECASE)
     if raw:
         return raw.group(0).strip()
-
     return text.strip()
 
 
-# ---------------------------------------------------------------------------
-# Single frame: build prompt with style injection
-# ---------------------------------------------------------------------------
+# ── Single frame: build prompt with style injection ───────────────────────────
 
 def _generate_svg_code(
     frame: FramePlan,
@@ -194,7 +140,6 @@ def _generate_svg_code(
     prompt_template: str,
     frame_index: int = 0,
 ) -> str:
-    """Synchronous LLM call that returns the raw LLM response for one SVG frame."""
     stroke = plan.shared_style.strokeColor
     bg     = plan.shared_style.backgroundColor
 
@@ -233,7 +178,6 @@ def _generate_svg_code(
     description = frame.description + style_note + vocab_note
     prompt = prompt_template.replace("{{DIAGRAM_DESCRIPTION}}", description)
 
-    # Cache the large static instruction block; only the frame description is dynamic.
     split_idx = prompt_template.find("{{DIAGRAM_DESCRIPTION}}")
     cache_prefix = prompt_template[:split_idx] if split_idx != -1 else ""
 
@@ -244,17 +188,9 @@ def _generate_svg_code(
     )
 
 
-# ---------------------------------------------------------------------------
-# Single frame: SVG → PNG via cairosvg
-# ---------------------------------------------------------------------------
+# ── Single frame: SVG → PNG via cairosvg ─────────────────────────────────────
 
 def _render_frame(svg_text: str, frame_index: int, output_dir: str) -> tuple[Optional[str], Optional[str]]:
-    """
-    Save SVG markup to disk and convert it to PNG using cairosvg.
-
-    Output PNG is always 1200×900 — matches the canvas size the prompt enforces.
-    Returns (png_path, None) on success, or (None, error_message) on failure.
-    """
     frame_dir = os.path.join(output_dir, f"frame_{frame_index}")
     os.makedirs(frame_dir, exist_ok=True)
 
@@ -265,8 +201,6 @@ def _render_frame(svg_text: str, frame_index: int, output_dir: str) -> tuple[Opt
     with open(svg_path, "w", encoding="utf-8") as f:
         f.write(clean_svg)
 
-    # Read viewBox height from the SVG so variable-height frames render correctly.
-    # Falls back to 900 if the viewBox attribute is absent or malformed.
     height_match = re.search(r'viewBox=["\']0 0 \d+ (\d+)["\']', clean_svg)
     svg_height = int(height_match.group(1)) if height_match else 900
 
@@ -283,9 +217,7 @@ def _render_frame(svg_text: str, frame_index: int, output_dir: str) -> tuple[Opt
         return None, str(e)
 
 
-# ---------------------------------------------------------------------------
-# Single frame: correction retry prompt
-# ---------------------------------------------------------------------------
+# ── Single frame: correction retry prompt ────────────────────────────────────
 
 def _generate_svg_code_retry(
     frame: FramePlan,
@@ -293,18 +225,11 @@ def _generate_svg_code_retry(
     failure_reason: str,
     failed_svg: str = "",
 ) -> str:
-    """
-    One corrective LLM call used only when the first attempt failed.
-
-    Sends the original description + the specific failure back to the model
-    so it can fix the exact problem rather than regenerating blindly.
-    """
     stroke = plan.shared_style.strokeColor
     bg     = plan.shared_style.backgroundColor
 
     svg_excerpt = ""
     if failed_svg:
-        # Send only the first 2000 chars to avoid token bloat
         excerpt = failed_svg[:2000]
         if len(failed_svg) > 2000:
             excerpt += "\n... (truncated)"
@@ -336,9 +261,268 @@ def _generate_svg_code_retry(
     return call_llm(correction_prompt, 8000, prompt_name=f"svg_prompt.md (frame {frame.index} retry)")
 
 
-# ---------------------------------------------------------------------------
-# Single frame: orchestrate LLM + render (async wrapper)
-# ---------------------------------------------------------------------------
+# ── Animated rendering: timing + HTML builder ────────────────────────────────
+
+def _compute_timings(reveal_order: list, animation_spec: dict, duration: float) -> dict:
+    """Evenly space reveal times across the middle 80% of the frame duration."""
+    animated = [
+        k for k in reveal_order
+        if animation_spec.get(k, {}).get("behavior", "enter") != "static"
+    ]
+    if not animated:
+        return {}
+    if len(animated) == 1:
+        return {animated[0]: duration * 0.2}
+    return {
+        key: duration * (0.1 + 0.8 * i / (len(animated) - 1))
+        for i, key in enumerate(animated)
+    }
+
+
+# JavaScript RAF animation engine — string template filled at render time.
+# Uses {{}}-escaped braces for literal JS braces inside the format string.
+_RAF_ENGINE_TEMPLATE = """\
+(function() {{
+  var ANIMATIONS   = {animations_json};
+  var DURATION     = {duration};
+  var LOOP_PERIODS = {{ fast: 0.65, medium: 1.0, slow: 1.55 }};
+  var NUM_PARTICLES = 5;
+
+  function easeBackOut(t) {{
+    var c1 = 1.70158, c3 = c1 + 1;
+    return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+  }}
+  function clamp(v, lo, hi) {{ return Math.max(lo, Math.min(hi, v)); }}
+
+  // Pre-show static entities and entities not mentioned in animation spec
+  ANIMATIONS.forEach(function(a) {{
+    var el = document.getElementById('ent-' + a.id);
+    if (el && a.behavior === 'static') {{ el.style.opacity = '1'; }}
+  }});
+  document.querySelectorAll('[id^="ent-"]').forEach(function(el) {{
+    var key = el.id.replace('ent-', '');
+    if (!ANIMATIONS.find(function(a) {{ return a.id === key; }})) {{
+      el.style.opacity = '1';
+    }}
+  }});
+
+  // Build particle systems for loop entities
+  var particleSystems = [];
+  ANIMATIONS.filter(function(a) {{ return a.behavior === 'loop'; }})
+    .forEach(function(anim) {{
+      var pathEl = document.getElementById('flow-' + anim.id);
+      if (!pathEl || typeof pathEl.getTotalLength !== 'function') return;
+
+      var totalLen = pathEl.getTotalLength();
+      var period   = LOOP_PERIODS[anim.speed] || 1.0;
+      var color    = pathEl.getAttribute('stroke') || '#333333';
+      var radius   = {{ fast: 4, medium: 5, slow: 6 }}[anim.speed] || 5;
+
+      var circles = [];
+      for (var i = 0; i < NUM_PARTICLES; i++) {{
+        var c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        c.setAttribute('r', String(radius));
+        c.setAttribute('fill', color);
+        c.setAttribute('opacity', '0');
+        c._startOffset = i / NUM_PARTICLES;
+        pathEl.parentNode.appendChild(c);
+        circles.push(c);
+      }}
+
+      particleSystems.push({{
+        key:      anim.id,
+        pathEl:   pathEl,
+        totalLen: totalLen,
+        period:   period,
+        circles:  circles,
+        appearAt: anim.appearAt || 0,
+      }});
+    }});
+
+  var startTime = null;
+
+  function frame(ts) {{
+    if (startTime === null) startTime = ts;
+    var t = (ts - startTime) / 1000;
+
+    // Enter animations: easeBackOut on opacity + scale over 0.45 s
+    ANIMATIONS.filter(function(a) {{ return a.behavior === 'enter'; }})
+      .forEach(function(anim) {{
+        var el = document.getElementById('ent-' + anim.id);
+        if (!el) return;
+        var p = clamp((t - (anim.appearAt || 0)) / 0.45, 0, 1);
+        var e = easeBackOut(p);
+        el.style.opacity   = String(clamp(e, 0, 1));
+        el.style.transform = 'scale(' + (0.82 + 0.18 * clamp(e, 0, 1)) + ')';
+      }});
+
+    // Loop: fade in group + move particles along flow path
+    particleSystems.forEach(function(sys) {{
+      var groupEl = document.getElementById('ent-' + sys.key);
+      if (groupEl) {{
+        var p = clamp((t - sys.appearAt) / 0.4, 0, 1);
+        groupEl.style.opacity = String(p);
+      }}
+      if (t < sys.appearAt) return;
+      sys.circles.forEach(function(c) {{
+        var frac = ((t - sys.appearAt) / sys.period + c._startOffset) % 1;
+        var pt   = sys.pathEl.getPointAtLength(frac * sys.totalLen);
+        c.setAttribute('cx', String(pt.x));
+        c.setAttribute('cy', String(pt.y));
+        c.setAttribute('opacity', '1');
+      }});
+    }});
+
+    requestAnimationFrame(frame);
+  }}
+
+  requestAnimationFrame(frame);
+}})();
+"""
+
+
+def _build_animation_html(
+    svg_text: str,
+    reveal_order: list,
+    animation_spec: dict,
+    duration: float,
+) -> str:
+    timings = _compute_timings(reveal_order, animation_spec, duration)
+
+    animations = []
+    for key, spec in animation_spec.items():
+        behavior = spec.get("behavior", "enter")
+        animations.append({
+            "id":       key,
+            "behavior": behavior,
+            "speed":    spec.get("speed") or spec.get("loop_speed") or "medium",
+            "appearAt": timings.get(key, 0.0),
+        })
+
+    animations_json = json.dumps(animations)
+    raf_engine = _RAF_ENGINE_TEMPLATE.format(
+        animations_json=animations_json,
+        duration=duration,
+    )
+
+    return f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"/>
+<style>
+  body {{ margin:0; padding:0; background:white; overflow:hidden; }}
+  svg  {{ display:block; }}
+  [id^="ent-"] {{ opacity:0; transform-origin:center center; }}
+</style>
+</head>
+<body>
+{svg_text}
+<script>{raf_engine}</script>
+</body></html>"""
+
+
+# ── Playwright renderer ───────────────────────────────────────────────────────
+
+async def _playwright_render(html: str, duration: float, tmp_dir: str, svg_text: str):
+    from playwright.async_api import async_playwright
+
+    height_match = re.search(r'viewBox=["\']0 0 \d+ (\d+)["\']', svg_text)
+    svg_height   = int(height_match.group(1)) if height_match else 900
+
+    ms_per_frame = round(1000 / FPS)
+    total_frames = math.ceil(duration * FPS)
+
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch()
+        page    = await browser.new_page()
+        await page.set_viewport_size({"width": 1200, "height": svg_height})
+        await page.clock.install(time=0)
+        await page.set_content(html, wait_until="domcontentloaded")
+
+        for f in range(total_frames):
+            await page.clock.run_for(ms_per_frame)
+            fp = os.path.join(tmp_dir, f"f{f:05d}.png")
+            await page.screenshot(path=fp, type="png")
+
+        await browser.close()
+
+
+def _get_ffmpeg_exe() -> str:
+    """Return path to ffmpeg binary — prefers imageio-ffmpeg bundle, falls back to system PATH."""
+    try:
+        import imageio_ffmpeg
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        return "ffmpeg"
+
+
+def _png_seq_to_mp4(tmp_dir: str, output_mp4: str):
+    cmd = [
+        _get_ffmpeg_exe(), "-y", "-hide_banner", "-loglevel", "error",
+        "-framerate", str(FPS),
+        "-i", os.path.join(tmp_dir, "f%05d.png"),
+        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "fast",
+        output_mp4,
+    ]
+    result = subprocess.run(cmd, capture_output=True)
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr.decode())
+
+
+# ── Animated frame renderer (Playwright path) ─────────────────────────────────
+
+async def _render_animated_frame(
+    svg_text: str,
+    reveal_order: list,
+    animation_spec: dict,
+    duration_seconds: float,
+    frame_index: int,
+    output_dir: str,
+) -> tuple[Optional[str], Optional[str]]:
+    """
+    Render an animated SVG frame as an MP4 clip via Playwright.
+    Falls back to cairosvg static PNG if Playwright is unavailable or fails.
+    Returns (path, error_message).
+    """
+    from core.config import SVG_ANIMATION_ENABLED
+
+    if not SVG_ANIMATION_ENABLED or not _PLAYWRIGHT_AVAILABLE:
+        return _render_frame(svg_text, frame_index, output_dir)
+
+    frame_dir = os.path.join(output_dir, f"frame_{frame_index}")
+    os.makedirs(frame_dir, exist_ok=True)
+    output_mp4 = os.path.join(frame_dir, "frame.mp4")
+    tmp_dir    = os.path.join(frame_dir, "png_seq")
+    os.makedirs(tmp_dir, exist_ok=True)
+
+    # Also save SVG for debugging/reference
+    svg_path = os.path.join(frame_dir, "frame.svg")
+    clean_svg = _sanitize_svg(svg_text)
+    with open(svg_path, "w", encoding="utf-8") as f:
+        f.write(clean_svg)
+
+    try:
+        html = _build_animation_html(clean_svg, reveal_order, animation_spec, duration_seconds)
+        await _playwright_render(html, duration_seconds, tmp_dir, clean_svg)
+        _png_seq_to_mp4(tmp_dir, output_mp4)
+        logger.info("svg_generator animated frame %d → %s (%.1fs)", frame_index, output_mp4, duration_seconds)
+        return output_mp4, None
+    except Exception as e:
+        logger.warning(
+            "svg_generator animated render failed (frame %d): %s — falling back to static PNG",
+            frame_index, e,
+        )
+        return _render_frame(clean_svg, frame_index, output_dir)
+
+
+# ── Single frame: orchestrate LLM + render ───────────────────────────────────
+
+def _narration_to_duration(narration: str) -> float:
+    """Estimate frame duration in seconds from narration word count."""
+    words = len(narration.split()) if narration else 0
+    from core.config import TTS_WORDS_PER_SECOND
+    seconds = words / TTS_WORDS_PER_SECOND
+    # Minimum 4 s, maximum 30 s per frame
+    return max(4.0, min(30.0, seconds))
+
 
 async def _generate_one_svg_frame(
     frame: FramePlan,
@@ -348,19 +532,17 @@ async def _generate_one_svg_frame(
     output_dir: str,
 ) -> Optional[str]:
     """
-    Generate and render one SVG frame. Returns absolute PNG path or None.
+    Generate and render one SVG frame. Returns absolute path (PNG or MP4) or None.
 
-    Runs the synchronous LLM call and cairosvg render in threads so the
-    event loop is never blocked.
+    Runs the synchronous LLM call and render in threads so the event loop is
+    never blocked.
 
-    On failure (bad extraction OR cairosvg crash) a single corrective retry
-    is attempted with the specific error included in the prompt. Only the
-    failing frame retries — successful frames are never re-run.
+    On failure (bad extraction OR render crash) a single corrective retry is
+    attempted with the specific error included in the prompt.
     """
     raw = await asyncio.to_thread(_generate_svg_code, frame, plan, prompt_template, frame_index)
     svg_text = _extract_svg(raw)
 
-    # ── Retry if extraction produced no valid SVG ────────────────────────────
     if not svg_text.lower().startswith("<svg"):
         logger.warning("svg_generator frame %d: no valid SVG in LLM response — retrying", frame_index)
         raw = await asyncio.to_thread(
@@ -374,16 +556,31 @@ async def _generate_one_svg_frame(
             logger.warning("svg_generator frame %d: retry also failed to produce valid SVG — skipping", frame_index)
             return None
 
-    # ── Render SVG → PNG ─────────────────────────────────────────────────────
-    png_path, render_error = await asyncio.to_thread(_render_frame, svg_text, frame_index, output_dir)
+    # Decide render path
+    from core.config import SVG_ANIMATION_ENABLED
+    use_animation = SVG_ANIMATION_ENABLED and _PLAYWRIGHT_AVAILABLE
 
-    # ── Retry if cairosvg crashed ─────────────────────────────────────────────
-    if png_path is None:
+    if use_animation:
+        duration  = _narration_to_duration(frame.narration)
+        out_path, render_error = await _render_animated_frame(
+            svg_text,
+            frame.reveal_order,
+            frame.animation_spec,
+            duration,
+            frame_index,
+            output_dir,
+        )
+    else:
+        out_path, render_error = await asyncio.to_thread(
+            _render_frame, svg_text, frame_index, output_dir
+        )
+
+    if out_path is None:
         logger.warning("svg_generator frame %d: render failed — retrying with correction", frame_index)
         raw = await asyncio.to_thread(
             _generate_svg_code_retry, frame, plan,
             failure_reason=(
-                f"cairosvg failed to render your SVG. Error: {render_error}. "
+                f"The renderer failed to process your SVG. Error: {render_error}. "
                 "Common causes: gradients (<linearGradient>/<radialGradient>), "
                 "filters (drop-shadow/blur), external image hrefs, malformed path data, "
                 "or invalid attribute values. Use only flat fills, inline attributes, "
@@ -395,22 +592,31 @@ async def _generate_one_svg_frame(
         if not svg_text.lower().startswith("<svg"):
             logger.warning("svg_generator frame %d: retry produced no valid SVG — skipping", frame_index)
             return None
-        png_path, _ = await asyncio.to_thread(_render_frame, svg_text, frame_index, output_dir)
 
-    return png_path
+        if use_animation:
+            duration = _narration_to_duration(frame.narration)
+            out_path, _ = await _render_animated_frame(
+                svg_text, frame.reveal_order, frame.animation_spec,
+                duration, frame_index, output_dir,
+            )
+        else:
+            out_path, _ = await asyncio.to_thread(
+                _render_frame, svg_text, frame_index, output_dir
+            )
+
+    return out_path
 
 
-# ---------------------------------------------------------------------------
-# All frames in parallel
-# ---------------------------------------------------------------------------
+# ── All frames in parallel ────────────────────────────────────────────────────
 
 async def generate_svg_frames(
     plan: GenerationPlan,
     prompt_template: str,
     output_dir: str,
+    frame_narrations: list[str] = None,
 ) -> list[Optional[str]]:
     """
-    Generate one PNG per frame using SVG.
+    Generate one frame file (PNG or MP4) per frame using SVG.
 
     Two-phase to maximise Anthropic prompt cache hits:
       Phase 1 — fire frame 0 alone and await it. This writes the cache entry
@@ -419,10 +625,19 @@ async def generate_svg_frames(
                  (0.1× input token rate) instead of paying cache_write again.
     Trade-off: ~10s sequential latency on frame 0 vs ~$0.12 saved per video.
 
-    Returns a list of absolute PNG paths (None = failed frame).
+    frame_narrations: optional per-frame narration strings used to estimate
+        animation duration. Falls back to a default duration if not provided.
+
+    Returns a list of absolute paths (None = failed frame).
     """
     if not plan.frames:
         return []
+
+    # Inject narration into FramePlan.narration if not already set by planner
+    if frame_narrations:
+        for i, frame in enumerate(plan.frames):
+            if i < len(frame_narrations) and not frame.narration:
+                frame.narration = frame_narrations[i]
 
     # Phase 1 — warm the cache with frame 0
     first = await _generate_one_svg_frame(

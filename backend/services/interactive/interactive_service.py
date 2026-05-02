@@ -58,9 +58,9 @@ def _wrap_in_sandbox(raw_html: str) -> str:
     )
 
 
-async def _run_codegen(spec: str, user_prompt: str) -> str:
-    """Call the codegen LLM to produce freeform HTML for one entity."""
-    template = _load_prompt("canvas_codegen.md")
+async def _run_codegen_with_prompt(prompt_file: str, spec: str, user_prompt: str) -> str:
+    """Call the codegen LLM using the given prompt template file."""
+    template = _load_prompt(prompt_file)
     prompt = (
         template
         .replace("{{ENTITY_SPEC}}", spec)
@@ -78,6 +78,16 @@ async def _run_codegen(spec: str, user_prompt: str) -> str:
         result = result.split("\n", 1)[-1]
         result = result.rsplit("```", 1)[0]
     return result.strip()
+
+
+async def _run_codegen(spec: str, user_prompt: str) -> str:
+    """Produce freeform Canvas HTML (raw JS, no framework)."""
+    return await _run_codegen_with_prompt("canvas_codegen.md", spec, user_prompt)
+
+
+async def _run_p5_codegen(spec: str, user_prompt: str) -> str:
+    """Produce a p5.js looping animation sketch."""
+    return await _run_codegen_with_prompt("canvas_codegen_p5.md", spec, user_prompt)
 
 
 async def _plan_scene(
@@ -154,10 +164,13 @@ async def run_interactive_pipeline(
     # Stage 4: Emit blocks in order.
     # Pre-built entity blocks emit instantly; freeform_html blocks wait for codegen.
     for block in scene.blocks:
-        if block.type == "entity" and block.entity_type == "freeform_html":
+        if block.type == "entity" and block.entity_type in ("freeform_html", "p5_sketch"):
             spec = block.props.get("spec", "an interactive widget")
             try:
-                raw_html = await _run_codegen(spec, message)
+                if block.entity_type == "p5_sketch":
+                    raw_html = await _run_p5_codegen(spec, message)
+                else:
+                    raw_html = await _run_codegen(spec, message)
                 block.html = _wrap_in_sandbox(raw_html)
             except Exception as exc:
                 logger.error("Codegen failed for block %s: %s", block.id, exc)

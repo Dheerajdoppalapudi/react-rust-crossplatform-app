@@ -2,7 +2,13 @@
   "permissions": {
     "allow": [
       "Bash(grep -E \"\\\\.\\(jsx?|tsx?\\)$\")",
-      "Bash(npx vite *)"
+      "Bash(npx vite *)",
+      "Bash(grep -v '^$')"
+    ],
+    "additionalDirectories": [
+      "/tmp",
+      "/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/services/interactive/prompts",
+      "/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/services/interactive/prompts/catalog"
     ]
   }
 }

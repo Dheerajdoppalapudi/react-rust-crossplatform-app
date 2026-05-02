@@ -9,7 +9,6 @@ import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown'
 import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined'
 import FunctionsOutlinedIcon from '@mui/icons-material/FunctionsOutlined'
 import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined'
-import AccountTreeOutlinedIcon from '@mui/icons-material/AccountTreeOutlined'
 import { useTheme } from '@mui/material'
 import { MODELS, RENDER_MODES } from './constants'
 import { BRAND, PALETTE } from '../../theme/tokens.js'
@@ -18,10 +17,9 @@ const claudeModels = MODELS.filter((m) => m.provider === 'claude')
 const openaiModels = MODELS.filter((m) => m.provider === 'openai')
 
 const RENDER_MODE_ICONS = {
-  auto:    <AutoAwesomeOutlinedIcon sx={{ fontSize: 13 }} />,
-  manim:   <FunctionsOutlinedIcon  sx={{ fontSize: 13 }} />,
-  svg:     <BrushOutlinedIcon      sx={{ fontSize: 13 }} />,
-  mermaid: <AccountTreeOutlinedIcon sx={{ fontSize: 13 }} />,
+  auto:  <AutoAwesomeOutlinedIcon sx={{ fontSize: 13 }} />,
+  manim: <FunctionsOutlinedIcon  sx={{ fontSize: 13 }} />,
+  svg:   <BrushOutlinedIcon      sx={{ fontSize: 13 }} />,
 }
 
 export default function PromptBar({

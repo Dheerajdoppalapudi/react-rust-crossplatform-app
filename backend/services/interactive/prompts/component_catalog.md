@@ -404,3 +404,209 @@ Every entity block in `blocks[]` MUST have ALL THREE fields:
   }
 }
 ```
+
+---
+
+## table_viewer
+
+**Use when**: presenting structured data in rows and columns — algorithm complexity comparisons, language feature tables, API reference tables, benchmark results, or any tabular comparison.
+
+**Props**:
+- `columns` (array, **required**): `[{ "key": string, "label": string, "width": string }]`. `width` is optional CSS width (e.g. `"20%"`, `"120px"`).
+- `rows` (array, **required**): array of objects; each key matches a column `key`.
+- `caption` (string, optional): label shown below the table.
+- `sortable` (boolean, optional, default `true`): click column headers to sort.
+- `striped` (boolean, optional, default `true`): alternating row shading.
+- `highlightRows` (number[], optional): array of row indices (0-based) to highlight in accent color.
+
+**Example**:
+```json
+{
+  "id":          "b2",
+  "type":        "entity",
+  "entity_type": "table_viewer",
+  "props": {
+    "columns": [
+      { "key": "lang",         "label": "Language",     "width": "20%" },
+      { "key": "complexity",   "label": "Time (avg)",   "width": "20%" },
+      { "key": "space",        "label": "Space",        "width": "20%" },
+      { "key": "stable",       "label": "Stable?",      "width": "20%" },
+      { "key": "notes",        "label": "Notes",        "width": "20%" }
+    ],
+    "rows": [
+      { "lang": "Merge Sort",  "complexity": "O(n log n)", "space": "O(n)",    "stable": "Yes", "notes": "Divide and conquer" },
+      { "lang": "Quick Sort",  "complexity": "O(n log n)", "space": "O(log n)","stable": "No",  "notes": "In-place, fast in practice" },
+      { "lang": "Heap Sort",   "complexity": "O(n log n)", "space": "O(1)",    "stable": "No",  "notes": "Not cache-friendly" },
+      { "lang": "Bubble Sort", "complexity": "O(n²)",      "space": "O(1)",    "stable": "Yes", "notes": "Avoid for large n" }
+    ],
+    "highlightRows": [0, 1],
+    "caption": "Sorting algorithm comparison"
+  }
+}
+```
+
+---
+
+## terminal_output
+
+**Use when**: showing shell commands and their output — CLI walkthroughs, build steps, git commands, debugging sessions, or any sequence of commands with expected output.
+
+**Props**:
+- `blocks` (array, **required**): sequence of `{ "type": "command"|"output"|"comment", "content": string }`.
+  - `"command"`: shown with `$` prompt in blue — the command the user types.
+  - `"output"`: shown in muted grey — what the terminal prints.
+  - `"comment"`: shown in italic grey with `#` prefix — an annotation explaining what happened.
+- `shell` (string, optional, default `"bash"`): label shown in the title bar.
+- `title` (string, optional): overrides the shell label in the title bar.
+- `caption` (string, optional): label shown below the terminal.
+
+**Example**:
+```json
+{
+  "id":          "b3",
+  "type":        "entity",
+  "entity_type": "terminal_output",
+  "props": {
+    "shell": "bash",
+    "blocks": [
+      { "type": "comment", "content": "View the last 5 commits" },
+      { "type": "command", "content": "git log --oneline -5" },
+      { "type": "output",  "content": "a3f2b1c Add OAuth flow\n8d7e9a2 Fix session bug\nc1e0f44 Refactor auth middleware\n3b8a21d Initial project setup\nf2c91bb Add README" },
+      { "type": "comment", "content": "Undo the last commit but keep changes staged" },
+      { "type": "command", "content": "git reset --soft HEAD~1" },
+      { "type": "comment", "content": "Changes are now staged, ready to re-commit" }
+    ],
+    "caption": "Git undo strategies"
+  }
+}
+```
+
+---
+
+## diff_viewer
+
+**Use when**: showing code before and after a change — refactors, bug fixes, adding type annotations, converting to a new API, or any side-by-side code comparison.
+
+**Props**:
+- `before` (string, **required**): the original code. Use `\n` for newlines.
+- `after` (string, **required**): the updated code. Use `\n` for newlines.
+- `language` (string, optional, default `"python"`): syntax highlighting language — same values as `code_walkthrough`.
+- `mode` (string, optional, default `"split"`): `"split"` = side-by-side panels; `"unified"` = single panel with +/- prefixes.
+- `caption` (string, optional): label shown below the diff.
+
+**Example**:
+```json
+{
+  "id":          "b4",
+  "type":        "entity",
+  "entity_type": "diff_viewer",
+  "props": {
+    "before":   "def add(a, b):\n    return a + b",
+    "after":    "def add(a: int, b: int) -> int:\n    \"\"\"Add two integers.\"\"\"\n    return a + b",
+    "language": "python",
+    "mode":     "split",
+    "caption":  "Adding type hints and a docstring"
+  }
+}
+```
+
+---
+
+## p5_sketch
+
+**Use when**: a looping physics or math animation would explain the concept better than a static diagram — particle simulations, wave motion, orbital mechanics, fluid dynamics, pendulums, spring systems, Fourier visualisations, etc. Prefer this over `freeform_html` for **physics** and **math** domains. Adds ~3 s codegen latency.
+
+**Props**:
+- `spec` (string, **required**): plain-English description of the animation. Be specific: what is drawn, what parameters are controlled by sliders, what numerical readouts are shown, what physics equations drive the motion.
+- `height` (number, optional, default `420`): iframe height in pixels.
+- `caption` (string, optional): label shown below the sketch.
+
+**Spec writing tips**:
+- Name the objects being drawn (particle, ball, pendulum bob, wave, arrow).
+- Specify sliders and their ranges (e.g. "slider for gravity 0–20 m/s²").
+- Mention what text overlays to show (velocity, period, frequency).
+- The sketch uses p5.js 1.9.4, loads from CDN, runs at 60fps in a sandboxed iframe.
+
+**Example**:
+```json
+{
+  "id":          "b5",
+  "type":        "entity",
+  "entity_type": "p5_sketch",
+  "props": {
+    "spec": "A simple pendulum simulation. Draw a pivot point at the top center, a string of adjustable length, and a circular bob. Animate the bob swinging using the small-angle approximation: θ(t) = θ₀ cos(√(g/L)·t). Slider for string length (0.5–3 m) and initial angle (5–45°). Show current angle, period T=2π√(L/g), and elapsed time as text overlays. Dark background, blue string, white bob.",
+    "height":  420,
+    "caption": "Simple pendulum — period depends only on length, not mass"
+  }
+}
+```
+
+---
+
+## quiz_block
+
+**Use when**: testing the user's understanding after an explanation — a single multiple-choice or true/false question with immediate feedback and an explanation after answering. Great at the end of a topic section.
+
+**Props**:
+- `question` (string, **required**): the question text.
+- `options` (string[], **required**): answer choices (2–5 items). Ignored for `true_false`.
+- `correctIndex` (number, **required**): 0-based index of the correct answer in `options`.
+- `type` (string, optional, default `"mcq"`): `"mcq"` | `"true_false"`. For `true_false`, options are auto-generated as `["True", "False"]`.
+- `explanation` (string, optional): shown after the user answers — explain why the correct answer is right.
+- `hint` (string, optional): revealed on demand before the user answers.
+- `caption` (string, optional).
+
+**Example**:
+```json
+{
+  "id":          "b6",
+  "type":        "entity",
+  "entity_type": "quiz_block",
+  "props": {
+    "question":     "What is the time complexity of binary search on a sorted array of n elements?",
+    "type":         "mcq",
+    "options":      ["O(1)", "O(log n)", "O(n)", "O(n log n)"],
+    "correctIndex": 1,
+    "explanation":  "Binary search halves the remaining search space each step. After k steps, n/2^k elements remain. It terminates when that equals 1, so k = log₂(n) steps — O(log n).",
+    "hint":         "Think about how many elements are eliminated with each comparison."
+  }
+}
+```
+
+---
+
+## flashcard_deck
+
+**Use when**: the user wants to review or memorise a set of definitions, terms, or concepts — vocabulary, algorithm names, formula names, key theorems, language syntax. Each card has a front (question/term) and back (answer/definition).
+
+**Props**:
+- `cards` (array, **required**): `[{ "front": string, "back": string, "hint": string }]`. `hint` is optional per card.
+- `stepReveal` (boolean, optional, default `false`): if `true`, card advances with a `step_controls` block. If `false`, user navigates with Prev/Next buttons.
+- `caption` (string, optional).
+
+**Example**:
+```json
+{
+  "id":          "b7",
+  "type":        "entity",
+  "entity_type": "flashcard_deck",
+  "props": {
+    "cards": [
+      {
+        "front": "What is a closure in JavaScript?",
+        "back":  "A function that retains access to variables from its enclosing scope, even after that scope has exited.",
+        "hint":  "Think about what happens when a function is returned from another function."
+      },
+      {
+        "front": "What does the event loop do?",
+        "back":  "It continuously checks the call stack and the callback queue, moving callbacks onto the stack when it's empty — enabling non-blocking I/O."
+      },
+      {
+        "front": "What is memoization?",
+        "back":  "An optimization technique that caches the results of expensive function calls, returning the cached result when the same inputs occur again."
+      }
+    ],
+    "caption": "JavaScript core concepts"
+  }
+}
+```

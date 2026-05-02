@@ -1,8 +1,8 @@
 // ─── Intent metadata ──────────────────────────────────────────────────────────
 export const INTENT_META = {
-  process:         { label: 'Mermaid',      bg: '#ede9fe', text: '#6d28d9' },
-  architecture:    { label: 'Mermaid',      bg: '#ede9fe', text: '#6d28d9' },
-  timeline:        { label: 'Mermaid',      bg: '#ede9fe', text: '#6d28d9' },
+  process:         { label: 'SVG',          bg: '#fce7f3', text: '#be185d' },
+  architecture:    { label: 'SVG',          bg: '#fce7f3', text: '#be185d' },
+  timeline:        { label: 'SVG',          bg: '#fce7f3', text: '#be185d' },
   math:            { label: 'Manim',        bg: '#dbeafe', text: '#1d4ed8' },
   concept_analogy: { label: 'Diagram',      bg: '#fef3c7', text: '#b45309' },
   comparison:      { label: 'Diagram',      bg: '#fef3c7', text: '#b45309' },
@@ -10,9 +10,9 @@ export const INTENT_META = {
 }
 
 export const ACCENT_BY_INTENT = {
-  process:         '#c7d2fe',
-  architecture:    '#c7d2fe',
-  timeline:        '#c7d2fe',
+  process:         '#fbcfe8',
+  architecture:    '#fbcfe8',
+  timeline:        '#fbcfe8',
   math:            '#bfdbfe',
   concept_analogy: '#fde68a',
   comparison:      '#fde68a',
@@ -32,10 +32,9 @@ export const FOLLOWUP_SUGGESTIONS = {
 
 // ─── Render mode override ─────────────────────────────────────────────────────
 export const RENDER_MODES = [
-  { id: 'auto',    label: 'Auto',    description: 'AI picks the best format',         color: null },
-  { id: 'manim',   label: 'Manim',   description: 'Math & physics animations',        color: '#1d4ed8', bg: '#dbeafe' },
-  { id: 'svg',     label: 'SVG',     description: 'Illustrated diagrams & analogies', color: '#be185d', bg: '#fce7f3' },
-  { id: 'mermaid', label: 'Mermaid', description: 'Flow & architecture diagrams',     color: '#6d28d9', bg: '#ede9fe' },
+  { id: 'auto',  label: 'Auto',  description: 'AI picks the best format',         color: null },
+  { id: 'manim', label: 'Manim', description: 'Math & physics animations',        color: '#1d4ed8', bg: '#dbeafe' },
+  { id: 'svg',   label: 'SVG',   description: 'Animated diagrams & illustrations', color: '#be185d', bg: '#fce7f3' },
 ]
 
 export const DEFAULT_RENDER_MODE = RENDER_MODES[0]

@@ -1,18 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
-import { Box, Typography, Skeleton } from '@mui/material'
+import { Box, Typography, Skeleton, useTheme } from '@mui/material'
 import mermaid from 'mermaid'
 
-let _mermaidInitialised = false
+let _initializedTheme = null   // 'dark' | 'light' | null
 
 function initMermaid(isDark) {
-  if (_mermaidInitialised) return
+  const theme = isDark ? 'dark' : 'default'
+  if (_initializedTheme === theme) return
   mermaid.initialize({
     startOnLoad: false,
-    theme: isDark ? 'dark' : 'default',
+    theme,
     securityLevel: 'loose',
     fontFamily: 'system-ui, sans-serif',
   })
-  _mermaidInitialised = true
+  _initializedTheme = theme
 }
 
 let _idCounter = 0
@@ -26,13 +27,15 @@ function fixNewlines(src) {
 }
 
 export default function MermaidViewer({ entityId, diagram, caption }) {
+  const theme             = useTheme()
+  const isDark            = theme.palette.mode === 'dark'
   const [svg, setSvg]     = useState(null)
   const [error, setError] = useState(null)
   const idRef             = useRef(`mermaid-${entityId ?? ++_idCounter}`)
 
   useEffect(() => {
     if (!diagram) return
-    initMermaid(false)
+    initMermaid(isDark)
     setError(null)
     setSvg(null)
 
@@ -42,7 +45,7 @@ export default function MermaidViewer({ entityId, diagram, caption }) {
         console.error('MermaidViewer render error:', err)
         setError('Could not render diagram.')
       })
-  }, [diagram])
+  }, [diagram, isDark])
 
   if (error) {
     return (
