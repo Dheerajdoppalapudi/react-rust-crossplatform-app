@@ -55,7 +55,7 @@ export default function PromptBar({
     <Box sx={{ flexShrink: 0 }}>
 
       {pauseContext && (
-        <Box sx={{ px: 3, pt: 1.5, pb: 0 }}>
+        <Box sx={{ px: { xs: 1.5, sm: 3 }, pt: 1.5, pb: 0 }}>
           <Box sx={{
             display: 'flex', alignItems: 'center', gap: 1,
             px: 1.5, py: 0.75, borderRadius: '10px',
@@ -85,7 +85,7 @@ export default function PromptBar({
         </Box>
       )}
 
-      <Box sx={{ px: 3, pt: 1, pb: 2 }}>
+      <Box sx={{ px: { xs: 1.5, sm: 3 }, pt: 1, pb: { xs: 'max(env(safe-area-inset-bottom, 0px) + 12px, 16px)', sm: 2 } }}>
         <Box sx={{ maxWidth: 760, mx: 'auto' }}>
           <Box sx={{
             border: `1.5px solid ${promptBorder}`,

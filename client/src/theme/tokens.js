@@ -121,13 +121,13 @@ export const SPACING = {
 // ─── Border Radius ────────────────────────────────────────────────────────────
 export const RADIUS = {
   none:  0,
-  sharp: 4,   // minimal inline elements
-  sm:    6,   // small buttons, secondary elements
-  md:    8,   // standard buttons, cards, containers
-  lg:    12,  // primary buttons, inputs, nav elements
-  xl:    16,  // featured containers, video players
-  xxl:   24,  // tag-like, highlighted containers
-  full:  32,  // hero containers, large cards
+  sharp: 3,   // minimal inline elements
+  sm:    4,   // small buttons, secondary elements
+  md:    6,   // standard buttons, cards, containers
+  lg:    8,   // primary buttons, inputs, nav elements
+  xl:    12,  // featured containers, video players
+  xxl:   16,  // tag-like, highlighted containers
+  full:  24,  // hero containers, large cards
   pill:  9999, // fully rounded pills
 }
 

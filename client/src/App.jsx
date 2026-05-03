@@ -1,9 +1,13 @@
 import { useState, useMemo, createContext, useContext, useCallback, useEffect } from 'react'
 import { Routes, Route, useLocation, useNavigate, useMatch, Navigate } from 'react-router-dom'
-import { Box, ThemeProvider, CssBaseline } from '@mui/material'
+import { Box, ThemeProvider, CssBaseline, IconButton, Typography, useTheme, useMediaQuery } from '@mui/material'
+import MenuIcon from '@mui/icons-material/Menu'
+import AddIcon from '@mui/icons-material/Add'
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
 import { buildTheme } from './theme/index.js'
 import Sidebar from './components/common/Sidebar'
 import Footer from './components/common/Footer'
+import { BRAND } from './theme/tokens.js'
 import AboutUs from './pages/AboutUs'
 import Settings from './pages/Settings'
 import Studio from './pages/Studio'
@@ -19,8 +23,41 @@ import { api } from './services/api'
 export const ColorModeContext = createContext({ mode: 'light', toggle: () => {} })
 export const useColorMode = () => useContext(ColorModeContext)
 
+// ─── Mobile header toolbar slot ───────────────────────────────────────────────
+// Studio fills this slot on mobile so its controls appear in the header bar.
+export const MobileHeaderSlotContext = createContext({ setSlot: () => {} })
+export const useMobileHeaderSlot = () => useContext(MobileHeaderSlotContext)
+
 // ─── Pages that use the full viewport height — no footer, no padding ──────────
 const NO_PADDING_PAGES  = ['/']
+
+// ─── Mobile top bar ───────────────────────────────────────────────────────────
+function MobileHeader({ onOpenSidebar, onNewConversation, slot }) {
+  const theme = useTheme()
+  return (
+    <Box sx={{
+      height: 48, flexShrink: 0,
+      display: 'flex', alignItems: 'center',
+      px: 0.5,
+      borderBottom: `1px solid ${theme.palette.divider}`,
+      bgcolor: 'background.paper',
+      zIndex: 10,
+    }}>
+      <IconButton size="small" onClick={onOpenSidebar} sx={{ p: 1, flexShrink: 0 }}>
+        <MenuIcon sx={{ fontSize: 20, color: theme.palette.text.secondary }} />
+      </IconButton>
+
+      {/* Toolbar slot — Studio fills this when on mobile */}
+      <Box sx={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+        {slot}
+      </Box>
+
+      <IconButton size="small" onClick={onNewConversation} sx={{ p: 1, flexShrink: 0 }}>
+        <AddIcon sx={{ fontSize: 20, color: theme.palette.text.secondary }} />
+      </IconButton>
+    </Box>
+  )
+}
 
 // ─── Inner app — has access to ToastProvider + AuthContext ────────────────────
 function AppInner() {
@@ -29,9 +66,15 @@ function AppInner() {
   const toast       = useToast()
   const { user }    = useAuth()
   const { mode: themeMode, toggle: onThemeToggle } = useContext(ColorModeContext)
+  const theme       = useTheme()
+  const isMobile    = useMediaQuery(theme.breakpoints.down('sm'))
   const isFullHeight = location.pathname.startsWith('/studio')
   const isNoPadding  = NO_PADDING_PAGES.includes(location.pathname)
   const isLoginPage  = location.pathname === '/login' || location.pathname === '/register'
+
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
+  const [mobileHeaderSlot, setMobileHeaderSlot] = useState(null)
+  const slotCtx = useMemo(() => ({ setSlot: setMobileHeaderSlot }), [])
 
   // ── Conversations — lifted so Sidebar and Studio share state ─────────────
   const [conversations, setConversations]             = useState([])
@@ -112,92 +155,104 @@ function AppInner() {
   }, [activeConvId, navigate, toast])
 
   return (
-    <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden', bgcolor: 'background.default' }}>
+    <MobileHeaderSlotContext.Provider value={slotCtx}>
+      <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden', bgcolor: 'background.default' }}>
 
-      {/* Sidebar is hidden on the login page */}
-      {!isLoginPage && (
-        <Sidebar
-          conversations={conversations}
-          activeConvId={activeConvId}
-          onSelectConv={handleSelectConv}
-          onNewConversation={handleNewConversation}
-          onRenameConv={handleRenameConv}
-          onStarConv={handleStarConv}
-          onDeleteConv={handleDeleteConv}
-          themeMode={themeMode}
-          onThemeToggle={onThemeToggle}
-          isLoading={isLoadingConversations}
-        />
-      )}
+        {/* Sidebar is hidden on the login page */}
+        {!isLoginPage && (
+          <Sidebar
+            conversations={conversations}
+            activeConvId={activeConvId}
+            onSelectConv={handleSelectConv}
+            onNewConversation={handleNewConversation}
+            onRenameConv={handleRenameConv}
+            onStarConv={handleStarConv}
+            onDeleteConv={handleDeleteConv}
+            themeMode={themeMode}
+            onThemeToggle={onThemeToggle}
+            isLoading={isLoadingConversations}
+            mobileOpen={mobileDrawerOpen}
+            onMobileClose={() => setMobileDrawerOpen(false)}
+          />
+        )}
 
-      <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
-        <Box
-          component="main"
-          sx={{
-            flex: 1,
-            p: (isFullHeight || isNoPadding || isLoginPage) ? 0 : 3,
-            display: 'flex',
-            flexDirection: 'column',
-            minHeight: 0,
-            overflow: (isFullHeight || isLoginPage) ? 'hidden' : 'auto',
-            '& > *': { flex: 1, minHeight: 0 },
-          }}
-        >
-          {/* Route-level boundary: page crashes don't take down the sidebar.
-              Key stays constant within /studio/* so Studio never remounts on conv switch. */}
-          <ErrorBoundary level="page" key={location.pathname.startsWith('/studio') ? '/studio' : location.pathname}>
-            <Routes>
-              {/* Always public */}
-              <Route path="/"      element={<AboutUs />} />
-              <Route path="/login" element={
-                user ? <Navigate to="/studio" replace /> : <Login />
-              } />
-              <Route path="/register" element={
-                user ? <Navigate to="/studio" replace /> : <Register />
-              } />
+        <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
+          {/* Mobile top bar — shown only on small screens, not on login/register */}
+          {!isLoginPage && isMobile && (
+            <MobileHeader
+              onOpenSidebar={() => setMobileDrawerOpen(true)}
+              onNewConversation={handleNewConversation}
+              slot={mobileHeaderSlot}
+            />
+          )}
+          <Box
+            component="main"
+            sx={{
+              flex: 1,
+              p: (isFullHeight || isNoPadding || isLoginPage) ? 0 : 3,
+              display: 'flex',
+              flexDirection: 'column',
+              minHeight: 0,
+              overflow: (isFullHeight || isLoginPage) ? 'hidden' : 'auto',
+              '& > *': { flex: 1, minHeight: 0 },
+            }}
+          >
+            {/* Route-level boundary: page crashes don't take down the sidebar.
+                Key stays constant within /studio/* so Studio never remounts on conv switch. */}
+            <ErrorBoundary level="page" key={location.pathname.startsWith('/studio') ? '/studio' : location.pathname}>
+              <Routes>
+                {/* Always public */}
+                <Route path="/"      element={<AboutUs />} />
+                <Route path="/login" element={
+                  user ? <Navigate to="/studio" replace /> : <Login />
+                } />
+                <Route path="/register" element={
+                  user ? <Navigate to="/studio" replace /> : <Register />
+                } />
 
-              {/* Protected — require login */}
-              <Route path="/studio" element={
-                <ProtectedRoute>
-                  <Studio
-                    activeConvId={activeConvId}
-                    activeConvTitle={conversations.find((c) => c.id === activeConvId)?.title ?? null}
-                    activeConvStarred={!!(conversations.find((c) => c.id === activeConvId)?.starred)}
-                    onActiveConvIdChange={onActiveConvIdChange}
-                    onConversationsRefresh={fetchConversations}
-                    onRenameConv={handleRenameConv}
-                    onStarConv={handleStarConv}
-                    onDeleteConv={handleDeleteConv}
-                  />
-                </ProtectedRoute>
-              } />
-              <Route path="/studio/:convId" element={
-                <ProtectedRoute>
-                  <Studio
-                    activeConvId={activeConvId}
-                    activeConvTitle={conversations.find((c) => c.id === activeConvId)?.title ?? null}
-                    activeConvStarred={!!(conversations.find((c) => c.id === activeConvId)?.starred)}
-                    onActiveConvIdChange={onActiveConvIdChange}
-                    onConversationsRefresh={fetchConversations}
-                    onRenameConv={handleRenameConv}
-                    onStarConv={handleStarConv}
-                    onDeleteConv={handleDeleteConv}
-                  />
-                </ProtectedRoute>
-              } />
-              <Route path="/settings" element={
-                <ProtectedRoute>
-                  <Settings />
-                </ProtectedRoute>
-              } />
-            </Routes>
-          </ErrorBoundary>
+                {/* Protected — require login */}
+                <Route path="/studio" element={
+                  <ProtectedRoute>
+                    <Studio
+                      activeConvId={activeConvId}
+                      activeConvTitle={conversations.find((c) => c.id === activeConvId)?.title ?? null}
+                      activeConvStarred={!!(conversations.find((c) => c.id === activeConvId)?.starred)}
+                      onActiveConvIdChange={onActiveConvIdChange}
+                      onConversationsRefresh={fetchConversations}
+                      onRenameConv={handleRenameConv}
+                      onStarConv={handleStarConv}
+                      onDeleteConv={handleDeleteConv}
+                    />
+                  </ProtectedRoute>
+                } />
+                <Route path="/studio/:convId" element={
+                  <ProtectedRoute>
+                    <Studio
+                      activeConvId={activeConvId}
+                      activeConvTitle={conversations.find((c) => c.id === activeConvId)?.title ?? null}
+                      activeConvStarred={!!(conversations.find((c) => c.id === activeConvId)?.starred)}
+                      onActiveConvIdChange={onActiveConvIdChange}
+                      onConversationsRefresh={fetchConversations}
+                      onRenameConv={handleRenameConv}
+                      onStarConv={handleStarConv}
+                      onDeleteConv={handleDeleteConv}
+                    />
+                  </ProtectedRoute>
+                } />
+                <Route path="/settings" element={
+                  <ProtectedRoute>
+                    <Settings />
+                  </ProtectedRoute>
+                } />
+              </Routes>
+            </ErrorBoundary>
+          </Box>
+
+          {!isFullHeight && !isLoginPage && <Footer />}
         </Box>
 
-        {!isFullHeight && !isLoginPage && <Footer />}
       </Box>
-
-    </Box>
+    </MobileHeaderSlotContext.Provider>
   )
 }
 

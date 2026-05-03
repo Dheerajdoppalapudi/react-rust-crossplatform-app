@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
-import { Box, Tooltip, IconButton, Typography, Divider, useTheme } from '@mui/material'
+import { Box, Tooltip, IconButton, Typography, Divider, useTheme, useMediaQuery } from '@mui/material'
 import NotesOutlinedIcon    from '@mui/icons-material/NotesOutlined'
 import EditNoteIcon         from '@mui/icons-material/EditNote'
 import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined'
 import VideocamOffOutlined  from '@mui/icons-material/VideocamOffOutlined'
+import { useMobileHeaderSlot } from '../App'
 
 import LoadingView          from '../components/Studio/LoadingView'
 import EmptyView            from '../components/Studio/EmptyView'
@@ -31,9 +32,11 @@ export default function Studio({
   onStarConv,
   onDeleteConv,
 }) {
-  const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
-  const toast  = useToast()
+  const theme    = useTheme()
+  const isDark   = theme.palette.mode === 'dark'
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
+  const toast    = useToast()
+  const { setSlot } = useMobileHeaderSlot()
 
   // ── Persisted preferences ───────────────────────────────────────────────────
 
@@ -204,6 +207,70 @@ export default function Studio({
     }
   }, [abortAllVideoStreams, generationAbortRef, loadAbortRef, loadedConvIdRef])
 
+  // Push toolbar controls into the mobile header slot.
+  useEffect(() => {
+    if (!isMobile) { setSlot(null); return }
+    setSlot(
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+        {/* Chat / Learn toggle */}
+        <Box sx={{
+          display: 'flex',
+          border: `1px solid ${isDark ? 'rgba(255,255,255,0.12)' : '#e2e8f0'}`,
+          borderRadius: '7px', p: 0.25, gap: 0.2,
+        }}>
+          {['Chat', 'Learn'].map((label) => {
+            const m      = label.toLowerCase()
+            const active = viewMode === m
+            return (
+              <Box
+                key={m}
+                onClick={() => setViewMode(m)}
+                sx={{
+                  px: 1.25, py: 0.35, borderRadius: '5px', cursor: 'pointer',
+                  fontSize: 11, fontWeight: 600, userSelect: 'none',
+                  bgcolor: active ? theme.palette.primary.main : 'transparent',
+                  color:   active ? '#fff' : theme.palette.text.secondary,
+                  transition: 'all 0.15s',
+                }}
+              >
+                {label}
+              </Box>
+            )
+          })}
+        </Box>
+        {/* AI Notes */}
+        <IconButton size="small" onClick={toggleNotes} sx={{
+          borderRadius: '7px', p: 0.6,
+          border: `1px solid ${notesEnabled ? (isDark ? 'rgba(79,110,255,0.45)' : '#c7d2fe') : (isDark ? 'rgba(255,255,255,0.12)' : '#e2e8f0')}`,
+          color: notesEnabled ? theme.palette.primary.main : (isDark ? 'rgba(255,255,255,0.4)' : '#94a3b8'),
+          bgcolor: notesEnabled ? (isDark ? 'rgba(79,110,255,0.1)' : '#f0f4ff') : 'transparent',
+        }}>
+          <NotesOutlinedIcon sx={{ fontSize: 15 }} />
+        </IconButton>
+        {/* Video */}
+        <IconButton size="small" onClick={toggleVideo} sx={{
+          borderRadius: '7px', p: 0.6,
+          border: `1px solid ${videoEnabled ? (isDark ? 'rgba(79,110,255,0.45)' : '#c7d2fe') : (isDark ? 'rgba(255,255,255,0.12)' : '#e2e8f0')}`,
+          color: videoEnabled ? theme.palette.primary.main : (isDark ? 'rgba(255,255,255,0.4)' : '#94a3b8'),
+          bgcolor: videoEnabled ? (isDark ? 'rgba(79,110,255,0.1)' : '#f0f4ff') : 'transparent',
+        }}>
+          {videoEnabled ? <VideocamOutlinedIcon sx={{ fontSize: 15 }} /> : <VideocamOffOutlined sx={{ fontSize: 15 }} />}
+        </IconButton>
+        {/* My Notes */}
+        <IconButton size="small" onClick={toggleUserNotes} sx={{
+          borderRadius: '7px', p: 0.6,
+          border: `1px solid ${userNotesOpen ? (isDark ? 'rgba(79,110,255,0.45)' : '#c7d2fe') : (isDark ? 'rgba(255,255,255,0.12)' : '#e2e8f0')}`,
+          color: userNotesOpen ? theme.palette.primary.main : (isDark ? 'rgba(255,255,255,0.4)' : '#94a3b8'),
+          bgcolor: userNotesOpen ? (isDark ? 'rgba(79,110,255,0.1)' : '#f0f4ff') : 'transparent',
+        }}>
+          <EditNoteIcon sx={{ fontSize: 16 }} />
+        </IconButton>
+      </Box>
+    )
+    return () => setSlot(null)
+  }, [isMobile, isDark, viewMode, notesEnabled, videoEnabled, userNotesOpen,
+      setSlot, toggleNotes, toggleVideo, toggleUserNotes, setViewMode, theme.palette.primary.main])
+
   // ── Derived state ───────────────────────────────────────────────────────────
 
   const lastTurn = turns.at(-1) ?? null
@@ -290,15 +357,15 @@ export default function Studio({
         minWidth: 0,
       }}>
 
-        {/* ── Toolbar ────────────────────────────────────────────────────────── */}
+        {/* ── Toolbar — hidden on mobile (controls move to MobileHeader slot) ── */}
         <Box sx={{
           position: 'absolute', top: 12, right: 16, zIndex: 10,
-          display: 'flex', alignItems: 'center', gap: 0.75,
+          display: { xs: 'none', sm: 'flex' }, alignItems: 'center', gap: 0.75,
           bgcolor: isDark ? 'rgba(26,26,26,0.85)' : 'rgba(255,255,255,0.88)',
           backdropFilter: 'blur(12px)',
           border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)'}`,
           borderRadius: '10px',
-          px: 0.75, py: 0.5,
+          px: { xs: 0.5, sm: 0.75 }, py: 0.5,
           boxShadow: isDark ? '0 4px 16px rgba(0,0,0,0.4)' : '0 4px 16px rgba(0,0,0,0.08)',
         }}>
           {/* Chat / Learn toggle */}
@@ -427,7 +494,7 @@ export default function Studio({
             }}
           >
             {showLoader && (
-              <Box sx={{ width: '100%', maxWidth: 760, mx: 'auto', px: 3 }}>
+              <Box sx={{ width: '100%', maxWidth: 760, mx: 'auto', px: { xs: 2, sm: 3 } }}>
                 {bootstrapPrompt && (
                   <Box sx={{ display: 'flex', justifyContent: 'flex-end', pt: 3, pb: 1.5 }}>
                     <UserBubble prompt={bootstrapPrompt} />
@@ -456,7 +523,7 @@ export default function Studio({
                 />
 
                 {followUpSuggestions.length > 0 && (
-                  <Box sx={{ width: '100%', maxWidth: 760, mx: 'auto', px: 3, pt: 2, pb: 3 }}>
+                  <Box sx={{ width: '100%', maxWidth: 760, mx: 'auto', px: { xs: 2, sm: 3 }, pt: 2, pb: 3 }}>
                     <Typography sx={{ fontSize: 13, fontWeight: 600, color: theme.palette.text.secondary, mb: 0.5 }}>
                       Follow-ups
                     </Typography>

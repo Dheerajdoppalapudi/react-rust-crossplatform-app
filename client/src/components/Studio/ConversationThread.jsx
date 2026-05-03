@@ -11,7 +11,7 @@ import BlockRenderer from '../Interactive/BlockRenderer'
 
 function ContentColumn({ children }) {
   return (
-    <Box sx={{ width: '100%', maxWidth: 760, mx: 'auto', px: 3 }}>
+    <Box sx={{ width: '100%', maxWidth: 760, mx: 'auto', px: { xs: 2, sm: 3 } }}>
       {children}
     </Box>
   )
