@@ -210,7 +210,7 @@ export function useGeneration({
             if (event.type === 'meta') {
               const baseTurnData = {
                 render_path: 'interactive', isLoading: true,
-                title: event.title ?? '', followUps: event.follow_ups ?? [], blocks: [],
+                title: event.title ?? '', followUps: event.follow_ups ?? [], learningObjective: event.learning_objective ?? null, blocks: [],
               }
               if (isFirstTurn) {
                 setTurns([{

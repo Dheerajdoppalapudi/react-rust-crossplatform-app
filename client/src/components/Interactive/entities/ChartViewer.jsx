@@ -1,4 +1,6 @@
-import { Box, Typography, useTheme } from '@mui/material'
+import { useRef, useCallback } from 'react'
+import { Box, Typography, Tooltip, IconButton, useTheme } from '@mui/material'
+import DownloadIcon from '@mui/icons-material/Download'
 import {
   ResponsiveContainer,
   BarChart, Bar,
@@ -8,19 +10,14 @@ import {
   PieChart, Pie, Cell,
   RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
   ComposedChart,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine,
+  XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, Legend, ReferenceLine, ReferenceDot,
 } from 'recharts'
 import { TYPOGRAPHY, RADIUS, PALETTE, BRAND } from '../../../theme/tokens'
 
 const DEFAULT_COLORS = [
-  BRAND.primary,
-  BRAND.accent,
-  PALETTE.warningOrange,
-  PALETTE.successGreen,
-  '#e879f9',
-  '#38bdf8',
-  '#fb7185',
-  '#a3e635',
+  BRAND.primary, BRAND.accent,
+  PALETTE.warningOrange, PALETTE.successGreen,
+  '#e879f9', '#38bdf8', '#fb7185', '#a3e635',
 ]
 
 function color(series, index, colors) {
@@ -42,13 +39,8 @@ function buildTooltipStyle(isDark) {
   }
 }
 
-function gridColor(isDark) {
-  return isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)'
-}
-
-function axisStyle(isDark) {
-  return { fontSize: TYPOGRAPHY.sizes.caption, fill: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)' }
-}
+function gridColor(isDark) { return isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)' }
+function axisStyle(isDark)  { return { fontSize: TYPOGRAPHY.sizes.caption, fill: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)' } }
 
 function ChartTitle({ title, isDark }) {
   if (!title) return null
@@ -82,36 +74,65 @@ export default function ChartViewer({
   showGrid    = true,
   showDots    = false,
   referenceLines = [],
+  annotations    = [],
   colors,
   caption,
 }) {
-  const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
-  const tt     = buildTooltipStyle(isDark)
-  const grid   = gridColor(isDark)
-  const axis   = axisStyle(isDark)
-  const yScale = logScale ? 'log' : 'auto'
-  const stack  = stacked ? 'a' : undefined
-
-  const sharedAxisProps = { tick: axis, axisLine: false, tickLine: false }
+  const theme     = useTheme()
+  const isDark    = theme.palette.mode === 'dark'
+  const chartRef  = useRef(null)
+  const tt        = buildTooltipStyle(isDark)
+  const grid      = gridColor(isDark)
+  const axis      = axisStyle(isDark)
+  const yScale    = logScale ? 'log' : 'auto'
+  const stack     = stacked ? 'a' : undefined
   const isVertical = layout === 'vertical'
 
-  // For vertical bar layout (horizontal bars), axes must be swapped:
-  // YAxis holds the categories, XAxis holds the numeric values.
+  const handleDownload = useCallback(() => {
+    const svg = chartRef.current?.querySelector('svg')
+    if (!svg) return
+    const serializer = new XMLSerializer()
+    const svgStr     = serializer.serializeToString(svg)
+    const blob       = new Blob([svgStr], { type: 'image/svg+xml' })
+    const url        = URL.createObjectURL(blob)
+    const a          = document.createElement('a')
+    a.href           = url
+    a.download       = 'chart.svg'
+    a.click()
+    URL.revokeObjectURL(url)
+  }, [])
+
+  const sharedAxisProps = { tick: axis, axisLine: false, tickLine: false }
+
+  const annotationDots = annotations.map((a, i) => (
+    <ReferenceDot
+      key={`ann-${i}`}
+      x={a.x} y={a.y}
+      r={5}
+      fill={a.color ?? PALETTE.warningOrange}
+      stroke="none"
+      label={{ value: a.label ?? '', position: 'top', fontSize: 11, fill: a.color ?? PALETTE.warningOrange }}
+    />
+  ))
+
   const commonChildren = (
     <>
       {showGrid && <CartesianGrid strokeDasharray="3 3" stroke={grid} />}
       {isVertical
         ? <>
-            <XAxis type="number" scale={yScale} {...sharedAxisProps} label={yLabel ? { value: yLabel, position: 'insideBottom', offset: -4, style: axis } : undefined} />
-            <YAxis type="category" dataKey={xKey} {...sharedAxisProps} width={80} label={xLabel ? { value: xLabel, angle: -90, position: 'insideLeft', style: axis } : undefined} />
+            <XAxis type="number" scale={yScale} {...sharedAxisProps}
+              label={yLabel ? { value: yLabel, position: 'insideBottom', offset: -4, style: axis } : undefined} />
+            <YAxis type="category" dataKey={xKey} {...sharedAxisProps} width={80}
+              label={xLabel ? { value: xLabel, angle: -90, position: 'insideLeft', style: axis } : undefined} />
           </>
         : <>
-            <XAxis dataKey={xKey} {...sharedAxisProps} label={xLabel ? { value: xLabel, position: 'insideBottom', offset: -4, style: axis } : undefined} />
-            <YAxis scale={yScale} {...sharedAxisProps} label={yLabel ? { value: yLabel, angle: -90, position: 'insideLeft', style: axis } : undefined} />
+            <XAxis dataKey={xKey} {...sharedAxisProps}
+              label={xLabel ? { value: xLabel, position: 'insideBottom', offset: -4, style: axis } : undefined} />
+            <YAxis scale={yScale} {...sharedAxisProps}
+              label={yLabel ? { value: yLabel, angle: -90, position: 'insideLeft', style: axis } : undefined} />
           </>
       }
-      <Tooltip {...tt} />
+      <RTooltip {...tt} />
       {showLegend && <Legend wrapperStyle={{ fontSize: TYPOGRAPHY.sizes.caption }} />}
       {referenceLines.map((rl, i) => (
         <ReferenceLine
@@ -123,6 +144,7 @@ export default function ChartViewer({
           label={{ value: rl.label ?? '', fill: rl.color ?? PALETTE.successGreen, fontSize: TYPOGRAPHY.sizes.caption }}
         />
       ))}
+      {annotationDots}
     </>
   )
 
@@ -136,7 +158,7 @@ export default function ChartViewer({
         <Pie data={pieData} dataKey={pieKey} nameKey={nameKey} cx="50%" cy="50%" outerRadius="70%" innerRadius={innerR} label>
           {pieData.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
         </Pie>
-        <Tooltip {...tt} />
+        <RTooltip {...tt} />
         {showLegend && <Legend wrapperStyle={{ fontSize: TYPOGRAPHY.sizes.caption }} />}
       </PieChart>
     )
@@ -150,7 +172,7 @@ export default function ChartViewer({
           <Radar key={s.dataKey} name={s.name ?? s.dataKey} dataKey={s.dataKey}
             stroke={color(s, i, colors)} fill={color(s, i, colors)} fillOpacity={0.3} />
         ))}
-        <Tooltip {...tt} />
+        <RTooltip {...tt} />
         {showLegend && <Legend wrapperStyle={{ fontSize: TYPOGRAPHY.sizes.caption }} />}
       </RadarChart>
     )
@@ -160,9 +182,10 @@ export default function ChartViewer({
         {showGrid && <CartesianGrid strokeDasharray="3 3" stroke={grid} />}
         <SXAxis dataKey={series[0]?.dataKey ?? 'x'} type="number" {...sharedAxisProps} />
         <SYAxis dataKey={series[1]?.dataKey ?? 'y'} type="number" {...sharedAxisProps} />
-        <Tooltip cursor={{ strokeDasharray: '3 3' }} {...tt} />
+        <RTooltip cursor={{ strokeDasharray: '3 3' }} {...tt} />
         {showLegend && <Legend wrapperStyle={{ fontSize: TYPOGRAPHY.sizes.caption }} />}
         <Scatter name={series[0]?.name ?? 'data'} data={data} fill={color(series[0], 0, colors)} />
+        {annotationDots}
       </ScatterChart>
     )
   } else if (type === 'composed') {
@@ -198,7 +221,6 @@ export default function ChartViewer({
       </LineChart>
     )
   } else {
-    // bar (default)
     chart = (
       <BarChart data={data} layout={layout === 'vertical' ? 'vertical' : 'horizontal'}>
         {commonChildren}
@@ -212,10 +234,22 @@ export default function ChartViewer({
 
   return (
     <Box>
-      <ChartTitle title={title} isDark={isDark} />
-      <ResponsiveContainer width="100%" height={height}>
-        {chart}
-      </ResponsiveContainer>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: title ? 0 : 0.5 }}>
+        <ChartTitle title={title} isDark={isDark} />
+        <Tooltip title="Download SVG">
+          <IconButton size="small" onClick={handleDownload} aria-label="Download chart"
+            sx={{ color: 'text.disabled', width: 26, height: 26, ml: 'auto' }}>
+            <DownloadIcon sx={{ fontSize: 15 }} />
+          </IconButton>
+        </Tooltip>
+      </Box>
+
+      <Box ref={chartRef}>
+        <ResponsiveContainer width="100%" height={height}>
+          {chart}
+        </ResponsiveContainer>
+      </Box>
+
       {caption && (
         <Typography sx={{
           mt: 1, fontSize: TYPOGRAPHY.sizes.caption, textAlign: 'center',

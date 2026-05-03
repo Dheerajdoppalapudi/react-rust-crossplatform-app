@@ -4,9 +4,10 @@ import { motion, AnimatePresence } from 'framer-motion'
 
 const MotionDiv = motion.div
 import { useSceneStore } from '../useSceneStore'
+import { useExpanded } from '../BlockWrapper'
 import { TYPOGRAPHY, RADIUS, PALETTE, BRAND } from '../../../theme/tokens'
 
-function EventCard({ event, side, orientation, index }) {
+function EventCard({ event, side, orientation, index, compact }) {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
   const color  = event.color ?? BRAND.primary
@@ -26,14 +27,13 @@ function EventCard({ event, side, orientation, index }) {
       <Box sx={{
         borderLeft: `3px solid ${color}`,
         borderRadius: `0 ${RADIUS.md}px ${RADIUS.md}px 0`,
-        backgroundColor: isDark
-          ? `${color}14`
-          : `${color}0d`,
-        px: 2, py: 1.5,
-        maxWidth: orientation === 'vertical' ? 280 : 220,
-        minWidth: orientation === 'vertical' ? 180 : 160,
+        backgroundColor: isDark ? `${color}14` : `${color}0d`,
+        px: compact ? 1.25 : 2,
+        py: compact ? 0.75 : 1.5,
+        maxWidth: orientation === 'vertical' ? (compact ? 220 : 280) : (compact ? 160 : 220),
+        minWidth: orientation === 'vertical' ? (compact ? 130 : 180) : (compact ? 110 : 160),
       }}>
-        {event.icon && (
+        {!compact && event.icon && (
           <Typography sx={{ fontSize: '1.3rem', lineHeight: 1.2, mb: 0.5 }}>{event.icon}</Typography>
         )}
         <Typography sx={{
@@ -44,18 +44,19 @@ function EventCard({ event, side, orientation, index }) {
           textTransform: 'uppercase',
           mb: 0.25,
         }}>
-          {event.date}
+          {compact && event.icon ? `${event.icon} ${event.date}` : event.date}
         </Typography>
         <Typography sx={{
-          fontSize: TYPOGRAPHY.sizes.bodySm ?? '0.8125rem',
+          fontSize: compact ? TYPOGRAPHY.sizes.caption : (TYPOGRAPHY.sizes.bodySm ?? '0.8125rem'),
           fontWeight: TYPOGRAPHY.weights.semibold,
           color: isDark ? PALETTE.warmSilver : PALETTE.nearBlackText,
-          mb: 0.5,
+          mb: compact ? 0 : 0.5,
           lineHeight: 1.3,
+          ...(compact ? { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } : {}),
         }}>
           {event.title}
         </Typography>
-        {event.description && (
+        {!compact && event.description && (
           <Typography sx={{
             fontSize: TYPOGRAPHY.sizes.caption,
             color: isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.45)',
@@ -82,25 +83,23 @@ function SpineDot({ color }) {
   )
 }
 
-function VerticalTimeline({ events }) {
+function VerticalTimeline({ events, compact }) {
   return (
     <Box sx={{ position: 'relative', px: 2, py: 1 }}>
-      {/* Center spine */}
       <Box sx={{
         position: 'absolute', left: '50%', top: 0, bottom: 0,
         width: 2, transform: 'translateX(-50%)',
         backgroundColor: 'divider',
       }} />
-
       {events.map((event, i) => {
         const side = i % 2 === 0 ? 'left' : 'right'
         return (
           <Box key={i} sx={{
-            display: 'flex', alignItems: 'center', mb: 3,
+            display: 'flex', alignItems: 'center', mb: compact ? 1.5 : 3,
             flexDirection: side === 'left' ? 'row' : 'row-reverse',
           }}>
             <Box sx={{ flex: 1, display: 'flex', justifyContent: side === 'left' ? 'flex-end' : 'flex-start', pr: side === 'left' ? 2 : 0, pl: side === 'right' ? 2 : 0 }}>
-              <EventCard event={event} side={side} orientation="vertical" index={i} />
+              <EventCard event={event} side={side} orientation="vertical" index={i} compact={compact} />
             </Box>
             <SpineDot color={event.color} />
             <Box sx={{ flex: 1 }} />
@@ -111,37 +110,37 @@ function VerticalTimeline({ events }) {
   )
 }
 
-function HorizontalTimeline({ events }) {
+function HorizontalTimeline({ events, compact }) {
+  const cardWidth = compact ? 140 : 220
   return (
-    <Box sx={{ overflowX: 'auto', pb: 1 }}>
-      <Box sx={{ position: 'relative', display: 'flex', alignItems: 'center', minWidth: events.length * 220, py: 2 }}>
-        {/* Horizontal spine */}
+    <Box sx={{ pb: 1 }}>
+      <Box sx={{ position: 'relative', display: 'flex', alignItems: 'center', minWidth: events.length * cardWidth, py: 2 }}>
         <Box sx={{
           position: 'absolute', top: '50%', left: 0, right: 0,
           height: 2, backgroundColor: 'divider', transform: 'translateY(-50%)',
         }} />
-
         {events.map((event, i) => {
           const side = i % 2 === 0 ? 'top' : 'bottom'
           return (
-            <Box key={i} sx={{
-              display: 'flex', flexDirection: 'column', alignItems: 'center',
-              flex: 1, position: 'relative',
-            }}>
+            <Box key={i} sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, position: 'relative' }}>
               {side === 'top' && (
                 <Box sx={{ mb: 1 }}>
-                  <EventCard event={event} side="top" orientation="horizontal" index={i} />
+                  <EventCard event={event} side="top" orientation="horizontal" index={i} compact={compact} />
                 </Box>
               )}
               <SpineDot color={event.color} />
               {side === 'bottom' && (
                 <Box sx={{ mt: 1 }}>
-                  <EventCard event={event} side="bottom" orientation="horizontal" index={i} />
+                  <EventCard event={event} side="bottom" orientation="horizontal" index={i} compact={compact} />
                 </Box>
               )}
             </Box>
           )
         })}
+      </Box>
+      {/* Scroll hint */}
+      <Box sx={{ textAlign: 'center', mt: 0.5 }}>
+        <Typography sx={{ fontSize: 10, opacity: 0.3, letterSpacing: '0.05em' }}>← scroll →</Typography>
       </Box>
     </Box>
   )
@@ -172,10 +171,12 @@ export default function TimelineViewer({
   orientation  = 'vertical',
   stepReveal   = false,
   groupBy,
+  compact      = false,
   caption,
 }) {
-  const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
+  const theme      = useTheme()
+  const isDark     = theme.palette.mode === 'dark'
+  const isExpanded = useExpanded()
 
   const stepIndex = useSceneStore(s => s.getStep(entityId))
 
@@ -208,18 +209,20 @@ export default function TimelineViewer({
   return (
     <Box>
       <Box sx={{
-        border: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.borderCream}`,
-        borderRadius: `${RADIUS.lg}px`,
+        border: isExpanded ? 'none' : `1px solid ${isDark ? PALETTE.borderDark : PALETTE.borderCream}`,
+        borderRadius: isExpanded ? 0 : `${RADIUS.lg}px`,
         backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.01)',
-        p: 2, overflow: 'hidden',
+        p: isExpanded ? 3 : 2,
+        overflow: 'hidden',
+        overflowX: orientation === 'horizontal' ? 'auto' : 'hidden',
       }}>
         <AnimatePresence>
           {sections.map((section, si) => (
             <Box key={si}>
               {section.label && <CategoryHeader label={section.label} isDark={isDark} />}
               {orientation === 'vertical'
-                ? <VerticalTimeline events={section.events} />
-                : <HorizontalTimeline events={section.events} />
+                ? <VerticalTimeline    events={section.events} compact={compact} />
+                : <HorizontalTimeline  events={section.events} compact={compact} />
               }
             </Box>
           ))}

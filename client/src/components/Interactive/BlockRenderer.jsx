@@ -1,9 +1,10 @@
 import { useEffect } from 'react'
 import { Box, Stack, Skeleton, Typography, useTheme } from '@mui/material'
 import MarkdownText from './MarkdownText'
-import { resolveEntity } from './registry'
+import { resolveEntity, getBlockMeta } from './registry'
 import { useSceneStore } from './useSceneStore'
 import ErrorBoundary from '../error/ErrorBoundary'
+import BlockWrapper from './BlockWrapper'
 import { TYPOGRAPHY, RADIUS } from '../../theme/tokens.js'
 
 function FallbackCard({ entityType }) {
@@ -23,8 +24,10 @@ function FallbackCard({ entityType }) {
   )
 }
 
-export default function BlockRenderer({ title, blocks = [], isLoading }) {
+export default function BlockRenderer({ title, learningObjective, blocks = [], isLoading }) {
   const resetScene = useSceneStore(s => s.resetScene)
+  const theme  = useTheme()
+  const isDark = theme.palette.mode === 'dark'
 
   useEffect(() => {
     resetScene()
@@ -43,23 +46,50 @@ export default function BlockRenderer({ title, blocks = [], isLoading }) {
         </Typography>
       )}
 
+      {learningObjective && (
+        <Box sx={{
+          px: 2, py: 1.25,
+          borderRadius: `${RADIUS.md}px`,
+          backgroundColor: isDark ? 'rgba(75,114,255,0.08)' : 'rgba(75,114,255,0.05)',
+          borderLeft: '3px solid #4B72FF',
+        }}>
+          <Typography sx={{
+            fontSize: TYPOGRAPHY.sizes.caption,
+            color: isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.55)',
+            lineHeight: 1.5,
+          }}>
+            <Box component="span" sx={{ fontWeight: 600, color: '#4B72FF', mr: 0.75 }}>
+              Goal:
+            </Box>
+            {learningObjective}
+          </Typography>
+        </Box>
+      )}
+
       {blocks.map(block => {
         if (block.type === 'text') {
           return <MarkdownText key={block.id} content={block.content} />
         }
 
         const Component = resolveEntity(block.entity_type)
+        const meta      = getBlockMeta(block.entity_type)
+        const copyText  = meta.getCopyText ? meta.getCopyText(block.props ?? {}) : null
+        const noExpand  = meta.noExpand ?? false
+        const label     = (block.entity_type ?? '').replace(/_/g, ' ')
+
         return (
           <ErrorBoundary
             key={block.id}
             level="component"
             fallback={<FallbackCard entityType={block.entity_type} />}
           >
-            <Component
-              entityId={block.id}
-              {...(block.props ?? {})}
-              html={block.html ?? null}
-            />
+            <BlockWrapper copyText={copyText || null} label={label} noExpand={noExpand}>
+              <Component
+                entityId={block.id}
+                {...(block.props ?? {})}
+                html={block.html ?? null}
+              />
+            </BlockWrapper>
           </ErrorBoundary>
         )
       })}

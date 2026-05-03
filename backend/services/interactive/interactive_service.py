@@ -252,6 +252,7 @@ async def run_interactive_pipeline(
         "type": "meta",
         "title": scene.title,
         "follow_ups": scene.follow_ups,
+        "learning_objective": scene.learning_objective,
     }
 
     # Stage 5: Emit blocks in order.

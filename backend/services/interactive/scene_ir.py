@@ -62,7 +62,7 @@ class SceneBlock(BaseModel):
                 "terminal_output":  ["blocks"],
                 "diff_viewer":      ["before", "after"],
                 "p5_sketch":        ["spec"],
-                "quiz_block":       ["question", "options", "correctIndex"],
+                "quiz_block":       [],  # validated below: accepts single-q or questions array
                 "flashcard_deck":   ["cards"],
             }
             missing = [
@@ -71,6 +71,13 @@ class SceneBlock(BaseModel):
             ]
             if missing:
                 raise ValueError(f"{self.entity_type} missing required props: {missing}")
+
+            # quiz_block: accept either questions array or single-question triple
+            if self.entity_type == "quiz_block":
+                has_single = all(k in self.props for k in ("question", "options", "correctIndex"))
+                has_multi  = "questions" in self.props
+                if not has_single and not has_multi:
+                    raise ValueError("quiz_block requires either 'questions' array or 'question'+'options'+'correctIndex'")
 
             # math_formula needs either 'latex' or 'steps'
             if self.entity_type == "math_formula":
@@ -91,5 +98,6 @@ class SceneIR(BaseModel):
     title: str
     domain: str
     intent: str
+    learning_objective: Optional[str] = None
     follow_ups: list[str] = []
     blocks: list[SceneBlock]

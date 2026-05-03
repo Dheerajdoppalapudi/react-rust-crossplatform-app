@@ -92,6 +92,7 @@ function TurnView({ turn, onPauseAsk, onRetryTurn, onRetryGeneration }) {
           (turn.title || (turn.blocks ?? []).length > 0) ? (
             <BlockRenderer
               title={turn.title}
+              learningObjective={turn.learningObjective}
               blocks={turn.blocks ?? []}
               isLoading={turn.isLoading}
             />

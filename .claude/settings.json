@@ -3,7 +3,9 @@
     "allow": [
       "Bash(grep -E \"\\\\.\\(jsx?|tsx?\\)$\")",
       "Bash(npx vite *)",
-      "Bash(grep -v '^$')"
+      "Bash(grep -v '^$')",
+      "Bash(grep -E \"\\\\.jsx$\")",
+      "Bash(git -C \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app\" diff --stat HEAD)"
     ],
     "additionalDirectories": [
       "/tmp",

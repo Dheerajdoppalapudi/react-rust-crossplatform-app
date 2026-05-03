@@ -1,5 +1,6 @@
-import { useMemo } from 'react'
-import { Box, Typography, useTheme } from '@mui/material'
+import { useMemo, useState, useCallback } from 'react'
+import { Box, Typography, Tooltip, IconButton, useTheme } from '@mui/material'
+import RefreshIcon from '@mui/icons-material/Refresh'
 import ReactFlow, {
   Background, Controls, MiniMap,
   MarkerType,
@@ -34,7 +35,10 @@ function buildNodes(rawNodes, highlightedNodeIds, nodeColors, isDark) {
       id:       n.id,
       type:     n.type ?? 'default',
       position: n.position ?? { x: n.x ?? 0, y: n.y ?? 0 },
-      data: { label: n.label ?? n.id },
+      data: {
+        label:    n.label ?? n.id,
+        metadata: n.metadata ?? null,
+      },
       style: {
         fontSize:        TYPOGRAPHY.sizes.caption,
         fontFamily:      TYPOGRAPHY.fontFamily,
@@ -63,36 +67,31 @@ function buildEdges(rawEdges, highlightedEdgeIds, directed, isDark) {
   return rawEdges.map(e => {
     const isHighlighted = highlightedEdgeIds.has(e.id)
     return {
-      id:           e.id ?? `${e.source}-${e.target}`,
-      source:       e.source,
-      target:       e.target,
-      label:        e.label,
-      animated:     e.animated ?? false,
-      type:         e.type ?? 'smoothstep',
-      markerEnd:    directed ? { type: MarkerType.ArrowClosed, color: isHighlighted ? BRAND.primary : (isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.35)') } : undefined,
+      id:       e.id ?? `${e.source}-${e.target}`,
+      source:   e.source,
+      target:   e.target,
+      label:    e.label,
+      animated: e.animated ?? false,
+      type:     e.type ?? 'smoothstep',
+      markerEnd: directed ? { type: MarkerType.ArrowClosed, color: isHighlighted ? BRAND.primary : (isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.35)') } : undefined,
       style: {
         stroke:      isHighlighted ? BRAND.primary : (isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.25)'),
         strokeWidth: isHighlighted ? 2.5 : 1.5,
         transition:  'stroke 0.25s ease, stroke-width 0.25s ease',
       },
-      labelStyle: {
-        fontSize:   TYPOGRAPHY.sizes.caption,
-        fill:       isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)',
-        fontFamily: TYPOGRAPHY.fontFamily,
-      },
-      labelBgStyle: {
-        fill: isDark ? PALETTE.darkSurface : '#ffffff',
-        fillOpacity: 0.8,
-      },
+      labelStyle:   { fontSize: TYPOGRAPHY.sizes.caption, fill: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)', fontFamily: TYPOGRAPHY.fontFamily },
+      labelBgStyle: { fill: isDark ? PALETTE.darkSurface : '#ffffff', fillOpacity: 0.8 },
     }
   })
 }
 
-function GraphInner({ rawNodes, rawEdges, layout, directed, height, showMinimap, showControls, stepHighlights, nodeColors, caption, entityId }) {
+function GraphInner({ rawNodes, rawEdges, layout, directed, height, showMinimap, showControls, stepHighlights, nodeColors, caption, entityId, resetKey }) {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
 
   const stepIndex = useSceneStore(s => s.getStep(entityId))
+
+  const [hoveredNodeId, setHoveredNodeId] = useState(null)
 
   const highlightedNodeIds = useMemo(() => {
     if (!stepHighlights?.length) return new Set()
@@ -112,7 +111,7 @@ function GraphInner({ rawNodes, rawEdges, layout, directed, height, showMinimap,
     }
     const dir = layout === 'dagre-tb' ? 'TB' : 'LR'
     return applyDagreLayout(rawNodes, rawEdges, dir)
-  }, [rawNodes, rawEdges, layout])
+  }, [rawNodes, rawEdges, layout, resetKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const rfNodes = useMemo(
     () => buildNodes(laidOutNodes, highlightedNodeIds, nodeColors, isDark),
@@ -125,20 +124,29 @@ function GraphInner({ rawNodes, rawEdges, layout, directed, height, showMinimap,
   )
 
   const [nodes, , onNodesChange] = useNodesState(rfNodes)
-  const [, , onEdgesChange] = useEdgesState(rfEdges)
+  const [, , onEdgesChange]      = useEdgesState(rfEdges)
 
-  // Sync external highlight changes into node/edge state
-  const displayNodes = rfNodes.map(n => ({ ...n, ...nodes.find(nn => nn.id === n.id && nn.dragging ? { position: nn.position } : {}) }))
-  const displayEdges = rfEdges
+  const displayNodes = rfNodes.map(n => ({
+    ...n,
+    ...nodes.find(nn => nn.id === n.id && nn.dragging ? { position: nn.position } : {}),
+  }))
+
+  const hoveredNode = hoveredNodeId ? rawNodes.find(n => n.id === hoveredNodeId) : null
 
   return (
     <Box>
-      <Box sx={{ height, borderRadius: `${RADIUS.lg}px`, overflow: 'hidden', border: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.borderCream}` }}>
+      <Box sx={{
+        height, position: 'relative',
+        borderRadius: `${RADIUS.lg}px`, overflow: 'hidden',
+        border: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.borderCream}`,
+      }}>
         <ReactFlow
           nodes={displayNodes}
-          edges={displayEdges}
+          edges={rfEdges}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
+          onNodeMouseEnter={(_, node) => { if (node.data.metadata) setHoveredNodeId(node.id) }}
+          onNodeMouseLeave={() => setHoveredNodeId(null)}
           fitView
           fitViewOptions={{ padding: 0.2 }}
           nodesDraggable={true}
@@ -151,7 +159,28 @@ function GraphInner({ rawNodes, rawEdges, layout, directed, height, showMinimap,
           {showMinimap  && <MiniMap nodeColor={n => n.style?.backgroundColor ?? '#eee'} maskColor={isDark ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.6)'} />}
           <Background variant="dots" gap={16} size={1} color={isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'} />
         </ReactFlow>
+
+        {/* Hover tooltip for node metadata */}
+        {hoveredNode?.metadata && (
+          <Box sx={{
+            position: 'absolute', bottom: 12, left: '50%', transform: 'translateX(-50%)',
+            backgroundColor: isDark ? 'rgba(13,17,23,0.95)' : 'rgba(255,255,255,0.97)',
+            border: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.borderCream}`,
+            borderRadius: `${RADIUS.md}px`,
+            px: 1.5, py: 0.75, maxWidth: 320, zIndex: 10,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          }}>
+            <Typography sx={{
+              fontSize: TYPOGRAPHY.sizes.caption,
+              color: isDark ? PALETTE.warmSilver : PALETTE.nearBlackText,
+              lineHeight: 1.45,
+            }}>
+              {hoveredNode.metadata}
+            </Typography>
+          </Box>
+        )}
       </Box>
+
       {caption && (
         <Typography sx={{
           mt: 1, fontSize: TYPOGRAPHY.sizes.caption, textAlign: 'center',
@@ -177,6 +206,12 @@ export default function GraphCanvas({
   nodeColors,
   caption,
 }) {
+  const theme  = useTheme()
+  const isDark = theme.palette.mode === 'dark'
+
+  const [resetKey, setResetKey] = useState(0)
+  const handleReset = useCallback(() => setResetKey(k => k + 1), [])
+
   if (!nodes.length) {
     return (
       <Box sx={{ p: 2, color: 'error.main', fontSize: TYPOGRAPHY.sizes.caption }}>
@@ -186,18 +221,30 @@ export default function GraphCanvas({
   }
 
   return (
-    <GraphInner
-      rawNodes={nodes}
-      rawEdges={edges}
-      layout={layout}
-      directed={directed}
-      height={height}
-      showMinimap={showMinimap}
-      showControls={showControls}
-      stepHighlights={stepHighlights}
-      nodeColors={nodeColors}
-      caption={caption}
-      entityId={entityId}
-    />
+    <Box>
+      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 0.5 }}>
+        <Tooltip title="Reset layout">
+          <IconButton size="small" onClick={handleReset} aria-label="Reset graph layout"
+            sx={{ color: 'text.disabled', width: 26, height: 26 }}>
+            <RefreshIcon sx={{ fontSize: 15 }} />
+          </IconButton>
+        </Tooltip>
+      </Box>
+      <GraphInner
+        key={resetKey}
+        rawNodes={nodes}
+        rawEdges={edges}
+        layout={layout}
+        directed={directed}
+        height={height}
+        showMinimap={showMinimap}
+        showControls={showControls}
+        stepHighlights={stepHighlights}
+        nodeColors={nodeColors}
+        caption={caption}
+        entityId={entityId}
+        resetKey={resetKey}
+      />
+    </Box>
   )
 }

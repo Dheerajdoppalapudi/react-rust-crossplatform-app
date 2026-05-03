@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Box, IconButton, Typography, LinearProgress, Tooltip, useTheme } from '@mui/material'
+import { Box, IconButton, Typography, LinearProgress, Tooltip, Select, MenuItem, useTheme } from '@mui/material'
 import SkipPreviousIcon from '@mui/icons-material/SkipPrevious'
 import SkipNextIcon     from '@mui/icons-material/SkipNext'
 import PlayArrowIcon    from '@mui/icons-material/PlayArrow'
@@ -7,12 +7,18 @@ import PauseIcon        from '@mui/icons-material/Pause'
 import ReplayIcon       from '@mui/icons-material/Replay'
 import { useSceneStore } from '../useSceneStore'
 
+const SPEED_OPTIONS = [
+  { label: '2s',  value: 2000 },
+  { label: '5s',  value: 5000 },
+  { label: '10s', value: 10000 },
+]
+
 export default function StepControls({
   entityId,
   steps          = [],
   targetEntityId,
   autoPlay       = false,
-  interval       = 2000,
+  interval       = 3000,
   loop           = false,
   showPlayButton = true,
 }) {
@@ -29,7 +35,8 @@ export default function StepControls({
   const label    = steps[step] ?? `Step ${step + 1}`
   const progress = total > 1 ? (step / (total - 1)) * 100 : 100
 
-  const [isPlaying, setIsPlaying] = useState(autoPlay)
+  const [isPlaying,    setIsPlaying]    = useState(autoPlay)
+  const [autoInterval, setAutoInterval] = useState(interval)
 
   const advance = useCallback(() => {
     setStep(resolvedTarget, (prev) => {
@@ -44,13 +51,31 @@ export default function StepControls({
 
   useEffect(() => {
     if (!isPlaying) return
-    const id = setInterval(advance, interval)
+    const id = setInterval(advance, autoInterval)
     return () => clearInterval(id)
-  }, [isPlaying, advance, interval])
+  }, [isPlaying, advance, autoInterval])
 
-  // Pause when manually navigating
-  const prev = () => { setIsPlaying(false); setStep(resolvedTarget, Math.max(0, step - 1)) }
-  const next = () => { setIsPlaying(false); setStep(resolvedTarget, Math.min(total - 1, step + 1)) }
+  // Global keyboard navigation — ← → and space
+  useEffect(() => {
+    const handler = (e) => {
+      const tag = document.activeElement?.tagName
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return
+      if (e.key === 'ArrowRight' || e.key === ' ') {
+        e.preventDefault()
+        advance()
+      }
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault()
+        setIsPlaying(false)
+        setStep(resolvedTarget, s => Math.max(0, s - 1))
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [advance, resolvedTarget, setStep])
+
+  const prev    = () => { setIsPlaying(false); setStep(resolvedTarget, Math.max(0, step - 1)) }
+  const next    = () => { setIsPlaying(false); setStep(resolvedTarget, Math.min(total - 1, step + 1)) }
   const restart = () => { setStep(resolvedTarget, 0); setIsPlaying(true) }
 
   const finished = atEnd && !loop && !isPlaying && step > 0
@@ -103,6 +128,27 @@ export default function StepControls({
       <IconButton size="small" onClick={next} disabled={atEnd && !loop} aria-label="Next step">
         <SkipNextIcon fontSize="small" />
       </IconButton>
+
+      {showPlayButton && (
+        <Tooltip title="Auto-advance speed">
+          <Select
+            value={autoInterval}
+            onChange={e => setAutoInterval(e.target.value)}
+            size="small"
+            variant="standard"
+            disableUnderline
+            aria-label="Auto-advance speed"
+            sx={{
+              fontSize: 11, color: 'text.disabled', minWidth: 34,
+              '& .MuiSelect-select': { py: 0, px: 0.5 },
+            }}
+          >
+            {SPEED_OPTIONS.map(o => (
+              <MenuItem key={o.value} value={o.value} sx={{ fontSize: 12 }}>{o.label}</MenuItem>
+            ))}
+          </Select>
+        </Tooltip>
+      )}
     </Box>
   )
 }

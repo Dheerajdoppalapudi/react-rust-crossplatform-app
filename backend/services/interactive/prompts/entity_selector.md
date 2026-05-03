@@ -38,6 +38,9 @@ Do NOT limit your picks to the detected domain. Cross-domain combinations often 
 - `math_formula` with derivation steps → include `step_controls`
 - `flashcard_deck` with stepReveal → include `step_controls`
 - Never include `step_controls` without a target entity
+- Any topic with ≥5 memorisable terms/cards → pair `flashcard_deck` with `quiz_block` for recall testing
+- Any explanation-only scene (no interactive entity) → add `quiz_block` at the end to confirm understanding
+- `timeline` with many sequential events → add `quiz_block` to test recall of key dates/events
 
 ### 4. Animation cost awareness
 `p5_sketch` and `freeform_html` add ~3 seconds of generation latency. Include them ONLY when continuous animation genuinely explains something a static entity cannot — e.g., wave interference, pendulum motion, particle collisions. Do NOT use them for concepts that a diagram or chart handles fine.
