@@ -99,7 +99,7 @@ export function useGeneration({
   isAnyGenerating,
   lastCompletedTurnId,
   setTurns,
-  // Prompt
+  // Prompt — passed as ref so handleGenerate stays stable across keystrokes
   prompt,
   setPrompt,
   // Generation preferences
@@ -129,12 +129,20 @@ export function useGeneration({
   // Exposed to Studio.jsx so the conversation-switch effect can cancel it.
   const generationAbortRef = useRef(null)
 
+  // Keep a ref in sync with the latest prompt value so handleGenerate can read
+  // the current prompt without having it in its dependency array.  This keeps
+  // the callback reference stable across keystrokes so PromptBar only re-renders
+  // when something meaningful changes, not on every character typed.
+  const promptRef = useRef(prompt)
+  promptRef.current = prompt
+
   // ── handleGenerate ────────────────────────────────────────────────────────
 
   const handleGenerate = useCallback(async () => {
-    if (!prompt.trim() || isAnyGenerating) return
+    const currentPrompt = promptRef.current
+    if (!currentPrompt.trim() || isAnyGenerating) return
 
-    const submittedPrompt = prompt.trim()
+    const submittedPrompt = currentPrompt.trim()
     setPrompt('')
 
     const thisGenId = ++generationIdRef.current
@@ -254,6 +262,18 @@ export function useGeneration({
           genController.signal,
         )
 
+        // interactiveGeneration() swallows AbortError and returns normally.
+        // If the controller was aborted (stop button / nav), clean up silently.
+        if (genController.signal.aborted) {
+          if (isFirstTurn) {
+            setBootstrap(null)
+            setTurns([])
+          } else {
+            setTurns((prev) => prev.filter((t) => t.tempId !== tempId))
+          }
+          return
+        }
+
         if (isFirstTurn && resolvedConvId.current) {
           loadedConvIdRef.current = resolvedConvId.current
           onActiveConvIdChange(resolvedConvId.current)
@@ -303,7 +323,18 @@ export function useGeneration({
         runVideoGenerationForTurn(tempId, data.session_id)
       }
     } catch (err) {
-      if (err?.name === 'AbortError') return
+      // _request() rethrows AbortError as a plain Error('Request cancelled.')
+      // so we can't check err.name — check the controller instead.
+      if (genController.signal.aborted) {
+        if (isFirstTurn) {
+          setBootstrap(null)
+          setTurns([])
+          onActiveConvIdChange(null)
+        } else {
+          setTurns((prev) => prev.filter((t) => t.tempId !== tempId))
+        }
+        return
+      }
       console.error('[Studio] handleGenerate:', err)
       toast.error('Generation failed. Please try again.')
       if (isFirstTurn) {
@@ -321,7 +352,7 @@ export function useGeneration({
       clearTurnTimers()
     }
   }, [
-    prompt, isAnyGenerating, lastCompletedTurnId, activeConvId, notesEnabled, videoEnabled,
+    isAnyGenerating, lastCompletedTurnId, activeConvId, notesEnabled, videoEnabled,
     pauseContext, selectedModel, selectedRenderMode, onActiveConvIdChange,
     onConversationsRefresh, runVideoGenerationForTurn, scrollToTop, toast,
     loadedConvIdRef, setBootstrap, setPauseContext, setPrompt,

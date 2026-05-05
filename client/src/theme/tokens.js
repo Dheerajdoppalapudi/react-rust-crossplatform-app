@@ -155,3 +155,19 @@ export const TRANSITIONS = {
   normal: '0.18s ease',
   slow:   '0.28s cubic-bezier(0.4, 0, 0.2, 1)',
 }
+
+// ─── Status colors ────────────────────────────────────────────────────────────
+// Used for quiz/feedback states — distinct from MUI theme semantic colors.
+export const STATUS = {
+  success: '#2ea043',  // correct / positive state
+  error:   '#f85149',  // incorrect / negative state
+  warning: '#f0883e',  // partial / medium state
+}
+
+// ─── Intent group colors ──────────────────────────────────────────────────────
+// Three visual groups for frame intent badges and render-mode selectors.
+export const INTENT_COLORS = {
+  diagram: { bg: '#fce7f3', text: '#be185d', accent: '#fbcfe8' },  // process, architecture, timeline, illustration, svg
+  math:    { bg: '#dbeafe', text: '#1d4ed8', accent: '#bfdbfe' },  // math, manim
+  concept: { bg: '#fef3c7', text: '#b45309', accent: '#fde68a' },  // concept_analogy, comparison
+}

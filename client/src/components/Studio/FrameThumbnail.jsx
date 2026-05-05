@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, memo } from 'react'
 import { Box, Typography, useTheme } from '@mui/material'
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline'
@@ -9,7 +9,7 @@ import { PALETTE } from '../../theme/tokens.js'
 // FrameStrip or SessionView) so all thumbnails in a session share one token fetch.
 // If sessionId + frameIndex are known here, we call useMediaUrl locally.
 
-export default function FrameThumbnail({ sessionId, frameIndex, caption, type, isActive, onClick }) {
+function FrameThumbnail({ sessionId, frameIndex, caption, type, isActive, onClick }) {
   const theme      = useTheme()
   const isDark     = theme.palette.mode === 'dark'
   const [imgError, setImgError] = useState(false)
@@ -91,3 +91,12 @@ export default function FrameThumbnail({ sessionId, frameIndex, caption, type, i
     </Box>
   )
 }
+
+export default memo(FrameThumbnail, (prev, next) =>
+  prev.sessionId   === next.sessionId   &&
+  prev.frameIndex  === next.frameIndex  &&
+  prev.caption     === next.caption     &&
+  prev.type        === next.type        &&
+  prev.isActive    === next.isActive    &&
+  prev.onClick     === next.onClick
+)

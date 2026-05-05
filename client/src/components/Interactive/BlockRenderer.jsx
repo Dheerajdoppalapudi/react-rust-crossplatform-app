@@ -5,7 +5,7 @@ import { resolveEntity, getBlockMeta } from './registry'
 import { useSceneStore } from './useSceneStore'
 import ErrorBoundary from '../error/ErrorBoundary'
 import BlockWrapper from './BlockWrapper'
-import { TYPOGRAPHY, RADIUS } from '../../theme/tokens.js'
+import { TYPOGRAPHY, RADIUS, BRAND } from '../../theme/tokens.js'
 
 function FallbackCard({ entityType }) {
   const theme = useTheme()
@@ -51,14 +51,14 @@ export default function BlockRenderer({ title, learningObjective, blocks = [], i
           px: 2, py: 1.25,
           borderRadius: `${RADIUS.md}px`,
           backgroundColor: isDark ? 'rgba(75,114,255,0.08)' : 'rgba(75,114,255,0.05)',
-          borderLeft: '3px solid #4B72FF',
+          borderLeft: `3px solid ${BRAND.accent}`,
         }}>
           <Typography sx={{
             fontSize: TYPOGRAPHY.sizes.caption,
             color: isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.55)',
             lineHeight: 1.5,
           }}>
-            <Box component="span" sx={{ fontWeight: 600, color: '#4B72FF', mr: 0.75 }}>
+            <Box component="span" sx={{ fontWeight: 600, color: BRAND.accent, mr: 0.75 }}>
               Goal:
             </Box>
             {learningObjective}

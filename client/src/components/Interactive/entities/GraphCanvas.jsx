@@ -1,6 +1,8 @@
 import { useMemo, useState, useCallback } from 'react'
-import { Box, Typography, Tooltip, IconButton, useTheme } from '@mui/material'
+import { Box, Typography, Tooltip, IconButton, useTheme, Dialog, DialogContent } from '@mui/material'
 import RefreshIcon from '@mui/icons-material/Refresh'
+import OpenInFullIcon from '@mui/icons-material/OpenInFull'
+import CloseIcon from '@mui/icons-material/Close'
 import ReactFlow, {
   Background, Controls, MiniMap,
   MarkerType,
@@ -133,12 +135,17 @@ function GraphInner({ rawNodes, rawEdges, layout, directed, height, showMinimap,
 
   const hoveredNode = hoveredNodeId ? rawNodes.find(n => n.id === hoveredNodeId) : null
 
+  const isFluid = height === '100%'
+
   return (
-    <Box>
+    <Box sx={isFluid ? { flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 } : {}}>
       <Box sx={{
-        height, position: 'relative',
-        borderRadius: `${RADIUS.lg}px`, overflow: 'hidden',
-        border: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.borderCream}`,
+        height: isFluid ? '100%' : height,
+        flex: isFluid ? 1 : undefined,
+        position: 'relative',
+        borderRadius: isFluid ? 0 : `${RADIUS.lg}px`,
+        overflow: 'hidden',
+        border: isFluid ? 'none' : `1px solid ${isDark ? PALETTE.borderDark : PALETTE.borderCream}`,
       }}>
         <ReactFlow
           nodes={displayNodes}
@@ -209,8 +216,11 @@ export default function GraphCanvas({
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
 
-  const [resetKey, setResetKey] = useState(0)
-  const handleReset = useCallback(() => setResetKey(k => k + 1), [])
+  const [resetKey,  setResetKey]  = useState(0)
+  const [expanded,  setExpanded]  = useState(false)
+  const handleReset   = useCallback(() => setResetKey(k => k + 1), [])
+  const handleExpand  = useCallback(() => setExpanded(true),        [])
+  const handleCollapse= useCallback(() => setExpanded(false),       [])
 
   if (!nodes.length) {
     return (
@@ -220,31 +230,76 @@ export default function GraphCanvas({
     )
   }
 
+  const sharedProps = {
+    rawNodes: nodes, rawEdges: edges, layout, directed,
+    showMinimap, showControls, stepHighlights, nodeColors,
+    entityId, resetKey,
+  }
+
   return (
     <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 0.5 }}>
+      {/* Toolbar */}
+      <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.25, mb: 0.5 }}>
         <Tooltip title="Reset layout">
           <IconButton size="small" onClick={handleReset} aria-label="Reset graph layout"
             sx={{ color: 'text.disabled', width: 26, height: 26 }}>
             <RefreshIcon sx={{ fontSize: 15 }} />
           </IconButton>
         </Tooltip>
+        <Tooltip title="Expand">
+          <IconButton size="small" onClick={handleExpand} aria-label="Expand graph"
+            sx={{ color: 'text.disabled', width: 26, height: 26 }}>
+            <OpenInFullIcon sx={{ fontSize: 14 }} />
+          </IconButton>
+        </Tooltip>
       </Box>
-      <GraphInner
-        key={resetKey}
-        rawNodes={nodes}
-        rawEdges={edges}
-        layout={layout}
-        directed={directed}
-        height={height}
-        showMinimap={showMinimap}
-        showControls={showControls}
-        stepHighlights={stepHighlights}
-        nodeColors={nodeColors}
-        caption={caption}
-        entityId={entityId}
-        resetKey={resetKey}
-      />
+
+      {/* Inline view */}
+      <GraphInner key={`inline-${resetKey}`} height={height} caption={caption} {...sharedProps} />
+
+      {/* Expanded Dialog — fresh mount so ReactFlow remeasures the new container */}
+      <Dialog
+        open={expanded}
+        onClose={handleCollapse}
+        maxWidth={false}
+        PaperProps={{
+          sx: {
+            width: '90vw', height: '85vh',
+            maxWidth: 'none', maxHeight: 'none',
+            bgcolor: 'background.paper',
+            backgroundImage: 'none',
+            borderRadius: 2,
+            overflow: 'hidden',
+            display: 'flex', flexDirection: 'column',
+          },
+        }}
+      >
+        {/* Dialog header */}
+        <Box sx={{
+          flexShrink: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+          px: 1.5, py: 0.75,
+          borderBottom: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.borderCream}`,
+        }}>
+          <Tooltip title="Close">
+            <IconButton size="small" onClick={handleCollapse}
+              sx={{ color: 'text.secondary', width: 28, height: 28 }}>
+              <CloseIcon sx={{ fontSize: 16 }} />
+            </IconButton>
+          </Tooltip>
+        </Box>
+
+        {/* Full-size graph — key differs from inline so ReactFlow gets a fresh instance */}
+        <DialogContent sx={{ flex: 1, p: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          <GraphInner
+            key={`expanded-${resetKey}-${expanded}`}
+            height="100%"
+            caption={caption}
+            {...sharedProps}
+            showMinimap={true}
+          />
+        </DialogContent>
+      </Dialog>
     </Box>
   )
 }

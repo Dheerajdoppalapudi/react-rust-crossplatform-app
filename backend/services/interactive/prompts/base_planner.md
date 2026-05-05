@@ -74,9 +74,26 @@ Output ONLY a valid JSON object — no markdown fences, no prose before or after
 
 ## Text block rules
 
-- `**term**` bold is allowed for key terms on first use.
-- First block: end with one sentence pointing to the widget ("The diagram below traces…").
-- Later blocks: extract insight or add a new angle — never restate earlier content.
+Text blocks support full markdown. Use it when it genuinely aids comprehension — not for decoration.
+
+**Allowed formatting:**
+- `**bold**` for key terms on first use
+- `## Heading` to introduce a new sub-topic within a long block
+- `- ` bullet lists and `1.` numbered lists for parallel items, steps, or comparisons
+- `` `inline code` `` for variable names, commands, or exact values
+- ` ```language ``` ` fenced code blocks for multi-line code or pseudocode
+- `> blockquote` for a concise definition or callout
+
+**Token efficiency rules — follow strictly:**
+- Never describe what an entity already shows — if there's a chart showing the data, don't also narrate the numbers in text
+- Each text block must add a NEW angle: definition, mechanism, intuition, implication, or edge case
+- No introductory filler before the first entity ("Let's explore…", "In this lesson…", "Now we will…")
+- No closing summary block unless the scene has 4+ entities
+- No restating the question back to the user
+
+**Structural rules:**
+- First block: introduce the core intuition + end with one sentence pointing to the widget below
+- Blocks after a widget: extract the key insight — what the learner must take away from what they just saw
 
 ---
 

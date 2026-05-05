@@ -1,22 +1,28 @@
+import { INTENT_COLORS, PALETTE } from '../../theme/tokens.js'
+
 // ─── Intent metadata ──────────────────────────────────────────────────────────
+const D = INTENT_COLORS.diagram
+const M = INTENT_COLORS.math
+const C = INTENT_COLORS.concept
+
 export const INTENT_META = {
-  process:         { label: 'SVG',          bg: '#fce7f3', text: '#be185d' },
-  architecture:    { label: 'SVG',          bg: '#fce7f3', text: '#be185d' },
-  timeline:        { label: 'SVG',          bg: '#fce7f3', text: '#be185d' },
-  math:            { label: 'Manim',        bg: '#dbeafe', text: '#1d4ed8' },
-  concept_analogy: { label: 'Diagram',      bg: '#fef3c7', text: '#b45309' },
-  comparison:      { label: 'Diagram',      bg: '#fef3c7', text: '#b45309' },
-  illustration:    { label: 'Illustration', bg: '#fce7f3', text: '#be185d' },
+  process:         { label: 'SVG',          bg: D.bg, text: D.text },
+  architecture:    { label: 'SVG',          bg: D.bg, text: D.text },
+  timeline:        { label: 'SVG',          bg: D.bg, text: D.text },
+  math:            { label: 'Manim',        bg: M.bg, text: M.text },
+  concept_analogy: { label: 'Diagram',      bg: C.bg, text: C.text },
+  comparison:      { label: 'Diagram',      bg: C.bg, text: C.text },
+  illustration:    { label: 'Illustration', bg: D.bg, text: D.text },
 }
 
 export const ACCENT_BY_INTENT = {
-  process:         '#fbcfe8',
-  architecture:    '#fbcfe8',
-  timeline:        '#fbcfe8',
-  math:            '#bfdbfe',
-  concept_analogy: '#fde68a',
-  comparison:      '#fde68a',
-  illustration:    '#fbcfe8',
+  process:         D.accent,
+  architecture:    D.accent,
+  timeline:        D.accent,
+  math:            M.accent,
+  concept_analogy: C.accent,
+  comparison:      C.accent,
+  illustration:    D.accent,
 }
 
 // ─── Follow-up suggestions per intent ────────────────────────────────────────
@@ -32,15 +38,19 @@ export const FOLLOWUP_SUGGESTIONS = {
 
 // ─── Render mode override ─────────────────────────────────────────────────────
 export const RENDER_MODES = [
-  { id: 'auto',  label: 'Auto',  description: 'AI picks the best format',         color: null },
-  { id: 'manim', label: 'Manim', description: 'Math & physics animations',        color: '#1d4ed8', bg: '#dbeafe' },
-  { id: 'svg',   label: 'SVG',   description: 'Animated diagrams & illustrations', color: '#be185d', bg: '#fce7f3' },
+  { id: 'auto',  label: 'Auto',  description: 'AI picks the best format',          color: null },
+  { id: 'manim', label: 'Manim', description: 'Math & physics animations',         color: M.text, bg: M.bg },
+  { id: 'svg',   label: 'SVG',   description: 'Animated diagrams & illustrations', color: D.text, bg: D.bg },
 ]
 
 export const DEFAULT_RENDER_MODE = RENDER_MODES[0]
 
 // ─── Available models ─────────────────────────────────────────────────────────
 export const MODELS = [
+  {
+    id: 'auto', provider: null, model: null,
+    label: 'Auto', short: 'Auto', description: 'Smart routing — picks the best model per query',
+  },
   {
     id: 'claude-sonnet-4-6', provider: 'claude', model: 'claude-sonnet-4-6',
     label: 'Claude Sonnet 4.6', short: 'Sonnet 4.6', description: 'Best quality · recommended',
@@ -95,5 +105,5 @@ export function getFrameType(imagePath) {
 }
 
 export function intentMeta(intentType) {
-  return INTENT_META[intentType] || { label: intentType || '?', bg: '#f1f5f9', text: '#64748b' }
+  return INTENT_META[intentType] || { label: intentType || '?', bg: PALETTE.warmSand, text: PALETTE.oliveGray }
 }

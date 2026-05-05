@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, memo } from 'react'
 import { Box, Typography, Button, CircularProgress, useTheme } from '@mui/material'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import ErrorBoundary from '../error/ErrorBoundary'
@@ -78,7 +78,7 @@ function RetryBanner({ turn, onRetry }) {
   )
 }
 
-function TurnView({ turn, onPauseAsk, onRetryTurn, onRetryGeneration }) {
+const TurnView = memo(function TurnView({ turn, onPauseAsk, onRetryTurn, onRetryGeneration }) {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
 
@@ -88,7 +88,6 @@ function TurnView({ turn, onPauseAsk, onRetryTurn, onRetryGeneration }) {
         <UserBubble prompt={turn.prompt} />
 
         {turn.render_path === 'interactive' ? (
-          // ── Interactive mode ──────────────────────────────────────────────
           (turn.title || (turn.blocks ?? []).length > 0) ? (
             <BlockRenderer
               title={turn.title}
@@ -100,7 +99,6 @@ function TurnView({ turn, onPauseAsk, onRetryTurn, onRetryGeneration }) {
             <LoadingView stage={turn.stage || 'planning'} compact mode="interactive" />
           )
         ) : turn.isLoading ? (
-          // ── Video mode: in-progress ────────────────────────────────────────
           <LoadingView stage={turn.stage || 'planning'} compact textMode={turn.videoPhase === 'disabled'} />
         ) : turn.videoPhase === 'error' && !turn.id ? (
           <Box sx={{
@@ -132,17 +130,17 @@ function TurnView({ turn, onPauseAsk, onRetryTurn, onRetryGeneration }) {
       </ContentColumn>
     </Box>
   )
-}
+})
 
-function TurnWithBoundary({ turn, onPauseAsk, onRetryTurn, onRetryGeneration }) {
+const TurnWithBoundary = memo(function TurnWithBoundary({ turn, onPauseAsk, onRetryTurn, onRetryGeneration }) {
   return (
     <ErrorBoundary level="component" key={`${turn.tempId}-boundary`}>
       <TurnView turn={turn} onPauseAsk={onPauseAsk} onRetryTurn={onRetryTurn} onRetryGeneration={onRetryGeneration} />
     </ErrorBoundary>
   )
-}
+})
 
-export default function ConversationThread({ turns, onPauseAsk, onRetryTurn, onRetryGeneration }) {
+const ConversationThread = memo(function ConversationThread({ turns, onPauseAsk, onRetryTurn, onRetryGeneration }) {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', pt: 1, pb: 1 }}>
       {turns.map((turn) => (
@@ -150,4 +148,6 @@ export default function ConversationThread({ turns, onPauseAsk, onRetryTurn, onR
       ))}
     </Box>
   )
-}
+})
+
+export default ConversationThread

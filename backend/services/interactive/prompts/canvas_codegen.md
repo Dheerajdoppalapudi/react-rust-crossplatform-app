@@ -11,20 +11,31 @@ Given an entity spec (a plain-English description of an interactive widget), wri
 3. **No network access**: the widget runs inside `<iframe sandbox="allow-scripts">` with a strict CSP. Any network call will be blocked silently. Do not attempt it.
 4. **No storage APIs**: `localStorage`, `sessionStorage`, `indexedDB`, and `document.cookie` are inaccessible (null origin). Do not reference them.
 5. **No `eval()`**: forbidden by CSP. Use regular functions.
-6. **Canvas sizing**: always call `canvas.width = canvas.offsetWidth` on resize and on first render to match CSS size. Use `requestAnimationFrame` for animations.
+6. **Canvas sizing**: always size the canvas inside `window.addEventListener('load', ...)` AND on resize. Never read `offsetWidth` before the DOM is ready.
 7. **Must fill the iframe**: the `<body>` must fill `100vw × 100vh`. No overflow. Use `box-sizing: border-box` everywhere.
 
-## Canvas 2D patterns you should use
+## Canvas 2D patterns you must use
 
-### Animation loop
+### Correct initialisation — wrap ALL setup in window.onload
 ```javascript
-let animId;
-function loop() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  // draw here
-  animId = requestAnimationFrame(loop);
-}
-loop();
+window.addEventListener('load', function() {
+  const canvas = document.getElementById('c');
+  const ctx    = canvas.getContext('2d');
+
+  function resize() {
+    canvas.width  = canvas.offsetWidth;
+    canvas.height = canvas.offsetHeight;
+  }
+  window.addEventListener('resize', resize);
+  resize();   // size before first draw
+
+  function loop() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    draw();   // your drawing code here
+    requestAnimationFrame(loop);
+  }
+  loop();
+});
 ```
 
 ### Slider wiring
@@ -33,49 +44,46 @@ const speedSlider = document.getElementById('speed');
 const speedLabel  = document.getElementById('speed-val');
 speedSlider.addEventListener('input', () => {
   speedLabel.textContent = speedSlider.value;
-  reset();
 });
-```
-
-### Responsive canvas
-```javascript
-function resize() {
-  canvas.width  = canvas.offsetWidth;
-  canvas.height = canvas.offsetHeight;
-}
-window.addEventListener('resize', resize);
-resize();
 ```
 
 ### Vector drawing helpers
 ```javascript
-function drawArrow(ctx, x1, y1, x2, y2, color = '#e03131', width = 2) {
+function drawArrow(ctx, x1, y1, x2, y2, color = '#74c0fc', width = 2) {
   const angle = Math.atan2(y2 - y1, x2 - x1);
   const head  = 12;
   ctx.save();
   ctx.strokeStyle = color;
   ctx.lineWidth   = width;
-  ctx.beginPath();
-  ctx.moveTo(x1, y1);
-  ctx.lineTo(x2, y2);
-  ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
   ctx.beginPath();
   ctx.moveTo(x2, y2);
   ctx.lineTo(x2 - head * Math.cos(angle - 0.4), y2 - head * Math.sin(angle - 0.4));
   ctx.lineTo(x2 - head * Math.cos(angle + 0.4), y2 - head * Math.sin(angle + 0.4));
   ctx.closePath();
-  ctx.fillStyle = color;
-  ctx.fill();
+  ctx.fillStyle = color; ctx.fill();
   ctx.restore();
 }
 ```
 
-## Style guidance
+## Style — MANDATORY colour rules
 
-- Background: `#1a1a2e` (dark) or `#f8f9fa` (light). Pick the one that suits the widget.
-- Primary accent: `#4dabf7` (blue). Secondary: `#f03e3e` (red). Labels: `#ced4da`.
+**Always use a dark background. Always use high-contrast, bright drawing colours. Never draw dark colours on a dark background.**
+
+| Role | Value |
+|---|---|
+| Body / canvas background | `#0f1117` |
+| Control strip background | `#1a1d27` |
+| Primary lines / particles | `#74c0fc` (bright blue) |
+| Secondary lines / particles | `#ff6b6b` (bright red) |
+| Tertiary / highlight | `#69db7c` (bright green) or `#ffd43b` (yellow) |
+| Text labels on canvas | `#e9ecef` (near-white) |
+| Dim / secondary labels | `#868e96` |
+| Control label text | `#ced4da` |
+
 - Font: `system-ui, sans-serif`. Keep UI chrome minimal — maximize the canvas area.
-- Controls (sliders, buttons) should sit in a compact strip at the top or bottom, not overlapping the canvas.
+- Controls (sliders, buttons) sit in a compact 48px strip at the bottom, never overlapping the canvas.
+- Canvas occupies everything above the control strip.
 
 ## Output
 

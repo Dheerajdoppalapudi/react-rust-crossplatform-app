@@ -5,7 +5,12 @@
       "Bash(npx vite *)",
       "Bash(grep -v '^$')",
       "Bash(grep -E \"\\\\.jsx$\")",
-      "Bash(git -C \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app\" diff --stat HEAD)"
+      "Bash(git -C \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app\" diff --stat HEAD)",
+      "Bash(python3 -c ' *)",
+      "Wrire",
+      "Edit",
+      "Bash(grep -r \"StreamingResponse\\\\|async def.*stream\\\\|yield\\\\|try:\\\\|except\\\\|finally:\" \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend\" --include=\"*.py\" -not -path \"*/env/*\")",
+      "Bash(grep -E \"^\\\\s*def .+\\\\\\):\\\\s*$\" \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/routers/auth.py\" -n)"
     ],
     "additionalDirectories": [
       "/tmp",

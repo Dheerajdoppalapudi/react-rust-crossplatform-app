@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react'
 import { Box, Tooltip, IconButton, Typography, Divider, useTheme, useMediaQuery } from '@mui/material'
 import NotesOutlinedIcon    from '@mui/icons-material/NotesOutlined'
 import EditNoteIcon         from '@mui/icons-material/EditNote'
@@ -43,23 +43,23 @@ export default function Studio({
   const [notesEnabled, setNotesEnabled] = useState(
     () => localStorage.getItem('studio-notes-enabled') === 'true'
   )
-  const toggleNotes = () => setNotesEnabled((prev) => {
+  const toggleNotes = useCallback(() => setNotesEnabled((prev) => {
     const next = !prev
     localStorage.setItem('studio-notes-enabled', String(next))
     return next
-  })
+  }), [])
 
   const [videoEnabled, setVideoEnabled] = useState(
     () => localStorage.getItem('studio-video-enabled') !== 'false'
   )
-  const toggleVideo = () => setVideoEnabled((prev) => {
+  const toggleVideo = useCallback(() => setVideoEnabled((prev) => {
     const next = !prev
     localStorage.setItem('studio-video-enabled', String(next))
     return next
-  })
+  }), [])
 
   const [userNotesOpen, setUserNotesOpen] = useState(false)
-  const toggleUserNotes = () => setUserNotesOpen((prev) => !prev)
+  const toggleUserNotes = useCallback(() => setUserNotesOpen((prev) => !prev), [])
 
   // ── Core state ──────────────────────────────────────────────────────────────
 
@@ -557,6 +557,7 @@ export default function Studio({
             prompt={prompt}
             onPromptChange={setPrompt}
             onSubmit={handleGenerate}
+            onStop={() => generationAbortRef.current?.abort()}
             onKeyDown={handleKeyDown}
             inputRef={inputRef}
             isGenerating={isAnyGenerating}

@@ -43,13 +43,15 @@ export default function EmptyView({ onSuggestionClick }) {
         {INITIAL_SUGGESTIONS.map((s) => (
           <Box
             key={s}
+            component="button"
+            type="button"
             onClick={() => onSuggestionClick(s)}
             sx={{
               px: 1.75, py: 0.75, borderRadius: '20px',
               border: `1px solid ${theme.palette.divider}`,
               backgroundColor: theme.palette.background.paper,
               cursor: 'pointer', fontSize: 12.5, color: theme.palette.text.secondary,
-              userSelect: 'none',
+              fontFamily: 'inherit',
               '&:hover': {
                 borderColor: theme.palette.primary.main,
                 color: theme.palette.primary.main,

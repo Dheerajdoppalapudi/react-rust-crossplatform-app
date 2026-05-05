@@ -1,7 +1,8 @@
-import { useState } from 'react'
-import { Box, Typography, TextField, IconButton, Tooltip, CircularProgress, Divider,
+import { useState, memo } from 'react'
+import { Box, Typography, TextField, IconButton, Tooltip, Divider,
          Menu, MenuItem } from '@mui/material'
 import SendIcon from '@mui/icons-material/Send'
+import StopRoundedIcon from '@mui/icons-material/StopRounded'
 import AddIcon from '@mui/icons-material/Add'
 import CloseIcon from '@mui/icons-material/Close'
 import PauseCircleOutlineIcon from '@mui/icons-material/PauseCircleOutline'
@@ -13,6 +14,7 @@ import { useTheme } from '@mui/material'
 import { MODELS, RENDER_MODES } from './constants'
 import { BRAND, PALETTE } from '../../theme/tokens.js'
 
+const autoModel    = MODELS.find((m) => m.id === 'auto')
 const claudeModels = MODELS.filter((m) => m.provider === 'claude')
 const openaiModels = MODELS.filter((m) => m.provider === 'openai')
 
@@ -22,10 +24,11 @@ const RENDER_MODE_ICONS = {
   svg:   <BrushOutlinedIcon      sx={{ fontSize: 13 }} />,
 }
 
-export default function PromptBar({
+function PromptBar({
   prompt,
   onPromptChange,
   onSubmit,
+  onStop,
   onKeyDown,
   inputRef,
   isGenerating,
@@ -153,12 +156,14 @@ export default function PromptBar({
             }}>
               <Box sx={{ display: 'flex', alignItems: 'center' }}>
                 <Box
+                  component="button"
+                  type="button"
                   onClick={(e) => setMenuAnchor(e.currentTarget)}
                   sx={{
                     display: 'flex', alignItems: 'center', gap: 0.4,
                     px: 1, py: 0.4, borderRadius: '7px', cursor: 'pointer',
                     color: theme.palette.text.secondary,
-                    userSelect: 'none',
+                    background: 'none', border: 'none', fontFamily: 'inherit',
                     '&:hover': {
                       bgcolor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)',
                       color: theme.palette.text.primary,
@@ -166,8 +171,11 @@ export default function PromptBar({
                     transition: 'all 0.15s',
                   }}
                 >
+                  {selectedModel?.id === 'auto' && (
+                    <AutoAwesomeOutlinedIcon sx={{ fontSize: 12, opacity: 0.6 }} />
+                  )}
                   <Typography sx={{ fontSize: 12, fontWeight: 500, lineHeight: 1 }}>
-                    {selectedModel?.short || 'Model'}
+                    {selectedModel?.short || 'Auto'}
                   </Typography>
                   <KeyboardArrowDownIcon sx={{ fontSize: 13, opacity: 0.7 }} />
                 </Box>
@@ -192,6 +200,24 @@ export default function PromptBar({
                     },
                   }}
                 >
+                  {/* Auto option */}
+                  <MenuItem
+                    key={autoModel.id}
+                    selected={selectedModel?.id === autoModel.id}
+                    onClick={() => { onModelChange(autoModel); setMenuAnchor(null) }}
+                    sx={{ px: 2, py: 0.75, mx: 0.5, borderRadius: '8px' }}
+                  >
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <AutoAwesomeOutlinedIcon sx={{ fontSize: 14, color: theme.palette.text.disabled }} />
+                      <Box>
+                        <Typography sx={{ fontSize: 13, fontWeight: 500, lineHeight: 1.3 }}>{autoModel.label}</Typography>
+                        <Typography sx={{ fontSize: 11, color: theme.palette.text.secondary, lineHeight: 1.4 }}>{autoModel.description}</Typography>
+                      </Box>
+                    </Box>
+                  </MenuItem>
+
+                  <Divider sx={{ my: 0.5, mx: 1.5, borderColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)' }} />
+
                   {claudeModels.map((m) => (
                     <MenuItem
                       key={m.id}
@@ -226,11 +252,13 @@ export default function PromptBar({
 
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, ml: 'auto', mr: 1 }}>
                 <Box
+                  component="button"
+                  type="button"
                   onClick={(e) => setRenderMenuAnchor(e.currentTarget)}
                   sx={{
                     display: 'flex', alignItems: 'center', gap: 0.5,
                     px: 1, py: 0.4, borderRadius: '7px', cursor: 'pointer',
-                    userSelect: 'none',
+                    background: 'none', fontFamily: 'inherit',
                     backgroundColor: isCustomRender
                       ? (isDark
                           ? `${selectedRenderMode?.color}22`
@@ -313,28 +341,48 @@ export default function PromptBar({
                 </Menu>
               </Box>
 
-              <Tooltip title={isGenerating ? 'Generating…' : !prompt.trim() ? 'Type something to generate' : 'Generate (Enter)'}>
-                <span>
+              {isGenerating ? (
+                <Tooltip title="Stop generating">
                   <IconButton
-                    onClick={onSubmit}
-                    disabled={!canSend}
+                    onClick={onStop}
                     size="small"
                     sx={{
                       width: 32, height: 32,
-                      backgroundColor: canSend ? theme.palette.primary.main : (isDark ? PALETTE.darkSubsurface : PALETTE.warmSand),
-                      color: canSend ? '#fff' : theme.palette.text.secondary,
+                      backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+                      color: theme.palette.text.primary,
                       borderRadius: '8px',
-                      '&:hover': { backgroundColor: canSend ? BRAND.primary : undefined },
+                      border: `1.5px solid ${theme.palette.divider}`,
+                      '&:hover': {
+                        backgroundColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.11)',
+                        borderColor: theme.palette.text.secondary,
+                      },
                       transition: 'all 0.15s',
                     }}
                   >
-                    {isGenerating
-                      ? <CircularProgress size={13} sx={{ color: theme.palette.text.secondary }} />
-                      : <SendIcon sx={{ fontSize: 14 }} />
-                    }
+                    <StopRoundedIcon sx={{ fontSize: 15 }} />
                   </IconButton>
-                </span>
-              </Tooltip>
+                </Tooltip>
+              ) : (
+                <Tooltip title={!prompt.trim() ? 'Type something to generate' : 'Generate (Enter)'}>
+                  <span>
+                    <IconButton
+                      onClick={onSubmit}
+                      disabled={!canSend}
+                      size="small"
+                      sx={{
+                        width: 32, height: 32,
+                        backgroundColor: canSend ? theme.palette.primary.main : (isDark ? PALETTE.darkSubsurface : PALETTE.warmSand),
+                        color: canSend ? '#fff' : theme.palette.text.secondary,
+                        borderRadius: '8px',
+                        '&:hover': { backgroundColor: canSend ? BRAND.primary : undefined },
+                        transition: 'all 0.15s',
+                      }}
+                    >
+                      <SendIcon sx={{ fontSize: 14 }} />
+                    </IconButton>
+                  </span>
+                </Tooltip>
+              )}
             </Box>
           </Box>
         </Box>
@@ -342,3 +390,5 @@ export default function PromptBar({
     </Box>
   )
 }
+
+export default memo(PromptBar)

@@ -194,6 +194,10 @@ async def generate_video(
         def elapsed() -> float:
             return round(time.time() - t_start, 1)
 
+        # Tracks every asyncio.Task created so they can be cancelled if the
+        # client disconnects before the stream finishes.
+        _active_tasks: list[asyncio.Task] = []
+
         try:
             total_frames = len(narration_texts)
 
@@ -231,6 +235,7 @@ async def generate_video(
                     narration_texts, str(safe_output_dir), use_openai_tts, progress_queue
                 )
             )
+            _active_tasks.extend([export_task, tts_task])
 
             # Await export first (usually faster — ~3s vs ~20s for TTS)
             normalized_pngs = await export_task
@@ -302,6 +307,7 @@ async def generate_video(
                         narration_texts, video_path, captions,
                     )
                 )
+                _active_tasks.append(assemble_task)
 
                 while not assemble_task.done():
                     try:
@@ -335,6 +341,18 @@ async def generate_video(
                 "elapsed_s":   total,
                 "stage_times": {"export_s": d1, "tts_s": d2, "assembly_s": d3},
             })
+
+        except asyncio.CancelledError:
+            # Client disconnected — cancel every background task so ffmpeg and
+            # TTS calls don't keep running after the stream is gone.
+            logger.info(
+                "video_sse_cancelled  session=%s  elapsed=%.1fs",
+                session_id, elapsed(),
+            )
+            for task in _active_tasks:
+                if not task.done():
+                    task.cancel()
+            raise
 
         except Exception:
             # CRIT-6: log full details server-side; send generic message to client.

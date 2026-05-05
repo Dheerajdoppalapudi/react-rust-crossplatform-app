@@ -266,20 +266,28 @@ async def interactive_generation(
     async def event_stream():
         # ContextVar must be set inside the generator — StreamingResponse runs it in a
         # separate asyncio context so tokens from the route handler cannot be reset here.
-        _provider = (
-            OpenAIProvider(model=_llm_provider_kwargs["model"]) if _llm_provider_kwargs["provider"] == "openai"
-            else ClaudeProvider(model=_llm_provider_kwargs["model"])
-        ) if _llm_provider_kwargs["model"] else (
-            OpenAIProvider() if _llm_provider_kwargs["provider"] == "openai" else ClaudeProvider()
+        #
+        # When model is None the user selected "Auto" — interactive_service handles
+        # model routing internally. Only force request_llm_service when user picks a
+        # specific model; otherwise leave it as None so smart routing kicks in.
+        svc_token = None
+        if _llm_provider_kwargs["model"]:
+            _provider = (
+                OpenAIProvider(model=_llm_provider_kwargs["model"]) if _llm_provider_kwargs["provider"] == "openai"
+                else ClaudeProvider(model=_llm_provider_kwargs["model"])
+            )
+            svc_token = request_llm_service.set(LLMService(provider=_provider))
+
+        # Hold a reference so CancelledError handling can call aclose() and stop
+        # any in-flight LLM calls inside the pipeline.
+        pipeline = run_interactive_pipeline(
+            message=message,
+            session_id=session_id,
+            output_dir=output_dir,
+            conversation_context=conversation_context,
         )
-        svc_token = request_llm_service.set(LLMService(provider=_provider))
         try:
-            async for event in run_interactive_pipeline(
-                message=message,
-                session_id=session_id,
-                output_dir=output_dir,
-                conversation_context=conversation_context,
-            ):
+            async for event in pipeline:
                 if event["type"] == "done":
                     # Enrich done event with conversation metadata
                     event.update({
@@ -293,15 +301,22 @@ async def interactive_generation(
                         output_dir=output_dir,
                     )
                 yield f"data: {json.dumps(event)}\n\n"
+        except asyncio.CancelledError:
+            # Client disconnected — stop the pipeline so in-flight LLM calls
+            # are not left running after the stream is gone.
+            logger.info("interactive_sse_cancelled  session=%s", session_id)
+            await pipeline.aclose()
+            raise
         except Exception as exc:
             logger.error(
-                "interactive_generation_failed  session=%s  error=%s",
-                session_id, exc, exc_info=True,
+                "interactive_generation_failed  session=%s",
+                session_id, exc_info=True,
             )
             update_session(session_id, status="error")
             yield f"data: {json.dumps({'type': 'error', 'message': 'Generation failed. Please try again.'})}\n\n"
         finally:
-            request_llm_service.reset(svc_token)
+            if svc_token is not None:
+                request_llm_service.reset(svc_token)
 
     return StreamingResponse(
         event_stream(),

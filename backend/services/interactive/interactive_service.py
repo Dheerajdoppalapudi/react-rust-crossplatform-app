@@ -27,15 +27,32 @@ import html
 import json
 import logging
 import os
+from dataclasses import dataclass, field
 from typing import AsyncGenerator
 
 from services.frame_generation.planner import classify_intent, _extract_json, request_llm_service
-from services.interactive.scene_ir import SceneBlock, SceneIR
-from services.llm_service import default_llm_service
+from services.interactive.scene_ir import SceneIR
+from services.llm_service import LLMService, OpenAIProvider, default_llm_service
 
 logger = logging.getLogger(__name__)
 
 _PROMPTS_DIR = os.path.join(os.path.dirname(__file__), "prompts")
+
+
+@dataclass
+class SelectionResult:
+    enriched_prompt: str
+    entities: list[str] = field(default_factory=list)
+    model: str = "claude-sonnet-4-6"
+
+
+def _get_llm_service(model: str) -> LLMService:
+    """Return an LLMService instance for the given model name."""
+    if model == "gpt-4.1":
+        return LLMService(provider=OpenAIProvider(model="gpt-4.1"))
+    return default_llm_service
+
+
 _DOMAINS_DIR = os.path.join(_PROMPTS_DIR, "domains")
 _CATALOG_DIR = os.path.join(_PROMPTS_DIR, "catalog")
 
@@ -101,7 +118,12 @@ def _wrap_in_sandbox(raw_html: str) -> str:
     )
 
 
-async def _run_codegen_with_prompt(prompt_file: str, spec: str, user_prompt: str) -> str:
+async def _run_codegen_with_prompt(
+    prompt_file: str,
+    spec: str,
+    user_prompt: str,
+    svc: LLMService = None,
+) -> str:
     """Call the codegen LLM using the given prompt template file."""
     template = _load_prompt(prompt_file)
     prompt = (
@@ -109,7 +131,7 @@ async def _run_codegen_with_prompt(prompt_file: str, spec: str, user_prompt: str
         .replace("{{ENTITY_SPEC}}", spec)
         .replace("{{USER_PROMPT}}", user_prompt)
     )
-    svc = request_llm_service.get() or default_llm_service
+    svc = svc or default_llm_service
     raw = await asyncio.to_thread(
         svc.make_single_prompt_request, prompt, "", None, False, max_tokens=4000
     )
@@ -123,26 +145,26 @@ async def _run_codegen_with_prompt(prompt_file: str, spec: str, user_prompt: str
     return result.strip()
 
 
-async def _run_codegen(spec: str, user_prompt: str) -> str:
+async def _run_codegen(spec: str, user_prompt: str, svc: LLMService = None) -> str:
     """Produce freeform Canvas HTML (raw JS, no framework)."""
-    return await _run_codegen_with_prompt("canvas_codegen.md", spec, user_prompt)
+    return await _run_codegen_with_prompt("canvas_codegen.md", spec, user_prompt, svc=svc)
 
 
-async def _run_p5_codegen(spec: str, user_prompt: str) -> str:
-    """Produce a p5.js looping animation sketch."""
-    return await _run_codegen_with_prompt("canvas_codegen_p5.md", spec, user_prompt)
+async def _run_p5_codegen(spec: str, user_prompt: str, svc: LLMService = None) -> str:
+    """Produce a Canvas 2D looping animation sketch."""
+    return await _run_codegen_with_prompt("canvas_codegen_p5.md", spec, user_prompt, svc=svc)
 
 
 async def _select_entities(
     message: str,
     domain: str,
     conversation_context: str,
-) -> list[str]:
+) -> SelectionResult:
     """
-    Intermediate LLM call: given the question + slim entity index, return the 2–5
-    entity names best suited to explain the concept.
+    Sonnet 4.6 call that enriches the user's question, selects 2–5 entities,
+    and recommends a model for downstream calls.
 
-    Falls back to empty list on any error — _plan_scene then uses the full catalog.
+    Falls back to raw message + empty entities + Sonnet on any error.
     """
     slim_index = _load_prompt("slim_index.md")
     selector_template = _load_prompt("entity_selector.md")
@@ -151,27 +173,34 @@ async def _select_entities(
     context_block = f"Conversation context:\n{conversation_context}\n\n" if conversation_context else ""
     user_msg = f"{context_block}Domain: {domain}\n\nQuestion: {message}"
 
-    svc = request_llm_service.get() or default_llm_service
+    # Entity selector always runs on Sonnet 4.6 regardless of per-request override
     try:
         raw, _ = await asyncio.to_thread(
-            svc.make_system_user_request, selector_prompt, user_msg, max_tokens=150
+            default_llm_service.make_system_user_request,
+            selector_prompt, user_msg, max_tokens=800
         )
         if raw is None:
-            return []
+            return SelectionResult(enriched_prompt=message)
 
         data = _extract_json(raw)
         entities: list[str] = data.get("entities", [])
+        enriched = data.get("enriched_prompt") or message
+        model = data.get("model", "claude-sonnet-4-6")
+
+        # Normalise model name — only two valid values
+        if model not in ("gpt-4.1", "claude-sonnet-4-6"):
+            model = "claude-sonnet-4-6"
 
         # Enforce mandatory pairing: code_walkthrough always needs step_controls
         if "code_walkthrough" in entities and "step_controls" not in entities:
             entities.append("step_controls")
 
-        logger.info("entity_selector selected=%s", entities)
-        return entities
+        logger.info("entity_selector enriched=%r entities=%s model=%s", enriched[:80], entities, model)
+        return SelectionResult(enriched_prompt=enriched, entities=entities, model=model)
 
     except Exception as exc:
-        logger.warning("entity_selector failed (%s) — falling back to full catalog", exc)
-        return []
+        logger.warning("entity_selector failed (%s) — falling back", exc)
+        return SelectionResult(enriched_prompt=message)
 
 
 async def _plan_scene(
@@ -179,6 +208,7 @@ async def _plan_scene(
     domain: str,
     conversation_context: str,
     selected_entities: list[str],
+    svc: LLMService = None,
 ) -> SceneIR:
     """Call the planner LLM and parse the Scene IR."""
     base       = _load_prompt("base_planner.md")
@@ -198,7 +228,7 @@ async def _plan_scene(
     )
     user_msg = f"{context_block}USER QUESTION: {message}"
 
-    svc = request_llm_service.get() or default_llm_service
+    svc = svc or default_llm_service
     raw, _ = await asyncio.to_thread(
         svc.make_system_user_request, system_prompt, user_msg, max_tokens=4000
     )
@@ -241,11 +271,19 @@ async def run_interactive_pipeline(
 
     logger.info("interactive_pipeline session=%s domain=%s", session_id, domain)
 
-    # Stage 2: Select entities — focused intermediate call with slim index
-    selected_entities = await _select_entities(message, domain, conversation_context)
+    # Stage 2: Enrich prompt + select entities + recommend model (single Sonnet call)
+    selection = await _select_entities(message, domain, conversation_context)
 
-    # Stage 3: Plan scene IR — planner gets full schemas only for selected entities
-    scene = await _plan_scene(message, domain, conversation_context, selected_entities)
+    # If the user forced a specific model from the UI, honour it — otherwise use
+    # the model recommended by the entity selector (auto routing).
+    user_forced_svc = request_llm_service.get()
+    downstream_svc = user_forced_svc if user_forced_svc else _get_llm_service(selection.model)
+
+    # Stage 3: Plan scene IR using enriched prompt and recommended model
+    scene = await _plan_scene(
+        selection.enriched_prompt, domain, conversation_context,
+        selection.entities, svc=downstream_svc,
+    )
 
     # Stage 4: Emit title + follow_ups immediately
     yield {
@@ -262,9 +300,9 @@ async def run_interactive_pipeline(
             spec = block.props.get("spec", "an interactive widget")
             try:
                 if block.entity_type == "p5_sketch":
-                    raw_html = await _run_p5_codegen(spec, message)
+                    raw_html = await _run_p5_codegen(spec, selection.enriched_prompt, svc=downstream_svc)
                 else:
-                    raw_html = await _run_codegen(spec, message)
+                    raw_html = await _run_codegen(spec, selection.enriched_prompt, svc=downstream_svc)
                 block.html = _wrap_in_sandbox(raw_html)
             except Exception as exc:
                 logger.error("Codegen failed for block %s: %s", block.id, exc)

@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef, useEffect, memo } from 'react'
 import {
   Box, Typography, Chip, Dialog, DialogContent, IconButton, useTheme,
 } from '@mui/material'
@@ -125,6 +125,7 @@ function FrameStrip({ sessionId, captions, images, activeFrame, onFrameChange, o
     </Box>
   )
 }
+FrameStrip = memo(FrameStrip)
 
 function SlideDialog({ open, frameIndex, captions, images, sessionId, onClose, onFrameChange, onAsk }) {
   const theme  = useTheme()
@@ -262,7 +263,7 @@ function SlideDialog({ open, frameIndex, captions, images, sessionId, onClose, o
   )
 }
 
-export default function SessionView({ session, videoPhase, framesData, onPauseAsk }) {
+function SessionView({ session, videoPhase, framesData, onPauseAsk }) {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
 
@@ -373,3 +374,10 @@ export default function SessionView({ session, videoPhase, framesData, onPauseAs
     </Box>
   )
 }
+
+export default memo(SessionView, (prev, next) =>
+  prev.session      === next.session      &&
+  prev.videoPhase   === next.videoPhase   &&
+  prev.framesData   === next.framesData   &&
+  prev.onPauseAsk   === next.onPauseAsk
+)

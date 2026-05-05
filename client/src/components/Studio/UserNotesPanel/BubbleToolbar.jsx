@@ -27,6 +27,8 @@ export default function BubbleToolbar({ editor }) {
       editor.chain().focus().extendMarkRange('link').unsetLink().run()
       return
     }
+    // Only allow http/https — blocks javascript: and data: URIs
+    if (!/^https?:\/\//i.test(url)) return
     editor.chain().focus().extendMarkRange('link').setLink({ href: url, target: '_blank' }).run()
   }
 

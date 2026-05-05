@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { Box, Typography, useTheme } from '@mui/material'
-import { TYPOGRAPHY, RADIUS, PALETTE } from '../../../theme/tokens'
+import { TYPOGRAPHY, RADIUS, PALETTE, BRAND, STATUS } from '../../../theme/tokens'
 import { useExpanded } from '../BlockWrapper'
 
 function QuizQuestion({ q, index, total, onAnswer, isDark }) {
@@ -37,11 +37,11 @@ function QuizQuestion({ q, index, total, onAnswer, isDark }) {
       },
     }
     if (i === q.correctIndex) return {
-      ...base, borderColor: '#2ea043',
+      ...base, borderColor: STATUS.success,
       backgroundColor: isDark ? 'rgba(46,160,67,0.12)' : 'rgba(46,160,67,0.08)',
     }
     if (i === selected && i !== q.correctIndex) return {
-      ...base, borderColor: '#f85149',
+      ...base, borderColor: STATUS.error,
       backgroundColor: isDark ? 'rgba(248,81,73,0.12)' : 'rgba(248,81,73,0.08)',
     }
     return {
@@ -71,10 +71,10 @@ function QuizQuestion({ q, index, total, onAnswer, isDark }) {
       {q.hint && !revealed && (
         <Box sx={{ mb: 1.5 }}>
           {!hintVisible ? (
-            <Typography component="span" onClick={() => setHintVisible(true)} sx={{
+            <Typography component="button" type="button" onClick={() => setHintVisible(true)} sx={{
               fontSize: TYPOGRAPHY.sizes.caption,
               color: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)',
-              cursor: 'pointer',
+              cursor: 'pointer', fontFamily: 'inherit', background: 'none', border: 'none', p: 0,
               '&:hover': { color: isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.55)' },
             }}>
               💡 Show hint
@@ -93,12 +93,12 @@ function QuizQuestion({ q, index, total, onAnswer, isDark }) {
 
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
         {displayOptions.map((opt, i) => (
-          <Box key={i} onClick={() => handleSelect(i)} sx={optionStyle(i)}>
+          <Box key={i} component="button" type="button" disabled={revealed} onClick={() => handleSelect(i)} sx={{ ...optionStyle(i), fontFamily: 'inherit', textAlign: 'left', width: '100%' }}>
             {revealed && i === q.correctIndex && (
-              <Typography component="span" sx={{ color: '#2ea043', fontWeight: 700, flexShrink: 0, lineHeight: 1 }}>✓</Typography>
+              <Typography component="span" sx={{ color: STATUS.success, fontWeight: 700, flexShrink: 0, lineHeight: 1 }}>✓</Typography>
             )}
             {revealed && i === selected && i !== q.correctIndex && (
-              <Typography component="span" sx={{ color: '#f85149', fontWeight: 700, flexShrink: 0, lineHeight: 1 }}>✗</Typography>
+              <Typography component="span" sx={{ color: STATUS.error, fontWeight: 700, flexShrink: 0, lineHeight: 1 }}>✗</Typography>
             )}
             {(!revealed || (i !== q.correctIndex && i !== selected)) && (
               <Typography component="span" sx={{
@@ -126,7 +126,7 @@ function QuizQuestion({ q, index, total, onAnswer, isDark }) {
         <Box sx={{
           mt: 2, p: 1.5, borderRadius: `${RADIUS.md}px`,
           backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
-          borderLeft: `3px solid ${selected === q.correctIndex ? '#2ea043' : '#f85149'}`,
+          borderLeft: `3px solid ${selected === q.correctIndex ? STATUS.success : STATUS.error}`,
         }}>
           <Typography sx={{
             fontSize: TYPOGRAPHY.sizes.caption,
@@ -145,7 +145,7 @@ function ScoreSummary({ answers, questions, onRetry, isDark }) {
   const correct = answers.filter(Boolean).length
   const total   = questions.length
   const pct     = Math.round((correct / total) * 100)
-  const color   = pct >= 80 ? '#2ea043' : pct >= 50 ? '#f0883e' : '#f85149'
+  const color   = pct >= 80 ? STATUS.success : pct >= 50 ? STATUS.warning : STATUS.error
 
   return (
     <Box sx={{ textAlign: 'center', py: 1 }}>
@@ -164,7 +164,7 @@ function ScoreSummary({ answers, questions, onRetry, isDark }) {
         {questions.map((q, i) => (
           <Box key={i} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
             <Typography component="span" sx={{
-              fontSize: 13, color: answers[i] ? '#2ea043' : '#f85149',
+              fontSize: 13, color: answers[i] ? STATUS.success : STATUS.error,
               flexShrink: 0, mt: '1px', lineHeight: 1,
             }}>
               {answers[i] ? '✓' : '✗'}
@@ -181,6 +181,8 @@ function ScoreSummary({ answers, questions, onRetry, isDark }) {
       </Box>
 
       <Box
+        component="button"
+        type="button"
         onClick={onRetry}
         sx={{
           display: 'inline-block', px: 2, py: 0.75,
@@ -190,9 +192,9 @@ function ScoreSummary({ answers, questions, onRetry, isDark }) {
           cursor: 'pointer',
           fontSize: TYPOGRAPHY.sizes.caption,
           color: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)',
-          userSelect: 'none',
+          fontFamily: 'inherit', background: 'none',
           transition: 'all 0.15s ease',
-          '&:hover': { borderColor: '#4B72FF', color: '#4B72FF' },
+          '&:hover': { borderColor: BRAND.accent, color: BRAND.accent },
         }}
       >
         Try again
