@@ -7,6 +7,16 @@ import ZoomOutMapIcon   from '@mui/icons-material/ZoomOutMap'
 import ContentCopyIcon  from '@mui/icons-material/ContentCopy'
 import CheckIcon        from '@mui/icons-material/Check'
 import mermaid from 'mermaid'
+import DOMPurify from 'dompurify'
+
+// Sanitize SVG output from mermaid before injecting it into the DOM.
+// securityLevel:'loose' allows HTML in labels, so we sanitize defensively.
+const SVG_CONFIG = {
+  USE_PROFILES: { svg: true, svgFilters: true },
+  FORBID_TAGS:  ['script'],
+  FORBID_ATTR:  ['xlink:href', 'href'],  // blocks external resource loads
+}
+const sanitizeSvg = (raw) => DOMPurify.sanitize(raw, SVG_CONFIG)
 
 let _initializedTheme = null
 
@@ -50,7 +60,7 @@ export default function MermaidViewer({ entityId, diagram, caption }) {
     setScale(1)
 
     mermaid.render(idRef.current, fixNewlines(diagram))
-      .then(({ svg: rendered }) => setSvg(rendered))
+      .then(({ svg: rendered }) => setSvg(sanitizeSvg(rendered)))
       .catch(err => {
         console.error('MermaidViewer render error:', err)
         setError('Could not render diagram.')

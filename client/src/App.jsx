@@ -8,6 +8,8 @@ import { buildTheme } from './theme/index.js'
 import Sidebar from './components/common/Sidebar'
 import Footer from './components/common/Footer'
 import { BRAND } from './theme/tokens.js'
+import { STORAGE_KEYS, VALID_THEMES } from './constants/storage.js'
+import { ROUTES, studioConvUrl } from './constants/routes.js'
 import AboutUs from './pages/AboutUs'
 import Settings from './pages/Settings'
 import Studio from './pages/Studio'
@@ -43,7 +45,7 @@ function MobileHeader({ onOpenSidebar, onNewConversation, slot }) {
       bgcolor: 'background.paper',
       zIndex: 10,
     }}>
-      <IconButton size="small" onClick={onOpenSidebar} sx={{ p: 1, flexShrink: 0 }}>
+      <IconButton size="small" aria-label="Open navigation" onClick={onOpenSidebar} sx={{ p: 1, flexShrink: 0 }}>
         <MenuIcon sx={{ fontSize: 20, color: theme.palette.text.secondary }} />
       </IconButton>
 
@@ -52,7 +54,7 @@ function MobileHeader({ onOpenSidebar, onNewConversation, slot }) {
         {slot}
       </Box>
 
-      <IconButton size="small" onClick={onNewConversation} sx={{ p: 1, flexShrink: 0 }}>
+      <IconButton size="small" aria-label="New conversation" onClick={onNewConversation} sx={{ p: 1, flexShrink: 0 }}>
         <AddIcon sx={{ fontSize: 20, color: theme.palette.text.secondary }} />
       </IconButton>
     </Box>
@@ -68,9 +70,21 @@ function AppInner() {
   const { mode: themeMode, toggle: onThemeToggle } = useContext(ColorModeContext)
   const theme       = useTheme()
   const isMobile    = useMediaQuery(theme.breakpoints.down('sm'))
-  const isFullHeight = location.pathname.startsWith('/studio')
+  const isFullHeight = location.pathname.startsWith(ROUTES.STUDIO)
   const isNoPadding  = NO_PADDING_PAGES.includes(location.pathname)
-  const isLoginPage  = location.pathname === '/login' || location.pathname === '/register'
+  const isLoginPage  = location.pathname === ROUTES.LOGIN || location.pathname === ROUTES.REGISTER
+
+  // Update document title on navigation so screen readers announce the new page.
+  useEffect(() => {
+    const PAGE_TITLES = {
+      [ROUTES.HOME]:     'Home',
+      [ROUTES.LOGIN]:    'Sign in',
+      [ROUTES.REGISTER]: 'Create account',
+      [ROUTES.SETTINGS]: 'Settings',
+    }
+    const base = location.pathname.startsWith(ROUTES.STUDIO) ? 'Studio' : (PAGE_TITLES[location.pathname] ?? 'Page')
+    document.title = `${base} — Zenith`
+  }, [location.pathname])
 
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
   const [mobileHeaderSlot, setMobileHeaderSlot] = useState(null)
@@ -83,13 +97,13 @@ function AppInner() {
   // activeConvId is derived directly from the URL — the URL is the single source
   // of truth. No state, no sync effects, no stale closures. This is how
   // ChatGPT (/c/:id) and Claude (/chat/:id) handle conversation routing.
-  const studioMatch  = useMatch('/studio/:convId')
+  const studioMatch  = useMatch(ROUTES.STUDIO_CONV)
   const activeConvId = studioMatch?.params?.convId ?? null
 
   // Passed to Studio as onActiveConvIdChange. Studio calls this when a new
   // conversation is created so the URL updates to /studio/:newId.
   const onActiveConvIdChange = useCallback((id) => {
-    navigate(id ? '/studio/' + id : '/studio')
+    navigate(id ? studioConvUrl(id) : ROUTES.STUDIO)
   }, [navigate])
 
   const fetchConversations = useCallback(async () => {
@@ -111,11 +125,11 @@ function AppInner() {
   useEffect(() => { fetchConversations() }, [fetchConversations])
 
   const handleSelectConv = useCallback((conv) => {
-    navigate('/studio/' + conv.id)
+    navigate(studioConvUrl(conv.id))
   }, [navigate])
 
   const handleNewConversation = useCallback(() => {
-    navigate('/studio')
+    navigate(ROUTES.STUDIO)
   }, [navigate])
 
   // HIGH-5: All conversation mutation handlers now catch errors and surface them
@@ -147,7 +161,7 @@ function AppInner() {
       await api.deleteConversation(convId)
       setConversations((prev) => prev.filter((c) => c.id !== convId))
       if (activeConvId === convId) {
-        navigate('/studio')
+        navigate(ROUTES.STUDIO)
       }
     } catch {
       toast.error('Could not delete conversation. Please try again.')
@@ -199,19 +213,19 @@ function AppInner() {
           >
             {/* Route-level boundary: page crashes don't take down the sidebar.
                 Key stays constant within /studio/* so Studio never remounts on conv switch. */}
-            <ErrorBoundary level="page" key={location.pathname.startsWith('/studio') ? '/studio' : location.pathname}>
+            <ErrorBoundary level="page" key={location.pathname.startsWith(ROUTES.STUDIO) ? ROUTES.STUDIO : location.pathname}>
               <Routes>
                 {/* Always public */}
-                <Route path="/"      element={<AboutUs />} />
-                <Route path="/login" element={
-                  user ? <Navigate to="/studio" replace /> : <Login />
+                <Route path={ROUTES.HOME}     element={<AboutUs />} />
+                <Route path={ROUTES.LOGIN}    element={
+                  user ? <Navigate to={ROUTES.STUDIO} replace /> : <Login />
                 } />
-                <Route path="/register" element={
-                  user ? <Navigate to="/studio" replace /> : <Register />
+                <Route path={ROUTES.REGISTER} element={
+                  user ? <Navigate to={ROUTES.STUDIO} replace /> : <Register />
                 } />
 
                 {/* Protected — require login */}
-                <Route path="/studio" element={
+                <Route path={ROUTES.STUDIO} element={
                   <ProtectedRoute>
                     <Studio
                       activeConvId={activeConvId}
@@ -225,7 +239,7 @@ function AppInner() {
                     />
                   </ProtectedRoute>
                 } />
-                <Route path="/studio/:convId" element={
+                <Route path={ROUTES.STUDIO_CONV} element={
                   <ProtectedRoute>
                     <Studio
                       activeConvId={activeConvId}
@@ -239,7 +253,7 @@ function AppInner() {
                     />
                   </ProtectedRoute>
                 } />
-                <Route path="/settings" element={
+                <Route path={ROUTES.SETTINGS} element={
                   <ProtectedRoute>
                     <Settings />
                   </ProtectedRoute>
@@ -259,8 +273,8 @@ function AppInner() {
 // ─── App ─────────────────────────────────────────────────────────────────────
 function App() {
   const [mode, setMode] = useState(() => {
-    const stored = localStorage.getItem('zenith-theme')
-    return stored === 'light' || stored === 'dark' ? stored : 'light'
+    const stored = localStorage.getItem(STORAGE_KEYS.THEME)
+    return VALID_THEMES.has(stored) ? stored : 'light'
   })
 
   // Keep CSS custom properties in sync with MUI theme so non-MUI elements
@@ -274,7 +288,7 @@ function App() {
     toggle: () =>
       setMode((prev) => {
         const next = prev === 'light' ? 'dark' : 'light'
-        localStorage.setItem('zenith-theme', next)
+        localStorage.setItem(STORAGE_KEYS.THEME, next)
         return next
       }),
   }), [mode])

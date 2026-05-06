@@ -26,6 +26,15 @@ const _cache = new Map()
 /** @type {Map<string, Promise<string>>} */
 const _inflight = new Map()
 
+// Cap the cache at 50 entries to prevent unbounded memory growth in long sessions.
+// Evict the 10 oldest keys when the limit is reached (they're likely expired anyway).
+const MAX_CACHE = 50
+function _evictIfNeeded() {
+  if (_cache.size <= MAX_CACHE) return
+  const toEvict = [..._cache.keys()].slice(0, 10)
+  toEvict.forEach((k) => _cache.delete(k))
+}
+
 import { getAccessToken } from './authBridge'
 
 async function _fetchToken(resourceId, endpoint) {
@@ -59,6 +68,7 @@ async function _getToken(cacheKey, endpoint) {
   }
 
   const promise = _fetchToken(cacheKey, endpoint).then((token) => {
+    _evictIfNeeded()
     _cache.set(cacheKey, { token, expiresAt: Date.now() + TOKEN_TTL_MS })
     _inflight.delete(cacheKey)
     return token

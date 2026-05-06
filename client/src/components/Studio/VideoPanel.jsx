@@ -6,6 +6,7 @@ import ClosedCaptionIcon          from '@mui/icons-material/ClosedCaption'
 import ClosedCaptionDisabledIcon  from '@mui/icons-material/ClosedCaptionDisabled'
 import { useMediaUrl } from '../../hooks/useMediaUrl'
 import { useToast } from '../../contexts/ToastContext'
+import { STORAGE_KEYS } from '../../constants/storage.js'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -52,7 +53,7 @@ function ReadyState({ sessionId, prompt, onPauseAsk, captions, frameCount, onFra
   const [duration,   setDuration]   = useState(0)
   // Captions on by default, persisted in localStorage
   const [captionsOn, setCaptionsOn] = useState(
-    () => localStorage.getItem('zenith-captions-on') !== 'false'
+    () => localStorage.getItem(STORAGE_KEYS.CAPTIONS_ON) !== 'false'
   )
   // Blob URL for the generated WebVTT file
   const [vttUrl, setVttUrl] = useState(null)
@@ -92,7 +93,7 @@ function ReadyState({ sessionId, prompt, onPauseAsk, captions, frameCount, onFra
   const toggleCaptions = useCallback(() => {
     setCaptionsOn((prev) => {
       const next = !prev
-      localStorage.setItem('zenith-captions-on', String(next))
+      localStorage.setItem(STORAGE_KEYS.CAPTIONS_ON, String(next))
       return next
     })
   }, [])

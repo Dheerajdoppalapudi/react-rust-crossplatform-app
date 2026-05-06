@@ -129,6 +129,9 @@ export function useGeneration({
   // Exposed to Studio.jsx so the conversation-switch effect can cancel it.
   const generationAbortRef = useRef(null)
 
+  // Debounce guard — ignore rapid double-clicks within 1 second.
+  const lastSubmitRef = useRef(0)
+
   // Keep a ref in sync with the latest prompt value so handleGenerate can read
   // the current prompt without having it in its dependency array.  This keeps
   // the callback reference stable across keystrokes so PromptBar only re-renders
@@ -141,6 +144,10 @@ export function useGeneration({
   const handleGenerate = useCallback(async () => {
     const currentPrompt = promptRef.current
     if (!currentPrompt.trim() || isAnyGenerating) return
+
+    const now = Date.now()
+    if (now - lastSubmitRef.current < 1_000) return
+    lastSubmitRef.current = now
 
     const submittedPrompt = currentPrompt.trim()
     setPrompt('')

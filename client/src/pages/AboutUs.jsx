@@ -20,6 +20,7 @@ import ArrowForwardIcon      from '@mui/icons-material/ArrowForward'
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline'
 import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline'
 import { BRAND, PALETTE } from '../theme/tokens.js'
+import { ROUTES } from '../constants/routes.js'
 
 // ─── Framer helpers ───────────────────────────────────────────────────────────
 const MotionBox = motion(Box)
@@ -337,7 +338,7 @@ export default function AboutUs() {
               <MotionBox
                 whileHover={{ scale: 1.04, y: -2 }}
                 whileTap={{ scale: 0.97 }}
-                onClick={() => navigate('/studio')}
+                onClick={() => navigate(ROUTES.STUDIO)}
                 sx={{
                   display: 'inline-flex', alignItems: 'center', gap: 1,
                   px: 3.5, py: 1.4,
@@ -858,7 +859,7 @@ export default function AboutUs() {
               <MotionBox
                 whileHover={{ scale: 1.05, x: 2 }}
                 whileTap={{ scale: 0.96 }}
-                onClick={() => navigate('/studio')}
+                onClick={() => navigate(ROUTES.STUDIO)}
                 sx={{
                   display: 'inline-flex', alignItems: 'center', gap: 1,
                   px: 2.5, py: 1.1, borderRadius: '10px', cursor: 'pointer',

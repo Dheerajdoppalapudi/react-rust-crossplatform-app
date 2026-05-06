@@ -236,6 +236,7 @@ const ConvItem = memo(({ conv, isActive, onSelect, onRename, onStar, onDelete })
         {(hovered || menuAnchor) && (
           <IconButton
             size="small"
+            aria-label="Conversation options"
             onClick={openMenu}
             sx={{
               p: 0.3, flexShrink: 0,
@@ -484,6 +485,8 @@ const Sidebar = ({
   return (
     <Box sx={{ position: 'relative', flexShrink: isMobile ? 0 : 0, width: isMobile ? 0 : undefined }}>
       <Drawer
+        component="nav"
+        aria-label="Main navigation"
         variant={isMobile ? 'temporary' : 'permanent'}
         open={drawerOpen}
         onClose={isMobile ? closeMobile : undefined}
@@ -539,7 +542,7 @@ const Sidebar = ({
           {(isMobile || open) && (
             <IconButton
               size="small"
-              title="Close sidebar"
+              aria-label="Close sidebar"
               onClick={(e) => { e.stopPropagation(); isMobile ? closeMobile() : setOpen(false) }}
               sx={{
                 width: 26, height: 26, borderRadius: '6px', flexShrink: 0,
@@ -753,6 +756,7 @@ const Sidebar = ({
                 <Tooltip title="Sign out" placement="right" arrow>
                   <IconButton
                     size="small"
+                    aria-label="Sign out"
                     onClick={logout}
                     sx={{
                       flexShrink: 0, color: theme.palette.text.disabled,

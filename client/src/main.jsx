@@ -4,7 +4,12 @@ import { BrowserRouter } from 'react-router-dom'
 import { GoogleOAuthProvider } from '@react-oauth/google'
 import App from './App.jsx'
 import ErrorBoundary from './components/error/ErrorBoundary.jsx'
+import { initSentry } from './lib/sentry.js'
 import './index.css'
+
+// Initialise Sentry before React mounts so it instruments the full component tree.
+// No-op when VITE_SENTRY_DSN is not set or when running in dev mode.
+initSentry()
 
 // M-8: Fail fast if VITE_GOOGLE_CLIENT_ID is missing — a blank string causes
 // @react-oauth/google to silently fail and the user sees no Google button.

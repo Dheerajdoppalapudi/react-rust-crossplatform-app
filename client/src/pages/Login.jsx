@@ -9,6 +9,7 @@ import { motion, useReducedMotion } from 'framer-motion'
 import { useGoogleLogin } from '@react-oauth/google'
 import { useAuth } from '../contexts/AuthContext'
 import { BRAND, PALETTE } from '../theme/tokens.js'
+import { ROUTES } from '../constants/routes.js'
 
 const MotionBox = motion(Box)
 const MotionG   = motion.g
@@ -375,7 +376,7 @@ function LoginForm({ isMobile }) {
   const [error, setError]       = useState('')
   const [loading, setLoading]   = useState(false)
 
-  const from = location.state?.from?.pathname || '/studio'
+  const from = location.state?.from?.pathname || ROUTES.STUDIO
 
   const googleLogin = useGoogleLogin({
     onSuccess: async (tokenResponse) => {

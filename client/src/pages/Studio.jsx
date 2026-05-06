@@ -1,10 +1,7 @@
-import { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react'
-import { Box, Tooltip, IconButton, Typography, Divider, useTheme, useMediaQuery } from '@mui/material'
-import NotesOutlinedIcon    from '@mui/icons-material/NotesOutlined'
-import EditNoteIcon         from '@mui/icons-material/EditNote'
-import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined'
-import VideocamOffOutlined  from '@mui/icons-material/VideocamOffOutlined'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { Box, Typography, Divider, useTheme, useMediaQuery } from '@mui/material'
 import { useMobileHeaderSlot } from '../App'
+import StudioToolbar from '../components/Studio/StudioToolbar'
 
 import LoadingView          from '../components/Studio/LoadingView'
 import EmptyView            from '../components/Studio/EmptyView'
@@ -16,6 +13,7 @@ import ConversationMiniTree from '../components/Studio/ConversationMiniTree'
 
 import { useToast }         from '../contexts/ToastContext'
 import { DEFAULT_MODEL, DEFAULT_RENDER_MODE, FOLLOWUP_SUGGESTIONS } from '../components/Studio/constants'
+import { STORAGE_KEYS } from '../constants/storage.js'
 
 import { useVideoStream }   from '../hooks/useVideoStream'
 import { usePauseContext }  from '../hooks/usePauseContext'
@@ -41,20 +39,20 @@ export default function Studio({
   // ── Persisted preferences ───────────────────────────────────────────────────
 
   const [notesEnabled, setNotesEnabled] = useState(
-    () => localStorage.getItem('studio-notes-enabled') === 'true'
+    () => localStorage.getItem(STORAGE_KEYS.NOTES_ENABLED) === 'true'
   )
   const toggleNotes = useCallback(() => setNotesEnabled((prev) => {
     const next = !prev
-    localStorage.setItem('studio-notes-enabled', String(next))
+    localStorage.setItem(STORAGE_KEYS.NOTES_ENABLED, String(next))
     return next
   }), [])
 
   const [videoEnabled, setVideoEnabled] = useState(
-    () => localStorage.getItem('studio-video-enabled') !== 'false'
+    () => localStorage.getItem(STORAGE_KEYS.VIDEO_ENABLED) !== 'false'
   )
   const toggleVideo = useCallback(() => setVideoEnabled((prev) => {
     const next = !prev
-    localStorage.setItem('studio-video-enabled', String(next))
+    localStorage.setItem(STORAGE_KEYS.VIDEO_ENABLED, String(next))
     return next
   }), [])
 
@@ -154,6 +152,14 @@ export default function Studio({
     return () => window.removeEventListener('keydown', handleKey)
   }, [])
 
+  // Warn before tab/window close while a generation is in-flight.
+  useEffect(() => {
+    if (!isAnyGenerating) return
+    const guard = (e) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', guard)
+    return () => window.removeEventListener('beforeunload', guard)
+  }, [isAnyGenerating])
+
   // Auto-scroll to the latest turn when a new one is appended.
   useEffect(() => {
     threadBottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -211,65 +217,21 @@ export default function Studio({
   useEffect(() => {
     if (!isMobile) { setSlot(null); return }
     setSlot(
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-        {/* Chat / Learn toggle */}
-        <Box sx={{
-          display: 'flex',
-          border: `1px solid ${isDark ? 'rgba(255,255,255,0.12)' : '#e2e8f0'}`,
-          borderRadius: '7px', p: 0.25, gap: 0.2,
-        }}>
-          {['Chat', 'Learn'].map((label) => {
-            const m      = label.toLowerCase()
-            const active = viewMode === m
-            return (
-              <Box
-                key={m}
-                onClick={() => setViewMode(m)}
-                sx={{
-                  px: 1.25, py: 0.35, borderRadius: '5px', cursor: 'pointer',
-                  fontSize: 11, fontWeight: 600, userSelect: 'none',
-                  bgcolor: active ? theme.palette.primary.main : 'transparent',
-                  color:   active ? '#fff' : theme.palette.text.secondary,
-                  transition: 'all 0.15s',
-                }}
-              >
-                {label}
-              </Box>
-            )
-          })}
-        </Box>
-        {/* AI Notes */}
-        <IconButton size="small" onClick={toggleNotes} sx={{
-          borderRadius: '7px', p: 0.6,
-          border: `1px solid ${notesEnabled ? (isDark ? 'rgba(79,110,255,0.45)' : '#c7d2fe') : (isDark ? 'rgba(255,255,255,0.12)' : '#e2e8f0')}`,
-          color: notesEnabled ? theme.palette.primary.main : (isDark ? 'rgba(255,255,255,0.4)' : '#94a3b8'),
-          bgcolor: notesEnabled ? (isDark ? 'rgba(79,110,255,0.1)' : '#f0f4ff') : 'transparent',
-        }}>
-          <NotesOutlinedIcon sx={{ fontSize: 15 }} />
-        </IconButton>
-        {/* Video */}
-        <IconButton size="small" onClick={toggleVideo} sx={{
-          borderRadius: '7px', p: 0.6,
-          border: `1px solid ${videoEnabled ? (isDark ? 'rgba(79,110,255,0.45)' : '#c7d2fe') : (isDark ? 'rgba(255,255,255,0.12)' : '#e2e8f0')}`,
-          color: videoEnabled ? theme.palette.primary.main : (isDark ? 'rgba(255,255,255,0.4)' : '#94a3b8'),
-          bgcolor: videoEnabled ? (isDark ? 'rgba(79,110,255,0.1)' : '#f0f4ff') : 'transparent',
-        }}>
-          {videoEnabled ? <VideocamOutlinedIcon sx={{ fontSize: 15 }} /> : <VideocamOffOutlined sx={{ fontSize: 15 }} />}
-        </IconButton>
-        {/* My Notes */}
-        <IconButton size="small" onClick={toggleUserNotes} sx={{
-          borderRadius: '7px', p: 0.6,
-          border: `1px solid ${userNotesOpen ? (isDark ? 'rgba(79,110,255,0.45)' : '#c7d2fe') : (isDark ? 'rgba(255,255,255,0.12)' : '#e2e8f0')}`,
-          color: userNotesOpen ? theme.palette.primary.main : (isDark ? 'rgba(255,255,255,0.4)' : '#94a3b8'),
-          bgcolor: userNotesOpen ? (isDark ? 'rgba(79,110,255,0.1)' : '#f0f4ff') : 'transparent',
-        }}>
-          <EditNoteIcon sx={{ fontSize: 16 }} />
-        </IconButton>
-      </Box>
+      <StudioToolbar
+        compact
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
+        notesEnabled={notesEnabled}
+        onToggleNotes={toggleNotes}
+        videoEnabled={videoEnabled}
+        onToggleVideo={toggleVideo}
+        userNotesOpen={userNotesOpen}
+        onToggleUserNotes={toggleUserNotes}
+      />
     )
     return () => setSlot(null)
-  }, [isMobile, isDark, viewMode, notesEnabled, videoEnabled, userNotesOpen,
-      setSlot, toggleNotes, toggleVideo, toggleUserNotes, setViewMode, theme.palette.primary.main])
+  }, [isMobile, viewMode, notesEnabled, videoEnabled, userNotesOpen,
+      setSlot, toggleNotes, toggleVideo, toggleUserNotes, setViewMode])
 
   // ── Derived state ───────────────────────────────────────────────────────────
 
@@ -368,118 +330,16 @@ export default function Studio({
           px: { xs: 0.5, sm: 0.75 }, py: 0.5,
           boxShadow: isDark ? '0 4px 16px rgba(0,0,0,0.4)' : '0 4px 16px rgba(0,0,0,0.08)',
         }}>
-          {/* Chat / Learn toggle */}
-          <Box sx={{
-            display: 'flex',
-            border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : '#e2e8f0'}`,
-            borderRadius: '7px', p: 0.25, gap: 0.2,
-          }}>
-            {['Chat', 'Learn'].map((label) => {
-              const m      = label.toLowerCase()
-              const active = viewMode === m
-              return (
-                <Box
-                  key={m}
-                  onClick={() => setViewMode(m)}
-                  sx={{
-                    px: 1.25, py: 0.35, borderRadius: '5px', cursor: 'pointer',
-                    fontSize: 11, fontWeight: 600, userSelect: 'none',
-                    bgcolor: active ? theme.palette.primary.main : 'transparent',
-                    color:   active ? '#fff' : theme.palette.text.secondary,
-                    transition: 'all 0.15s',
-                  }}
-                >
-                  {label}
-                </Box>
-              )
-            })}
-          </Box>
-
-          {/* AI Notes toggle */}
-          <Tooltip title={notesEnabled ? 'AI Notes on' : 'AI Notes off'}>
-            <IconButton
-              size="small"
-              onClick={toggleNotes}
-              aria-pressed={notesEnabled}
-              sx={{
-                borderRadius: '7px', p: 0.6,
-                border: `1px solid ${notesEnabled
-                  ? (isDark ? 'rgba(79,110,255,0.45)' : '#c7d2fe')
-                  : (isDark ? 'rgba(255,255,255,0.12)' : '#e2e8f0')}`,
-                color: notesEnabled
-                  ? theme.palette.primary.main
-                  : (isDark ? 'rgba(255,255,255,0.4)' : '#94a3b8'),
-                bgcolor: notesEnabled
-                  ? (isDark ? 'rgba(79,110,255,0.1)' : '#f0f4ff')
-                  : 'transparent',
-                '&:hover': {
-                  borderColor: isDark ? 'rgba(255,255,255,0.25)' : '#94a3b8',
-                  color: notesEnabled ? theme.palette.primary.main : (isDark ? '#fff' : '#374151'),
-                },
-                transition: 'all 0.15s',
-              }}
-            >
-              <NotesOutlinedIcon sx={{ fontSize: 15 }} />
-            </IconButton>
-          </Tooltip>
-
-          {/* Video mode toggle */}
-          <Tooltip title={videoEnabled ? 'Video on' : 'Video off'}>
-            <IconButton
-              size="small"
-              onClick={toggleVideo}
-              aria-pressed={videoEnabled}
-              sx={{
-                borderRadius: '7px', p: 0.6,
-                border: `1px solid ${videoEnabled
-                  ? (isDark ? 'rgba(79,110,255,0.45)' : '#c7d2fe')
-                  : (isDark ? 'rgba(255,255,255,0.12)' : '#e2e8f0')}`,
-                color: videoEnabled
-                  ? theme.palette.primary.main
-                  : (isDark ? 'rgba(255,255,255,0.4)' : '#94a3b8'),
-                bgcolor: videoEnabled
-                  ? (isDark ? 'rgba(79,110,255,0.1)' : '#f0f4ff')
-                  : 'transparent',
-                '&:hover': {
-                  borderColor: isDark ? 'rgba(255,255,255,0.25)' : '#94a3b8',
-                  color: videoEnabled ? theme.palette.primary.main : (isDark ? '#fff' : '#374151'),
-                },
-                transition: 'all 0.15s',
-              }}
-            >
-              {videoEnabled
-                ? <VideocamOutlinedIcon sx={{ fontSize: 15 }} />
-                : <VideocamOffOutlined  sx={{ fontSize: 15 }} />}
-            </IconButton>
-          </Tooltip>
-
-          {/* My Notes panel toggle */}
-          <Tooltip title={`My Notes (${navigator.platform.toUpperCase().includes('MAC') ? '⇧⌘N' : 'Ctrl+Shift+N'})`}>
-            <IconButton
-              size="small"
-              onClick={toggleUserNotes}
-              aria-pressed={userNotesOpen}
-              sx={{
-                borderRadius: '7px', p: 0.6,
-                border: `1px solid ${userNotesOpen
-                  ? (isDark ? 'rgba(79,110,255,0.45)' : '#c7d2fe')
-                  : (isDark ? 'rgba(255,255,255,0.12)' : '#e2e8f0')}`,
-                color: userNotesOpen
-                  ? theme.palette.primary.main
-                  : (isDark ? 'rgba(255,255,255,0.4)' : '#94a3b8'),
-                bgcolor: userNotesOpen
-                  ? (isDark ? 'rgba(79,110,255,0.1)' : '#f0f4ff')
-                  : 'transparent',
-                '&:hover': {
-                  borderColor: isDark ? 'rgba(255,255,255,0.25)' : '#94a3b8',
-                  color: userNotesOpen ? theme.palette.primary.main : (isDark ? '#fff' : '#374151'),
-                },
-                transition: 'all 0.15s',
-              }}
-            >
-              <EditNoteIcon sx={{ fontSize: 16 }} />
-            </IconButton>
-          </Tooltip>
+          <StudioToolbar
+            viewMode={viewMode}
+            onViewModeChange={setViewMode}
+            notesEnabled={notesEnabled}
+            onToggleNotes={toggleNotes}
+            videoEnabled={videoEnabled}
+            onToggleVideo={toggleVideo}
+            userNotesOpen={userNotesOpen}
+            onToggleUserNotes={toggleUserNotes}
+          />
         </Box>
 
         {/* ── Content area ────────────────────────────────────────────────────── */}

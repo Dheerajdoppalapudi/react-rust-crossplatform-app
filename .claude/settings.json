@@ -10,12 +10,17 @@
       "Wrire",
       "Edit",
       "Bash(grep -r \"StreamingResponse\\\\|async def.*stream\\\\|yield\\\\|try:\\\\|except\\\\|finally:\" \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend\" --include=\"*.py\" -not -path \"*/env/*\")",
-      "Bash(grep -E \"^\\\\s*def .+\\\\\\):\\\\s*$\" \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/routers/auth.py\" -n)"
+      "Bash(grep -E \"^\\\\s*def .+\\\\\\):\\\\s*$\" \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/routers/auth.py\" -n)",
+      "Bash(mkdir -p \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/client/src/lib\")",
+      "Bash(mkdir -p \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/client/src/constants\")",
+      "Bash(grep -n \"SAVED_RESET\\\\|DEBOUNCE_MS\\\\|const.*=.*[0-9]\\\\{3,\\\\}\" \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/client/src/components/Studio/UserNotesPanel/index.jsx\")",
+      "Bash(grep -n \"const.*=.*[0-9]\\\\{3,\\\\}\\\\|TOAST\\\\|ms\\\\b\\\\|_MS\\\\b\" \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/client/src/contexts/ToastContext.jsx\")"
     ],
     "additionalDirectories": [
       "/tmp",
       "/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/services/interactive/prompts",
-      "/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/services/interactive/prompts/catalog"
+      "/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/services/interactive/prompts/catalog",
+      "/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/client/src"
     ]
   }
 }

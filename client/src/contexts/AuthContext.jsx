@@ -11,6 +11,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import { setAccessToken, setAuthCallbacks, getAccessToken } from '../services/authBridge'
+import { setUser as setSentryUser } from '../lib/sentry.js'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
@@ -45,10 +46,12 @@ export function AuthProvider({ children }) {
   const [user, setUser]           = useState(null)
   const [isLoading, setIsLoading] = useState(true)  // true until first refresh attempt completes
 
-  // Keep the bridge token in sync so api.js can read it without importing React
+  // Keep the bridge token in sync so api.js can read it without importing React.
+  // Also syncs the Sentry user context so every error report includes user identity.
   const _setAuth = (token, user) => {
     setAccessToken(token)
     setUser(user)
+    setSentryUser(user)
   }
 
   // ── Silent restore on page load ──────────────────────────────────────────────

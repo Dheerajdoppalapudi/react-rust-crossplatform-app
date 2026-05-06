@@ -13,12 +13,13 @@ import { getFrameType }            from './constants'
 import { useMediaUrl }             from '../../hooks/useMediaUrl'
 import { BRAND, PALETTE }          from '../../theme/tokens.js'
 
-function NavButton({ onClick, disabled, children }) {
+function NavButton({ onClick, disabled, 'aria-label': ariaLabel, children }) {
   return (
     <IconButton
       onClick={onClick}
       disabled={disabled}
       size="small"
+      aria-label={ariaLabel}
       sx={{
         color: '#fff',
         bgcolor: 'rgba(0,0,0,0.45)',
@@ -170,6 +171,7 @@ function SlideDialog({ open, frameIndex, captions, images, sessionId, onClose, o
         <IconButton
           onClick={onClose}
           size="small"
+          aria-label="Close full-screen view"
           sx={{
             position: 'absolute', top: 10, right: 10, zIndex: 10,
             color: '#fff', bgcolor: 'rgba(0,0,0,0.5)',
@@ -213,14 +215,14 @@ function SlideDialog({ open, frameIndex, captions, images, sessionId, onClose, o
 
           {frameIndex > 0 && (
             <Box sx={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }}>
-              <NavButton onClick={goPrev} disabled={frameIndex === 0}>
+              <NavButton onClick={goPrev} disabled={frameIndex === 0} aria-label="Previous slide">
                 <ArrowBackIosNewIcon sx={{ fontSize: 16 }} />
               </NavButton>
             </Box>
           )}
           {frameIndex < total - 1 && (
             <Box sx={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)' }}>
-              <NavButton onClick={goNext} disabled={frameIndex === total - 1}>
+              <NavButton onClick={goNext} disabled={frameIndex === total - 1} aria-label="Next slide">
                 <ArrowForwardIosIcon sx={{ fontSize: 16 }} />
               </NavButton>
             </Box>

@@ -8,6 +8,7 @@ import { Visibility, VisibilityOff } from '@mui/icons-material'
 import { motion, useReducedMotion } from 'framer-motion'
 import { useAuth } from '../contexts/AuthContext'
 import { BRAND } from '../theme/tokens.js'
+import { ROUTES } from '../constants/routes.js'
 
 const MotionBox = motion(Box)
 
@@ -288,7 +289,7 @@ export default function Register() {
     setLoading(true)
     try {
       await register(name.trim(), email, password)
-      navigate('/studio', { replace: true })
+      navigate(ROUTES.STUDIO, { replace: true })
     } catch (err) {
       setError(err.message || 'Registration failed. Please try again.')
     } finally {

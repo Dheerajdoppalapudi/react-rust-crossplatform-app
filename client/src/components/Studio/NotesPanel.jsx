@@ -12,10 +12,12 @@ function toBullets(notes) {
     .map(l => l.trim().replace(/^[-•*]\s*/, ''))
     .filter(Boolean)
 
-  // Already a single block of prose (no newlines) — split on sentences
+  // Already a single block of prose (no newlines) — split on sentences.
+  // Require the next char to be uppercase so "Dr. Smith" and "U.S.A." don't split.
   if (lines.length === 1) {
     return lines[0]
-      .split(/(?<=[.!?])\s+/)
+      .split(/(?<=[.!?])\s+(?=[A-Z])/)
+      .map(s => s.trim())
       .filter(Boolean)
       .map(s => `- ${s}`)
       .join('\n')
