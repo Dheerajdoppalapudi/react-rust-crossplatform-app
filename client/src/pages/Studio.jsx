@@ -378,7 +378,29 @@ export default function Studio({
             )}
 
             {showEmpty && (
-              <EmptyView onSuggestionClick={handleSuggestionClick} />
+              <EmptyView
+                onSuggestionClick={handleSuggestionClick}
+                prompt={prompt}
+                onPromptChange={setPrompt}
+                onSubmit={handleGenerate}
+                onStop={() => generationAbortRef.current?.abort()}
+                onKeyDown={handleKeyDown}
+                inputRef={inputRef}
+                isGenerating={isAnyGenerating}
+                activeConversation={activeConversationMeta}
+                onNewConversation={handleNewConversation}
+                pauseContext={pauseContext}
+                onClearPauseContext={() => setPauseContext(null)}
+                selectedModel={selectedModel}
+                onModelChange={setSelectedModel}
+                selectedRenderMode={selectedRenderMode}
+                onRenderModeChange={setSelectedRenderMode}
+                selectedMode={selectedMode}
+                onModeChange={setSelectedMode}
+                stagedFiles={stagedFiles}
+                onAddFiles={handleAddFiles}
+                onRemoveFile={handleRemoveFile}
+              />
             )}
 
             {showThread && (
@@ -421,28 +443,30 @@ export default function Studio({
             )}
           </Box>
 
-          <PromptBar
-            prompt={prompt}
-            onPromptChange={setPrompt}
-            onSubmit={handleGenerate}
-            onStop={() => generationAbortRef.current?.abort()}
-            onKeyDown={handleKeyDown}
-            inputRef={inputRef}
-            isGenerating={isAnyGenerating}
-            activeConversation={activeConversationMeta}
-            onNewConversation={handleNewConversation}
-            pauseContext={pauseContext}
-            onClearPauseContext={() => setPauseContext(null)}
-            selectedModel={selectedModel}
-            onModelChange={setSelectedModel}
-            selectedRenderMode={selectedRenderMode}
-            onRenderModeChange={setSelectedRenderMode}
-            selectedMode={selectedMode}
-            onModeChange={setSelectedMode}
-            stagedFiles={stagedFiles}
-            onAddFiles={handleAddFiles}
-            onRemoveFile={handleRemoveFile}
-          />
+          {!showEmpty && (
+            <PromptBar
+              prompt={prompt}
+              onPromptChange={setPrompt}
+              onSubmit={handleGenerate}
+              onStop={() => generationAbortRef.current?.abort()}
+              onKeyDown={handleKeyDown}
+              inputRef={inputRef}
+              isGenerating={isAnyGenerating}
+              activeConversation={activeConversationMeta}
+              onNewConversation={handleNewConversation}
+              pauseContext={pauseContext}
+              onClearPauseContext={() => setPauseContext(null)}
+              selectedModel={selectedModel}
+              onModelChange={setSelectedModel}
+              selectedRenderMode={selectedRenderMode}
+              onRenderModeChange={setSelectedRenderMode}
+              selectedMode={selectedMode}
+              onModeChange={setSelectedMode}
+              stagedFiles={stagedFiles}
+              onAddFiles={handleAddFiles}
+              onRemoveFile={handleRemoveFile}
+            />
+          )}
         </Box>
 
         {showThread && (

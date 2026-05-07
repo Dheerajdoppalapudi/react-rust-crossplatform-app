@@ -66,14 +66,17 @@ function PillButton({ onClick, children, active = false, activeColor = null, act
       type="button"
       onClick={onClick}
       sx={{
-        display: 'flex', alignItems: 'center', gap: 0.4,
-        px: 1, py: 0.4, borderRadius: '7px', cursor: 'pointer',
+        display: 'flex', alignItems: 'center', gap: 0.5,
+        px: 1.5, py: 0.8, borderRadius: '20px', cursor: 'pointer',
         background: 'none', fontFamily: 'inherit',
-        backgroundColor: active && activeBg ? activeBg : 'transparent',
+        backgroundColor: active && activeBg ? activeBg : isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
         color: active && activeColor ? activeColor : theme.palette.text.secondary,
-        border: active && activeColor ? `1px solid ${activeColor}44` : '1px solid transparent',
+        border: active && activeColor
+          ? `1.5px solid ${activeColor}55`
+          : `1.5px solid ${isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.14)'}`,
         '&:hover': {
-          bgcolor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)',
+          borderColor: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.22)',
+          bgcolor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)',
           color: theme.palette.text.primary,
         },
         transition: 'all 0.15s',
@@ -81,6 +84,46 @@ function PillButton({ onClick, children, active = false, activeColor = null, act
       }}
     >
       {children}
+    </Box>
+  )
+}
+
+// ── Mode pill (Perplexity-style rounded pill with border, no icon) ────────────
+
+function ModePill({ onClick, mode, isDark }) {
+  return (
+    <Box
+      component="button"
+      type="button"
+      onClick={onClick}
+      sx={{
+        display:         'flex',
+        alignItems:      'center',
+        gap:             0.5,
+        px:              1.75,
+        py:              0.8,
+        borderRadius:    '20px',
+        border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.14)'}`,
+        backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
+        cursor:          'pointer',
+        background:      isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
+        fontFamily:      'inherit',
+        transition:      'all 0.15s',
+        '&:hover': {
+          borderColor:     isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.22)',
+          backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)',
+        },
+      }}
+    >
+      <Typography sx={{
+        fontSize:   14,
+        fontWeight: 500,
+        lineHeight: 1,
+        color:      isDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.62)',
+      }}>
+        {mode.label}
+      </Typography>
+      <KeyboardArrowDownIcon sx={{ fontSize: 14, opacity: 0.5, color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.4)' }} />
     </Box>
   )
 }
@@ -103,13 +146,13 @@ function PromptBar({
   onModelChange,
   selectedRenderMode,
   onRenderModeChange,
-  // Generation mode
   selectedMode,
   onModeChange,
-  // Staged file attachments
   stagedFiles,
   onAddFiles,
   onRemoveFile,
+  // When true: no outer horizontal padding (used inside EmptyView for width alignment)
+  embedded = false,
 }) {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
@@ -150,6 +193,20 @@ function PromptBar({
     }
   }
 
+  // Outer wrapper — when embedded (inside EmptyView), skip horizontal padding
+  // so the card edge aligns with the suggestion grid below it.
+  const outerSx = embedded
+    ? { pt: 0, pb: 0 }
+    : {
+        px: { xs: 1.5, sm: 3 },
+        pt: 1,
+        pb: { xs: 'max(env(safe-area-inset-bottom, 0px) + 12px, 16px)', sm: 2 },
+      }
+
+  const innerSx = embedded
+    ? { width: '100%' }
+    : { maxWidth: 760, mx: 'auto' }
+
   return (
     <Box sx={{ flexShrink: 0 }}>
       {/* Hidden file input */}
@@ -164,7 +221,7 @@ function PromptBar({
 
       {/* Pause context banner */}
       {pauseContext && (
-        <Box sx={{ px: { xs: 1.5, sm: 3 }, pt: 1.5, pb: 0 }}>
+        <Box sx={embedded ? { pb: 1 } : { px: { xs: 1.5, sm: 3 }, pt: 1.5, pb: 0 }}>
           <Box sx={{
             display: 'flex', alignItems: 'center', gap: 1,
             px: 1.5, py: 0.75, borderRadius: '10px',
@@ -195,8 +252,8 @@ function PromptBar({
         </Box>
       )}
 
-      <Box sx={{ px: { xs: 1.5, sm: 3 }, pt: 1, pb: { xs: 'max(env(safe-area-inset-bottom, 0px) + 12px, 16px)', sm: 2 } }}>
-        <Box sx={{ maxWidth: 760, mx: 'auto' }}>
+      <Box sx={outerSx}>
+        <Box sx={innerSx}>
           <Box sx={{
             border: `1.5px solid ${promptBorder}`,
             borderRadius: '14px',
@@ -210,8 +267,8 @@ function PromptBar({
             transition: 'border-color 0.15s, box-shadow 0.15s',
           }}>
 
-            {/* Text input */}
-            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, px: 2, pt: 1.25, pb: 0.25 }}>
+            {/* Text input — taller padding when embedded for more presence */}
+            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, px: 2, pt: embedded ? 2 : 1.5, pb: 0.5 }}>
               <TextField
                 inputRef={inputRef}
                 value={prompt}
@@ -224,15 +281,18 @@ function PromptBar({
                                   'What do you want to learn today?'
                 }
                 multiline
-                minRows={1}
+                minRows={embedded ? 2 : 1}
                 maxRows={6}
                 variant="standard"
                 fullWidth
                 slotProps={{ input: { disableUnderline: true } }}
                 sx={{
                   '& .MuiInputBase-input': {
-                    fontSize: 14, color: theme.palette.text.primary, py: 0,
-                    '&::placeholder': { color: theme.palette.text.secondary, opacity: 0.55 },
+                    fontSize:   embedded ? 15 : 14,
+                    color:      theme.palette.text.primary,
+                    py:         0,
+                    lineHeight: 1.6,
+                    '&::placeholder': { color: theme.palette.text.secondary, opacity: 0.5 },
                   },
                 }}
               />
@@ -250,30 +310,50 @@ function PromptBar({
             {/* Bottom control row */}
             <Box sx={{
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              px: 1.5, pb: 1.25, pt: 0.25,
+              px: 2, pb: 1.75, pt: 1,
             }}>
               {/* LEFT: + | mode | render */}
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
 
-                {/* + button */}
-                <PillButton
+                {/* + button — circle style */}
+                <Box
+                  component="button"
+                  type="button"
                   onClick={(e) => setPlusMenuAnchor(e.currentTarget)}
-                  isDark={isDark}
-                  sx={{ px: 0.75 }}
+                  sx={{
+                    display:         'flex',
+                    alignItems:      'center',
+                    justifyContent:  'center',
+                    width:           32,
+                    height:          32,
+                    borderRadius:    '50%',
+                    border:          `1.5px solid ${isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.14)'}`,
+                    backgroundColor: 'transparent',
+                    cursor:          'pointer',
+                    background:      'none',
+                    fontFamily:      'inherit',
+                    flexShrink:      0,
+                    transition:      'all 0.15s',
+                    color:           isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.5)',
+                    '&:hover': {
+                      borderColor:     isDark ? 'rgba(255,255,255,0.32)' : 'rgba(0,0,0,0.25)',
+                      backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
+                      color:           isDark ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.75)',
+                    },
+                  }}
                 >
                   {uploading
-                    ? <CircularProgress size={12} sx={{ color: 'inherit' }} />
-                    : <AddIcon sx={{ fontSize: 14 }} />
+                    ? <CircularProgress size={14} sx={{ color: 'inherit' }} />
+                    : <AddIcon sx={{ fontSize: 18 }} />
                   }
-                  <KeyboardArrowDownIcon sx={{ fontSize: 11, opacity: 0.6 }} />
-                </PillButton>
+                </Box>
 
                 <Menu
                   anchorEl={plusMenuAnchor}
                   open={Boolean(plusMenuAnchor)}
                   onClose={() => setPlusMenuAnchor(null)}
-                  anchorOrigin={{ vertical: 'top', horizontal: 'left' }}
-                  transformOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+                  anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+                  transformOrigin={{ vertical: 'top', horizontal: 'left' }}
                   slotProps={{ paper: { sx: { minWidth: 200, borderRadius: '12px', border: `1px solid ${theme.palette.divider}`, boxShadow: isDark ? '0 8px 32px rgba(0,0,0,0.6)' : '0 8px 32px rgba(0,0,0,0.12)', mb: 0.5 } } }}
                 >
                   <MenuItem
@@ -303,22 +383,19 @@ function PromptBar({
                   ]}
                 </Menu>
 
-                {/* Mode selector */}
-                <PillButton
+                {/* Mode selector — Perplexity-style pill */}
+                <ModePill
                   onClick={(e) => setModeMenuAnchor(e.currentTarget)}
+                  mode={activeMode}
                   isDark={isDark}
-                >
-                  <Typography sx={{ fontSize: 11, mr: 0.2 }}>{activeMode.icon}</Typography>
-                  <Typography sx={{ fontSize: 12, fontWeight: 500, lineHeight: 1 }}>{activeMode.label}</Typography>
-                  <KeyboardArrowDownIcon sx={{ fontSize: 13, opacity: 0.7 }} />
-                </PillButton>
+                />
 
                 <Menu
                   anchorEl={modeMenuAnchor}
                   open={Boolean(modeMenuAnchor)}
                   onClose={() => setModeMenuAnchor(null)}
-                  anchorOrigin={{ vertical: 'top', horizontal: 'left' }}
-                  transformOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+                  anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+                  transformOrigin={{ vertical: 'top', horizontal: 'left' }}
                   slotProps={{ paper: { sx: { minWidth: 220, borderRadius: '12px', border: `1px solid ${theme.palette.divider}`, boxShadow: isDark ? '0 8px 32px rgba(0,0,0,0.6)' : '0 8px 32px rgba(0,0,0,0.12)', mb: 0.5 } } }}
                 >
                   {MODES.map(m => (
@@ -328,12 +405,9 @@ function PromptBar({
                       onClick={() => { onModeChange?.(m); setModeMenuAnchor(null) }}
                       sx={{ px: 2, py: 0.75, mx: 0.5, borderRadius: '8px' }}
                     >
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Typography sx={{ fontSize: 14, lineHeight: 1 }}>{m.icon}</Typography>
-                        <Box>
-                          <Typography sx={{ fontSize: 13, fontWeight: 500, lineHeight: 1.3 }}>{m.label}</Typography>
-                          <Typography sx={{ fontSize: 11, color: theme.palette.text.secondary, lineHeight: 1.4 }}>{m.desc}</Typography>
-                        </Box>
+                      <Box>
+                        <Typography sx={{ fontSize: 13, fontWeight: 500, lineHeight: 1.3 }}>{m.label}</Typography>
+                        <Typography sx={{ fontSize: 11, color: theme.palette.text.secondary, lineHeight: 1.4 }}>{m.desc}</Typography>
                       </Box>
                     </MenuItem>
                   ))}
@@ -351,18 +425,18 @@ function PromptBar({
                   <Box sx={{ display: 'flex', alignItems: 'center', flexShrink: 0, color: isCustomRender ? selectedRenderMode?.color : 'inherit' }}>
                     {RENDER_MODE_ICONS[selectedRenderMode?.id]}
                   </Box>
-                  <Typography sx={{ fontSize: 12, fontWeight: 500, lineHeight: 1 }}>
+                  <Typography sx={{ fontSize: 14, fontWeight: 500, lineHeight: 1 }}>
                     {selectedRenderMode?.id === 'auto' ? 'Auto' : selectedRenderMode?.label}
                   </Typography>
-                  <KeyboardArrowDownIcon sx={{ fontSize: 13, opacity: 0.7 }} />
+                  <KeyboardArrowDownIcon sx={{ fontSize: 14, opacity: 0.5 }} />
                 </PillButton>
 
                 <Menu
                   anchorEl={renderMenuAnchor}
                   open={Boolean(renderMenuAnchor)}
                   onClose={() => setRenderMenuAnchor(null)}
-                  anchorOrigin={{ vertical: 'top', horizontal: 'left' }}
-                  transformOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+                  anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+                  transformOrigin={{ vertical: 'top', horizontal: 'left' }}
                   slotProps={{ paper: { sx: { minWidth: 210, borderRadius: '12px', border: `1px solid ${theme.palette.divider}`, boxShadow: isDark ? '0 8px 32px rgba(0,0,0,0.6)' : '0 8px 32px rgba(0,0,0,0.12)', mb: 0.5 } } }}
                 >
                   {RENDER_MODES.map(mode => (
@@ -387,28 +461,47 @@ function PromptBar({
               </Box>
 
               {/* RIGHT: model | send/stop */}
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
 
-                {/* Model selector */}
-                <PillButton
+                {/* Model selector — plain text + chevron, no border (Perplexity style) */}
+                <Box
+                  component="button"
+                  type="button"
                   onClick={(e) => setModelMenuAnchor(e.currentTarget)}
-                  isDark={isDark}
+                  sx={{
+                    display:    'flex',
+                    alignItems: 'center',
+                    gap:        0.35,
+                    px:         0.75,
+                    py:         0.5,
+                    border:     'none',
+                    background: 'none',
+                    cursor:     'pointer',
+                    fontFamily: 'inherit',
+                    borderRadius: '6px',
+                    transition: 'opacity 0.15s',
+                    opacity: 0.65,
+                    '&:hover': { opacity: 1 },
+                  }}
                 >
-                  {selectedModel?.id === 'auto' && (
-                    <AutoAwesomeOutlinedIcon sx={{ fontSize: 12, opacity: 0.6 }} />
-                  )}
-                  <Typography sx={{ fontSize: 12, fontWeight: 500, lineHeight: 1 }}>
-                    {selectedModel?.short || 'Auto'}
+                  <Typography sx={{
+                    fontSize:      14,
+                    fontWeight:    500,
+                    lineHeight:    1,
+                    color:         theme.palette.text.primary,
+                    letterSpacing: 0.1,
+                  }}>
+                    {selectedModel?.short || 'Model'}
                   </Typography>
-                  <KeyboardArrowDownIcon sx={{ fontSize: 13, opacity: 0.7 }} />
-                </PillButton>
+                  <KeyboardArrowDownIcon sx={{ fontSize: 15, color: theme.palette.text.primary }} />
+                </Box>
 
                 <Menu
                   anchorEl={modelMenuAnchor}
                   open={Boolean(modelMenuAnchor)}
                   onClose={() => setModelMenuAnchor(null)}
-                  anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
-                  transformOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                  anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                  transformOrigin={{ vertical: 'top', horizontal: 'right' }}
                   slotProps={{ paper: { sx: { minWidth: 230, borderRadius: '12px', border: `1px solid ${theme.palette.divider}`, boxShadow: isDark ? '0 8px 32px rgba(0,0,0,0.6)' : '0 8px 32px rgba(0,0,0,0.12)', mb: 0.5 } } }}
                 >
                   <MenuItem
@@ -551,6 +644,7 @@ PromptBar.propTypes = {
   stagedFiles:         PropTypes.arrayOf(PropTypes.shape({ id: PropTypes.string, name: PropTypes.string, type: PropTypes.string })),
   onAddFiles:          PropTypes.func,
   onRemoveFile:        PropTypes.func,
+  embedded:            PropTypes.bool,
 }
 
 PromptBar.defaultProps = {
@@ -559,6 +653,7 @@ PromptBar.defaultProps = {
   stagedFiles:  [],
   onAddFiles:   () => {},
   onRemoveFile: () => {},
+  embedded:     false,
 }
 
 export default memo(PromptBar)
