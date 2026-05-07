@@ -79,6 +79,13 @@ export const MODELS = [
 
 export const DEFAULT_MODEL = MODELS[0]
 
+// ─── Generation modes ─────────────────────────────────────────────────────────
+export const MODES = [
+  { id: 'instant',       label: 'Instant',       icon: '⚡', desc: 'Direct visual generation'           },
+  { id: 'deep_research', label: 'Deep Research',  icon: '🧠', desc: 'Web search + synthesis + visuals'  },
+]
+export const DEFAULT_MODE = MODES[0]
+
 // ─── Prompt bar initial suggestions ──────────────────────────────────────────
 export const INITIAL_SUGGESTIONS = [
   "Newton's laws of motion",

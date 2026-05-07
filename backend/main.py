@@ -35,7 +35,7 @@ from slowapi.util import get_remote_address
 from core.config import CORS_ORIGINS
 from core.database import init_db, get_db
 from core.responses import success
-from routers import auth, conversations, generation, sessions, upload, video
+from routers import auth, conversations, generate, sessions, upload, video
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +93,7 @@ async def request_id_middleware(request: Request, call_next):
 # ── Routers ───────────────────────────────────────────────────────────────────
 
 app.include_router(auth.router)
-app.include_router(generation.router)
+app.include_router(generate.router)
 app.include_router(conversations.router)
 app.include_router(sessions.router)
 app.include_router(video.router)

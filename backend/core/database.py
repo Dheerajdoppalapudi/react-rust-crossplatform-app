@@ -39,6 +39,8 @@ _ALLOWED_SESSION_COLUMNS: frozenset[str] = frozenset({
     "model_name",
     "video_path",
     "merged_video_path",
+    "research_mode",
+    "sources_json",
 })
 
 
@@ -174,6 +176,8 @@ def init_db() -> None:
             (7,  "SELECT 1"),  # user_id on sessions
             (8,  "SELECT 1"),  # merged_video_path, user_id, starred, deleted_at on conversations
             (9,  "SELECT 1"),  # password_hash, auth_provider on users
+            (10, "ALTER TABLE sessions ADD COLUMN research_mode TEXT DEFAULT 'instant'"),
+            (11, "ALTER TABLE sessions ADD COLUMN sources_json TEXT"),
         ]
 
         current = _current_schema_version(conn)

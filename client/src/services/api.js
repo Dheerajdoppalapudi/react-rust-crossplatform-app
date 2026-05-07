@@ -23,7 +23,7 @@ import { getAccessToken, getRefreshCallback, getLogoutCallback } from './authBri
 export { setAuthCallbacks } from './authBridge'
 
 // CRIT-7 / HIGH-3: Default timeout for short-lived JSON API requests (30 seconds).
-// Pass timeout: null to disable (for long-running requests like imageGeneration).
+// Pass timeout: null to disable (for long-running SSE streams).
 // Pass timeout: N to override with a custom millisecond value.
 const _DEFAULT_TIMEOUT_MS = 30_000
 
@@ -141,10 +141,10 @@ async function _request(url, options = {}) {
 
 // ── Private SSE helper ─────────────────────────────────────────────────────────
 //
-// Shared by generateVideoStream and interactiveGeneration — both implement the
-// same "fetch → check response → reader loop → buffer split → processLine →
-// terminalSeen guard → error surfacing" pattern verbatim. Centralising it here
-// means the logic (partial-chunk buffering, final-flush, AbortError handling,
+// Shared by generateStream and generateVideoStream — both implement the same
+// "fetch → check response → reader loop → buffer split → processLine →
+// terminalSeen guard → error surfacing" pattern. Centralising it here means the
+// logic (partial-chunk buffering, final-flush, AbortError handling,
 // terminalSeen guard) only lives once.
 
 /**
@@ -218,52 +218,92 @@ async function _readSSEStream(reader, onEvent) {
 
 export const api = {
 
-  // ── Generation ───────────────────────────────────────────────────────────────
+  // ── Generation (unified SSE stream) ─────────────────────────────────────────
+  //
+  // Single entry point for all generation modes:
+  //   instant     + interactive  (video_enabled=false, research_mode='instant')
+  //   instant     + video        (video_enabled=true,  research_mode='instant')
+  //   deep_research + interactive (video_enabled=false, research_mode='deep_research')
+  //   deep_research + video       (video_enabled=true,  research_mode='deep_research')
+  //
+  // SSE event types (all modes):
+  //   Research phase: stage, stage_done, source, token, synthesis_done
+  //   Interactive:    stage, meta, block
+  //   Video:          stage, stage_done, frame
+  //   Shared:         heartbeat, done, error
 
-  // Options object (replaces the previous 10-positional-parameter signature).
-  // signal: optional AbortSignal — pass controller.signal to cancel on navigation.
-  // timeout: null — generation can run for 60-120+ seconds; no client-side timeout.
-  // parentSessionId: for general follow-ups (no pause), the last completed session in
-  //   the conversation — used to build the tree view edge. For pause follow-ups this is
-  //   derived from pauseContext, so callers should leave it null in that case.
-  imageGeneration: async ({
+  generateStream: async ({
     message,
-    conversationId  = null,
-    pauseContext    = null,
-    notesEnabled    = false,
-    provider        = 'claude',
-    model           = null,
-    signal          = null,
-    renderMode      = null,
-    parentSessionId = null,
-    textOnly        = false,
-  }) => {
-    const formData = new FormData()
-    formData.append('message', message)
-    formData.append('notes_enabled', String(notesEnabled))
-    formData.append('provider', provider)
-    formData.append('text_only', String(textOnly))
-    if (model)          formData.append('model', model)
-    if (conversationId) formData.append('conversation_id', conversationId)
-    if (renderMode)     formData.append('render_mode', renderMode)
+    conversationId   = null,
+    pauseContext     = null,
+    notesEnabled     = false,
+    provider         = 'claude',
+    model            = null,
+    renderMode       = null,
+    parentSessionId  = null,
+    videoEnabled     = false,
+    researchMode     = 'instant',
+    uploadedFileIds  = null,    // comma-separated UUIDs from /api/upload
+    researchContext  = null,    // pre-synthesised text (internal use)
+  }, onEvent, signal) => {
+    const form = new FormData()
+    form.append('message',        message)
+    form.append('notes_enabled',  String(notesEnabled))
+    form.append('provider',       provider)
+    form.append('video_enabled',  String(videoEnabled))
+    form.append('research_mode',  researchMode)
+    if (model)            form.append('model',            model)
+    if (conversationId)   form.append('conversation_id',   conversationId)
+    if (renderMode)       form.append('render_mode',       renderMode)
+    if (uploadedFileIds)  form.append('uploaded_file_ids', uploadedFileIds)
+    if (researchContext)  form.append('research_context',  researchContext)
     if (pauseContext) {
-      formData.append('pause_session_id', pauseContext.sessionId)
+      form.append('pause_session_id',  pauseContext.sessionId)
       if (pauseContext.frameIndex != null) {
-        formData.append('pause_frame_index', String(pauseContext.frameIndex))
+        form.append('pause_frame_index', String(pauseContext.frameIndex))
       }
-      if (pauseContext.caption) formData.append('pause_caption', pauseContext.caption)
-      formData.append('parent_session_id', pauseContext.sessionId)
+      if (pauseContext.caption) form.append('pause_caption', pauseContext.caption)
+      form.append('parent_session_id',  pauseContext.sessionId)
       if (pauseContext.frameIndex != null) {
-        formData.append('parent_frame_index', String(pauseContext.frameIndex))
+        form.append('parent_frame_index', String(pauseContext.frameIndex))
       }
     } else if (parentSessionId) {
-      formData.append('parent_session_id', parentSessionId)
+      form.append('parent_session_id', parentSessionId)
     }
-    return _request(`${API_BASE}/api/image_generation`, {
-      method: 'POST', body: formData,
-      timeout: null,  // no client timeout — server controls generation duration
-      signal,
-    })
+
+    const token = getAccessToken()
+    let res
+    try {
+      res = await fetch(`${API_BASE}/api/generate`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: form,
+        signal,
+      })
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        onEvent({ type: 'error', message: 'Connection failed. Please try again.' })
+      }
+      return
+    }
+
+    if (!res.ok) {
+      let msg = `HTTP ${res.status}`
+      try { const b = await res.json(); msg = b.error || b.detail || msg } catch { /* ignore */ }
+      onEvent({ type: 'error', message: msg })
+      return
+    }
+
+    await _readSSEStream(res.body.getReader(), onEvent)
+  },
+
+  // ── File upload ───────────────────────────────────────────────────────────────
+  // Returns { files: [{original_name, saved_as, size, content_type}] }
+  uploadFiles: async (files) => {
+    const form = new FormData()
+    files.forEach(f => form.append('files', f))
+    return _request(`${API_BASE}/api/upload`, { method: 'POST', body: form, timeout: null })
   },
 
   chatWithFiles: async (message, files = []) => {
@@ -382,50 +422,7 @@ export const api = {
     if (!res.ok) {
       // Pre-flight errors (404, 400, 503) come back as { status:"error", error:"..." }
       let message = `HTTP ${res.status}`
-      try { const body = await res.json(); message = body.error || body.detail || message } catch {}
-      onEvent({ type: 'error', message })
-      return
-    }
-
-    await _readSSEStream(res.body.getReader(), onEvent)
-  },
-
-  // ── Interactive generation (SSE) ─────────────────────────────────────────────
-  //
-  // SSE event types:
-  //   { type: "content", title, text, follow_ups }
-  //   { type: "entity",  entity: {...} }
-  //   { type: "done",    session_id, conversation_id, turn_index }
-  //   { type: "error",   message }
-
-  interactiveGeneration: async ({ message, conversationId, parentSessionId, provider, model }, onEvent, signal) => {
-    const formBody = new FormData()
-    formBody.append('message', message)
-    if (conversationId)   formBody.append('conversation_id',   conversationId)
-    if (parentSessionId)  formBody.append('parent_session_id', parentSessionId)
-    if (provider)         formBody.append('provider', provider)
-    if (model)            formBody.append('model', model)
-
-    const token = getAccessToken()
-    let res
-    try {
-      res = await fetch(`${API_BASE}/api/interactive_generation`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: formBody,
-        signal,
-      })
-    } catch (err) {
-      if (err.name !== 'AbortError') {
-        onEvent({ type: 'error', message: 'Connection failed. Please try again.' })
-      }
-      return
-    }
-
-    if (!res.ok) {
-      let message = `HTTP ${res.status}`
-      try { const b = await res.json(); message = b.error || b.detail || message } catch {}
+      try { const body = await res.json(); message = body.error || body.detail || message } catch { /* ignore */ }
       onEvent({ type: 'error', message })
       return
     }

@@ -36,3 +36,8 @@ email-validator>=2.0
 
 # Rate limiting
 slowapi>=0.1.9
+
+# Deep research
+tavily-python>=0.3.0
+pdfplumber>=0.10.0
+python-pptx>=0.6.21

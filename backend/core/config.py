@@ -40,6 +40,15 @@ CLASSIFY_MODEL: str = os.getenv("CLASSIFY_MODEL", "claude-haiku-4-5-20251001")
 # cache_control so repeated calls reuse cached tokens at 10% of normal cost.
 PROMPT_CACHE_ENABLED: bool = os.getenv("PROMPT_CACHE_ENABLED", "true").lower() != "false"
 
+# ── Deep research ────────────────────────────────────────────────────────────
+TAVILY_API_KEY:         str   = os.getenv("TAVILY_API_KEY", "")
+DEEP_SEARCH_ROUNDS:     int   = int(os.getenv("DEEP_SEARCH_ROUNDS", "2"))
+DEEP_SEARCH_QUERIES:    int   = int(os.getenv("DEEP_SEARCH_QUERIES", "5"))
+DEEP_SEARCH_SOURCES:    int   = int(os.getenv("DEEP_SEARCH_SOURCES", "10"))
+DEEP_SOURCES_IN_ANSWER: int   = int(os.getenv("DEEP_SOURCES_IN_ANSWER", "5"))
+DEEP_MAX_TOKENS_SOURCE: int   = int(os.getenv("DEEP_MAX_TOKENS_SOURCE", "1200"))
+DEEP_TIMEOUT_SECONDS:   float = float(os.getenv("DEEP_TIMEOUT_SECONDS", "90"))
+
 # ── External services ─────────────────────────────────────────────────────────
 
 # ── Video / TTS ───────────────────────────────────────────────────────────────

@@ -94,23 +94,6 @@ function VideoSkeletonCard({ isDark }) {
   )
 }
 
-const STEPS = [
-  { key: 'planning',   label: 'Analyzing your question' },
-  { key: 'generating', label: 'Generating visual content' },
-  { key: 'rendering',  label: 'Rendering frames' },
-  { key: 'frames',     label: 'Visual frames ready' },
-  { key: 'video',      label: 'Generating video' },
-]
-
-const TEXT_STEPS = [{ key: 'planning', label: 'Thinking' }]
-
-const INTERACTIVE_STEPS = [
-  { key: 'planning',  label: 'Analyzing your question' },
-  { key: 'designing', label: 'Designing the lesson'    },
-  { key: 'building',  label: 'Building blocks'         },
-]
-
-// Three skeleton blocks hinting at the lesson layout being assembled
 function BlockSkeletonPreview({ isDark }) {
   const BLOCKS = [
     { type: 'text',   lines: [1, 0.82, 0.58] },
@@ -128,7 +111,6 @@ function BlockSkeletonPreview({ isDark }) {
           animation: `${fadeIn} 0.5s ease both`,
           animationDelay: `${i * 0.22}s`,
         }}>
-          {/* shimmer sweep */}
           <Box sx={{
             position: 'absolute', inset: 0,
             background: `linear-gradient(90deg, transparent 0%, ${shimmerBg(isDark)} 50%, transparent 100%)`,
@@ -146,7 +128,6 @@ function BlockSkeletonPreview({ isDark }) {
               ))}
             </Box>
           ) : (
-            // entity block placeholder — diagram icon grid
             <Box sx={{ height: 112, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Box sx={{ opacity: 0.09, display: 'flex', flexDirection: 'column', gap: 0.75, alignItems: 'center' }}>
                 <Box sx={{ display: 'flex', gap: 1.5 }}>
@@ -164,27 +145,71 @@ function BlockSkeletonPreview({ isDark }) {
   )
 }
 
-export default function LoadingView({ stage, compact = false, framesData = null, textMode = false, mode }) {
-  const theme   = useTheme()
-  const isDark  = theme.palette.mode === 'dark'
+// ── Fallback stage arrays for the old stage-string API (bootstrap overlay) ────
+
+const _STEPS = [
+  { key: 'planning',         label: 'Analyzing your question'  },
+  { key: 'designing',        label: 'Designing the lesson'     },
+  { key: 'generating',       label: 'Generating visual content'},
+  { key: 'generating_frames',label: 'Generating frames'        },
+  { key: 'rendering',        label: 'Rendering frames'         },
+  { key: 'frames',           label: 'Visual frames ready'      },
+  { key: 'video',            label: 'Generating video'         },
+  // Research stages (used by bootstrap when SSE stage events arrive)
+  { key: 'decomposing',      label: 'Understanding your question…'},
+  { key: 'searching',        label: 'Searching the web…'       },
+  { key: 'reading',          label: 'Reading sources…'         },
+  { key: 'synthesising',     label: 'Synthesising answer…'     },
+]
+
+function _stageStringToArray(stageStr) {
+  const idx = _STEPS.findIndex(s => s.key === stageStr)
+  if (idx === -1) return [{ id: stageStr, label: stageStr, status: 'active' }]
+  return [{ id: stageStr, label: _STEPS[idx].label, status: 'active' }]
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
+
+/**
+ * Renders a live stage progress list.
+ *
+ * Primary API: pass `stages` (SSE-driven array, no timers).
+ * Fallback API: pass `stage` string (bootstrap overlay, old style).
+ *
+ * stages[].status: 'pending' | 'active' | 'done'
+ * stages[].id: matches SSE stage names ('decomposing', 'searching', 'designing', etc.)
+ */
+export default function LoadingView({
+  stages        = null,   // Array<{id, label, status, duration_s?}> — primary prop
+  stage         = null,   // string fallback for bootstrap overlay
+  compact       = false,
+  framesData    = null,
+  textMode      = false,
+  mode          = null,
+  synthesisText = '',     // streaming research tokens shown below stages
+}) {
+  const theme     = useTheme()
+  const isDark    = theme.palette.mode === 'dark'
   const isInteractive = mode === 'interactive'
 
-  // Timer-based auto-advance: planning → designing after 1.4s so something
-  // visually changes during the LLM planning wait even with no server events.
+  // Timer only fires when using the old string API (bootstrap + interactive, no stages prop)
   const [timerFired, setTimerFired] = useState(false)
-
   useEffect(() => {
-    if (!isInteractive || stage !== 'planning') return
+    if (stages?.length || !isInteractive || stage !== 'planning') return
     const t = setTimeout(() => setTimerFired(true), 1400)
     return () => clearTimeout(t)
-  }, [stage, isInteractive])
+  }, [stages, stage, isInteractive])
 
-  // Derivation guards with `stage === 'planning'` so stale timerFired never bleeds
-  // into non-planning stages — no explicit reset needed.
-  const effectiveStage = (isInteractive && stage === 'planning' && timerFired) ? 'designing' : stage
-
-  const steps   = isInteractive ? INTERACTIVE_STEPS : (textMode ? TEXT_STEPS : STEPS)
-  const current = steps.findIndex((s) => s.key === effectiveStage)
+  // Derive the display stages array from whichever API was used
+  let displayStages
+  if (stages?.length) {
+    displayStages = stages
+  } else if (stage) {
+    const effectiveStage = (isInteractive && stage === 'planning' && timerFired) ? 'designing' : stage
+    displayStages = _stageStringToArray(effectiveStage)
+  } else {
+    displayStages = [{ id: 'planning', label: 'Planning…', status: 'active' }]
+  }
 
   const mutedColor   = isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)'
   const activeColor  = isDark ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.8)'
@@ -193,73 +218,95 @@ export default function LoadingView({ stage, compact = false, framesData = null,
 
   return (
     <Box role="status" aria-live="polite" aria-atomic="false" sx={{
-      position: 'relative', display: 'flex', alignItems: 'flex-start',
+      position: 'relative', display: 'flex', flexDirection: 'column',
+      alignItems: 'flex-start',
       minHeight: compact ? 80 : (textMode || isInteractive ? 80 : 240),
       py: compact ? 1.5 : 3,
       px: compact ? 0   : 4,
     }}>
-      <Box sx={{
-        position: 'absolute', width: 1, height: 1,
-        overflow: 'hidden', clip: 'rect(0,0,0,0)', whiteSpace: 'nowrap',
-      }}>
-        {steps[current]?.label ?? 'Complete'}
+      {/* Screen reader live region */}
+      <Box sx={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0,0,0,0)', whiteSpace: 'nowrap' }}>
+        {displayStages.find(s => s.status === 'active')?.label ?? 'Complete'}
       </Box>
 
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0, maxWidth: 400 }}>
-        {steps.map((step, i) => {
-          const status = i < current ? 'done' : i === current ? 'active' : 'pending'
-          const color  = status === 'active' ? activeColor : status === 'done' ? mutedColor : pendingColor
+        {displayStages.map((s, i) => {
+          const color = s.status === 'active' ? activeColor : s.status === 'done' ? mutedColor : pendingColor
 
-          const showSkeletons     = (step.key === 'generating' || step.key === 'rendering') && status === 'active'
-          const showFrames        = step.key === 'frames' && status !== 'pending'
-          const showVideoSkeleton = step.key === 'video' && status === 'active'
-          const showBlockSketons  = isInteractive && step.key === 'designing' && status === 'active'
-          const showCards         = showSkeletons || showFrames || showVideoSkeleton || showBlockSketons
-          const lineH             = showCards
-            ? (showVideoSkeleton ? 128 : showBlockSketons ? 260 : 96)
+          const showFrameSkeleton = (s.id === 'generating_frames' || s.id === 'generating' || s.id === 'rendering') && s.status === 'active'
+          const showActualFrames  = s.id === 'frames' && s.status !== 'pending'
+          const showVideoSkeleton = s.id === 'video' && s.status === 'active'
+          const showBlockSkeleton = s.id === 'designing' && s.status === 'active'
+          const showCards = showFrameSkeleton || showActualFrames || showVideoSkeleton || showBlockSkeleton
+          const lineH = showCards
+            ? (showVideoSkeleton ? 128 : showBlockSkeleton ? 260 : 96)
             : (compact ? 18 : 22)
 
           return (
-            <Box key={step.key} sx={{
+            <Box key={`${s.id}-${i}`} sx={{
               display: 'flex', alignItems: 'flex-start', gap: 1.5,
-              opacity:        status === 'pending' ? 0.4 : 1,
-              animation:      status !== 'pending' ? `${fadeIn} 0.35s ease both` : 'none',
+              opacity:        s.status === 'pending' ? 0.4 : 1,
+              animation:      s.status !== 'pending' ? `${fadeIn} 0.35s ease both` : 'none',
               animationDelay: `${i * 0.08}s`,
             }}>
+              {/* Vertical track */}
               <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0, pt: '5px' }}>
-                <Box sx={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: color, flexShrink: 0 }} />
-                {i < steps.length - 1 && (
+                {s.status === 'done' ? (
+                  <CheckCircleOutlineIcon sx={{ fontSize: 10, color, flexShrink: 0 }} />
+                ) : (
+                  <Box sx={{
+                    width: 7, height: 7, borderRadius: '50%', backgroundColor: color, flexShrink: 0,
+                    ...(s.status === 'active' ? { animation: `${pulse} 1.2s ease-in-out infinite` } : {}),
+                  }} />
+                )}
+                {i < displayStages.length - 1 && (
                   <Box sx={{ width: 1.5, height: lineH, backgroundColor: lineColor, mt: 0.5 }} />
                 )}
               </Box>
 
-              <Box sx={{ pb: i < steps.length - 1 ? 0.75 : 0 }}>
-                <Typography sx={{ fontSize: compact ? 12.5 : 13, color, lineHeight: 1.4, transition: 'color 0.3s' }}>
-                  {step.label}
-                  {status === 'active' && (
-                    <Box component="span" sx={{ animation: `${pulse} 1.2s ease-in-out infinite`, ml: 0.25 }}>…</Box>
+              {/* Label row */}
+              <Box sx={{ pb: i < displayStages.length - 1 ? 0.75 : 0 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                  <Typography sx={{ fontSize: compact ? 12.5 : 13, color, lineHeight: 1.4, transition: 'color 0.3s' }}>
+                    {s.label}
+                    {s.status === 'active' && (
+                      <Box component="span" sx={{ animation: `${pulse} 1.2s ease-in-out infinite`, ml: 0.25 }}>…</Box>
+                    )}
+                  </Typography>
+                  {s.status === 'done' && s.duration_s != null && (
+                    <Typography sx={{ fontSize: 10, color: pendingColor }}>
+                      {s.duration_s}s
+                    </Typography>
                   )}
-                </Typography>
+                </Box>
 
-                {showSkeletons     && <FrameSkeletonCards isDark={isDark} />}
-                {showFrames        && (framesData?.sessionId
+                {showFrameSkeleton  && <FrameSkeletonCards isDark={isDark} />}
+                {showActualFrames   && (framesData?.sessionId
                   ? <ActualFrames sessionId={framesData.sessionId} count={framesData.framesData?.images?.length || 5} isDark={isDark} />
                   : <FrameSkeletonCards isDark={isDark} />
                 )}
-                {showVideoSkeleton && <VideoSkeletonCard isDark={isDark} />}
-                {showBlockSketons  && <BlockSkeletonPreview isDark={isDark} />}
+                {showVideoSkeleton  && <VideoSkeletonCard isDark={isDark} />}
+                {showBlockSkeleton  && <BlockSkeletonPreview isDark={isDark} />}
               </Box>
             </Box>
           )
         })}
-
-        {current === steps.length && (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 1, animation: `${fadeIn} 0.3s ease both` }}>
-            <CheckCircleOutlineIcon sx={{ fontSize: 14, color: mutedColor }} />
-            <Typography sx={{ fontSize: 12, color: mutedColor }}>Done</Typography>
-          </Box>
-        )}
       </Box>
+
+      {/* Streaming research synthesis tokens */}
+      {synthesisText && (
+        <Box sx={{ mt: 1.5, maxWidth: 400 }}>
+          <Typography sx={{
+            fontSize: 12, color: mutedColor, lineHeight: 1.6,
+            fontStyle: 'italic', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+          }}>
+            {synthesisText.length > 500
+              ? `…${synthesisText.slice(-500)}`
+              : synthesisText
+            }
+          </Typography>
+        </Box>
+      )}
     </Box>
   )
 }

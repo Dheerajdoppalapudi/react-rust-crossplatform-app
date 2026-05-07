@@ -3,7 +3,7 @@ export function parseNotes(raw) {
 }
 
 export function isTextTurn(turn) {
-  return turn.framesData?.render_path === 'text' || turn.render_path === 'text'
+  return turn.framesData?.render_path === 'interactive' || turn.render_path === 'interactive'
 }
 
 export function formatIntentType(intentType) {
@@ -52,10 +52,7 @@ export function createTempTurn({ tempId, prompt, videoEnabled, parentSessionId, 
     render_path:      null,
     frame_count:      null,
     isLoading:        true,
-    stage:            'planning',
     framesData:       null,
-    // videoPhase 'disabled' signals text/interactive mode — derive textMode from
-    // this at render time instead of storing a redundant dead field on every turn.
     videoPhase:       videoEnabled ? 'generating' : 'disabled',
     parentSessionId,
     parentFrameIndex,

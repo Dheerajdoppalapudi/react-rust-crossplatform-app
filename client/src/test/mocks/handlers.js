@@ -17,17 +17,6 @@ export const fixtures = {
     render_path: 'video',
     frames_data: { captions: ['Frame 1', 'Frame 2'], images: [], frame_count: 2 },
   },
-  generationResponse: {
-    status: 'success',
-    data: {
-      session_id: 'sess-new',
-      conversation_id: 'conv-1',
-      video_phase: 'generating',
-      render_path: 'video',
-      frames_data: null,
-      intent_type: 'illustration',
-    },
-  },
 }
 
 // ─── Handlers ─────────────────────────────────────────────────────────────────
@@ -77,8 +66,11 @@ export const handlers = [
     })
   ),
 
-  // Generation
-  http.post(`${BASE}/api/image_generation`, () =>
-    HttpResponse.json(fixtures.generationResponse)
+  // Generation (unified SSE endpoint)
+  http.post(`${BASE}/api/generate`, () =>
+    new HttpResponse(
+      'data: {"type":"done","session_id":"sess-new","conversation_id":"conv-1","turn_index":1,"render_path":"interactive"}\n\n',
+      { headers: { 'Content-Type': 'text/event-stream' } }
+    )
   ),
 ]

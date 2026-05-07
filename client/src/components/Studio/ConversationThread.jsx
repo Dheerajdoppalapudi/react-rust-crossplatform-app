@@ -9,7 +9,8 @@ import LoadingView from './LoadingView'
 import NotesPanel from './NotesPanel'
 import { isTextTurn } from './studioUtils'
 import { BRAND, PALETTE } from '../../theme/tokens.js'
-import BlockRenderer from '../Interactive/BlockRenderer'
+import BlockRenderer   from '../Interactive/BlockRenderer'
+import ResearchResult  from './ResearchResult'
 
 function ContentColumn({ children }) {
   return (
@@ -90,18 +91,30 @@ const TurnView = memo(function TurnView({ turn, onPauseAsk, onRetryTurn, onRetry
         <UserBubble prompt={turn.prompt} />
 
         {turn.render_path === 'interactive' ? (
-          (turn.title || (turn.blocks ?? []).length > 0) ? (
-            <BlockRenderer
-              title={turn.title}
-              learningObjective={turn.learningObjective}
-              blocks={turn.blocks ?? []}
-              isLoading={turn.isLoading}
-            />
+          (turn.title || (turn.blocks ?? []).length > 0 || turn.synthesisText || turn.sources?.length > 0) ? (
+            (turn.synthesisText || turn.sources?.length > 0) ? (
+              <ResearchResult
+                synthesisText={turn.synthesisText ?? ''}
+                synthesisComplete={turn.synthesisComplete ?? false}
+                sources={turn.sources ?? []}
+                blocks={turn.blocks ?? []}
+                title={turn.title ?? ''}
+                learningObjective={turn.learningObjective ?? null}
+                isLoading={turn.isLoading}
+              />
+            ) : (
+              <BlockRenderer
+                title={turn.title}
+                learningObjective={turn.learningObjective}
+                blocks={turn.blocks ?? []}
+                isLoading={turn.isLoading}
+              />
+            )
           ) : (
-            <LoadingView stage={turn.stage || 'planning'} compact mode="interactive" />
+            <LoadingView stages={turn.stages} compact mode="interactive" synthesisText={turn.synthesisText} />
           )
         ) : turn.isLoading ? (
-          <LoadingView stage={turn.stage || 'planning'} compact textMode={turn.videoPhase === 'disabled'} />
+          <LoadingView stages={turn.stages} compact textMode={turn.videoPhase === 'disabled'} synthesisText={turn.synthesisText} />
         ) : turn.videoPhase === 'error' && !turn.id ? (
           <Box sx={{
             py: 2.5, px: 3, borderRadius: '12px',
@@ -114,7 +127,7 @@ const TurnView = memo(function TurnView({ turn, onPauseAsk, onRetryTurn, onRetry
             <RetryBanner turn={turn} onRetry={onRetryGeneration} />
           </Box>
         ) : turn.id && turn.videoPhase === 'generating' ? (
-          <LoadingView stage="video" compact framesData={{ sessionId: turn.id, framesData: turn.framesData }} />
+          <LoadingView stages={[{id:'video', label:'Assembling video', status:'active'}]} compact framesData={{ sessionId: turn.id, framesData: turn.framesData }} />
         ) : turn.id && turn.videoPhase === 'error' ? (
           <>
             {turn.framesData && (
@@ -175,4 +188,5 @@ ConversationThread.propTypes = {
   onRetryGeneration:  PropTypes.func.isRequired,
 }
 
-export default withProfiler(ConversationThread, 'ConversationThread')
+const ConversationThreadProfiled = withProfiler(ConversationThread, 'ConversationThread')
+export default ConversationThreadProfiled

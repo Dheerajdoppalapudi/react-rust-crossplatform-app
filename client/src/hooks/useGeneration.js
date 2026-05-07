@@ -1,106 +1,43 @@
-import { useRef, useCallback } from 'react'
+import { useRef, useCallback, useEffect } from 'react'
 import { api } from '../services/api'
 import { createTempTurn, normalizeFramesData } from '../components/Studio/studioUtils'
 import { withSpan } from '../lib/sentry.js'
 
-// ── Shared generation utilities (C1) ─────────────────────────────────────────
-//
-// These helpers were previously copy-pasted in handleGenerate,
-// handleLearnGenerate, and handleRetryGeneration.  Extracting them here means
-// the stage-delay constants, timer wiring, and turn-shape definition each live
-// in exactly one place.
+// ── Stage array helpers ───────────────────────────────────────────────────────
 
-/**
- * Optimistic stage label delays (ms).  Both timers fire only when video mode
- * is active — interactive/text mode drives labels via SSE meta events instead.
- *
- * Values mirror the approximate server-side pipeline stage durations so the UI
- * appears to progress meaningfully before the API response arrives.
- */
-const STAGE_DELAYS = Object.freeze({ generating: 2_500, rendering: 6_000 })
-
-/**
- * Arms setTimeout-based optimistic stage label updates for a non-first turn.
- * Updates turn.stage in the array so the LoadingView spinner shows progress.
- *
- * Returns { clear } — ALWAYS call clear() in a finally block to cancel timers
- * if the generation resolves (success or abort) before the delays fire.
- *
- * @param {string}   tempId     - Temporary id of the turn being generated.
- * @param {boolean}  start      - When false, returns a no-op cleanup immediately.
- * @param {Function} setTurns   - React state dispatcher for the turns array.
- */
-function startTurnStageTimers(tempId, start, setTurns) {
-  if (!start) return { clear: () => {} }
-
-  const t1 = setTimeout(
-    () => setTurns((p) => p.map((t) => t.tempId === tempId ? { ...t, stage: 'generating' } : t)),
-    STAGE_DELAYS.generating,
-  )
-  const t2 = setTimeout(
-    () => setTurns((p) => p.map((t) => t.tempId === tempId ? { ...t, stage: 'rendering'  } : t)),
-    STAGE_DELAYS.rendering,
-  )
-
-  return { clear: () => { clearTimeout(t1); clearTimeout(t2) } }
+function _withStage(turn, event) {
+  const stages = turn.stages ?? []
+  const exists  = stages.find(s => s.id === event.stage)
+  return {
+    ...turn,
+    stages: exists
+      ? stages.map(s => s.id === event.stage ? { ...s, status: 'active', label: event.label ?? s.label } : s)
+      : [...stages, { id: event.stage, label: event.label ?? event.stage, status: 'active' }],
+  }
 }
 
-/**
- * Builds the permanent turn object from a completed imageGeneration response.
- * Single source of truth for the post-generation turn shape — avoids the three
- * separate inline object literals that previously had to be kept in sync.
- *
- * @param {object} params
- * @param {string} params.tempId
- * @param {string} params.prompt
- * @param {object} params.data            - Raw API response from imageGeneration.
- * @param {boolean} params.videoEnabled
- * @param {string|null} params.parentSessionId
- * @param {number|null} params.parentFrameIndex
- * @returns {object} Turn object ready to splice into the turns array.
- */
-function buildRealTurn({ tempId, prompt, data, videoEnabled, parentSessionId, parentFrameIndex }) {
+function _withStageDone(turn, event) {
   return {
-    tempId,
-    id:               data.session_id,
-    conversation_id:  data.conversation_id,
-    turn_index:       data.turn_index,
-    prompt,
-    intent_type:      data.intent_type,
-    render_path:      data.render_path,
-    frame_count:      data.frame_count,
-    isLoading:        false,
-    stage:            null,
-    framesData:       normalizeFramesData(data),
-    videoPhase:       videoEnabled ? 'generating' : 'disabled',
-    parentSessionId:  parentSessionId  ?? null,
-    parentFrameIndex: parentFrameIndex ?? null,
+    ...turn,
+    stages: (turn.stages ?? []).map(s =>
+      s.id === event.stage ? { ...s, status: 'done', duration_s: event.duration_s } : s
+    ),
   }
 }
 
 // ── Hook ─────────────────────────────────────────────────────────────────────
 
-/**
- * Owns all three generation entry points (handleGenerate, handleLearnGenerate,
- * handleRetryGeneration) and the AbortController for the active generation
- * request.  Returns generationAbortRef so Studio.jsx can cancel a running
- * generation when the user switches conversations.
- *
- * The hook is intentionally a "fat" controller — it holds no UI state itself
- * and delegates all rendering concerns back to Studio.jsx via setTurns,
- * setIsBootstrapping, etc.
- */
 export function useGeneration({
   // Conversation context
   activeConvId,
   loadedConvIdRef,
   onActiveConvIdChange,
   onConversationsRefresh,
-  // Derived from turns (memoized in Studio.jsx — avoids passing turns array)
+  // Derived from turns (memoized in Studio.jsx)
   isAnyGenerating,
   lastCompletedTurnId,
   setTurns,
-  // Prompt — passed as ref so handleGenerate stays stable across keystrokes
+  // Prompt
   prompt,
   setPrompt,
   // Generation preferences
@@ -108,10 +45,12 @@ export function useGeneration({
   notesEnabled,
   selectedModel,
   selectedRenderMode,
+  selectedMode  = null,   // { id: 'instant' | 'deep_research', label, icon }
+  stagedFiles   = null,   // Array<{ id, name, type }> | null
   // Pause context
   pauseContext,
   setPauseContext,
-  // Bootstrap overlay (single atomic setter from useConversation)
+  // Bootstrap overlay
   setBootstrap,
   // Video stream
   runVideoGenerationForTurn,
@@ -120,32 +59,18 @@ export function useGeneration({
   toast,
 }) {
   if (import.meta.env.DEV) {
-    if (!onActiveConvIdChange) console.warn('[useGeneration] onActiveConvIdChange is required')
-    if (!onConversationsRefresh) console.warn('[useGeneration] onConversationsRefresh is required')
+    if (!onActiveConvIdChange)    console.warn('[useGeneration] onActiveConvIdChange is required')
+    if (!onConversationsRefresh)  console.warn('[useGeneration] onConversationsRefresh is required')
     if (!runVideoGenerationForTurn) console.warn('[useGeneration] runVideoGenerationForTurn is required')
-    if (!toast) console.warn('[useGeneration] toast context is required')
+    if (!toast)                   console.warn('[useGeneration] toast context is required')
   }
 
-  // Monotonic counter — incremented on every new generation.  Each generation
-  // captures the counter value at creation time and checks isStale() before
-  // applying any async result.  This prevents a slow in-flight response from
-  // stomping a newer generation that started after it.
-  const generationIdRef  = useRef(0)
-
-  // Shared AbortController for the active generation fetch.  Replaced on each
-  // new call; the old controller is aborted first so concurrent calls are safe.
-  // Exposed to Studio.jsx so the conversation-switch effect can cancel it.
+  const generationIdRef    = useRef(0)
   const generationAbortRef = useRef(null)
+  const lastSubmitRef      = useRef(0)
 
-  // Debounce guard — ignore rapid double-clicks within 1 second.
-  const lastSubmitRef = useRef(0)
-
-  // Keep a ref in sync with the latest prompt value so handleGenerate can read
-  // the current prompt without having it in its dependency array.  This keeps
-  // the callback reference stable across keystrokes so PromptBar only re-renders
-  // when something meaningful changes, not on every character typed.
   const promptRef = useRef(prompt)
-  promptRef.current = prompt
+  useEffect(() => { promptRef.current = prompt })
 
   // ── handleGenerate ────────────────────────────────────────────────────────
 
@@ -176,179 +101,235 @@ export function useGeneration({
       ? null
       : (pauseContext?.sessionId ?? lastCompletedTurnId)
 
-    // ── Optimistic UI setup ───────────────────────────────────────────────────
+    const capturedPauseContext = pauseContext
+    setPauseContext(null)
 
+    const researchMode    = selectedMode?.id ?? 'instant'
+    const renderModeId    = selectedRenderMode?.id !== 'auto' ? selectedRenderMode?.id : null
+    const uploadedFileIds = stagedFiles?.length ? stagedFiles.map(f => f.id).join(',') : null
+
+    // ── Optimistic UI ─────────────────────────────────────────────────────────
     if (isFirstTurn) {
       setBootstrap({ stage: 'planning', prompt: submittedPrompt, frames: null })
       setTurns([])
       scrollToTop()
     } else {
-      setTurns((prev) => [...prev, createTempTurn({
-        tempId,
-        prompt:           submittedPrompt,
-        videoEnabled,
-        parentSessionId,
-        parentFrameIndex: pauseContext?.frameIndex ?? null,
-      })])
+      setTurns((prev) => [...prev, {
+        ...createTempTurn({
+          tempId,
+          prompt:           submittedPrompt,
+          videoEnabled,
+          parentSessionId,
+          parentFrameIndex: capturedPauseContext?.frameIndex ?? null,
+        }),
+        stages:            [],
+        sources:           [],
+        synthesisText:     '',
+        synthesisComplete: false,
+        // Pre-declare render_path for non-video so the loading view knows what's coming
+        ...(videoEnabled ? {} : { render_path: 'interactive', title: '', followUps: [], blocks: [] }),
+      }])
     }
 
-    // Bootstrap overlay stage timers — only for first-turn + video mode.
-    const bt1 = (isFirstTurn && videoEnabled)
-      ? setTimeout(() => setBootstrap((b) => b ? { ...b, stage: 'generating' } : b), STAGE_DELAYS.generating) : null
-    const bt2 = (isFirstTurn && videoEnabled)
-      ? setTimeout(() => setBootstrap((b) => b ? { ...b, stage: 'rendering'  } : b), STAGE_DELAYS.rendering)  : null
-
-    // Per-turn stage label timers for follow-up turns (video and interactive).
-    const { clear: clearTurnTimers } = !isFirstTurn
-      ? startTurnStageTimers(tempId, true, setTurns)
-      : { clear: () => {} }
-
-    const capturedPauseContext = pauseContext
-    setPauseContext(null)
+    // Mutable tracking objects — mutated inside the SSE callback, read post-stream
+    const resolvedConvId = { current: activeConvId }
+    const donePayload    = { current: null }
 
     try {
-      // ── Interactive / text mode ─────────────────────────────────────────────
-      if (!videoEnabled) {
-        const updateTurn = (updates) =>
-          setTurns((prev) => prev.map((t) => t.tempId === tempId ? { ...t, ...updates } : t))
+      await api.generateStream(
+        {
+          message:         submittedPrompt,
+          conversationId:  activeConvId,
+          pauseContext:    capturedPauseContext,
+          notesEnabled,
+          provider:        selectedModel.provider,
+          model:           selectedModel.model,
+          renderMode:      renderModeId,
+          parentSessionId,
+          videoEnabled,
+          researchMode,
+          uploadedFileIds,
+        },
+        (event) => {
+          if (isStale()) return
 
-        if (!isFirstTurn) {
-          updateTurn({ render_path: 'interactive', title: '', followUps: [], blocks: [] })
-        }
-
-        // Wrap in an object so the SSE callback and the post-await read share
-        // the same mutable slot without depending on JS closure mutation across
-        // async boundaries (I5 — stale closure fix).
-        const resolvedConvId = { current: activeConvId }
-
-        await api.interactiveGeneration(
-          {
-            message:         submittedPrompt,
-            conversationId:  activeConvId,
-            parentSessionId,
-            provider:        selectedModel.provider,
-            model:           selectedModel.model,
-          },
-          (event) => {
-            if (isStale()) return
-
-            if (event.type === 'meta') {
-              const baseTurnData = {
-                render_path: 'interactive', isLoading: true,
-                title: event.title ?? '', followUps: event.follow_ups ?? [], learningObjective: event.learning_objective ?? null, blocks: [],
+          switch (event.type) {
+            case 'stage': {
+              if (isFirstTurn) {
+                setBootstrap(b => b ? { ...b, stage: event.stage } : b)
+              }
+              setTurns(prev => prev.map(t => t.tempId === tempId ? _withStage(t, event) : t))
+              break
+            }
+            case 'stage_done': {
+              setTurns(prev => prev.map(t => t.tempId === tempId ? _withStageDone(t, event) : t))
+              break
+            }
+            case 'source': {
+              setTurns(prev => prev.map(t => t.tempId === tempId
+                ? { ...t, sources: [...(t.sources ?? []), event.source] }
+                : t
+              ))
+              break
+            }
+            case 'token': {
+              setTurns(prev => prev.map(t => t.tempId === tempId
+                ? { ...t, synthesisText: (t.synthesisText ?? '') + event.text }
+                : t
+              ))
+              break
+            }
+            case 'synthesis_done': {
+              setTurns(prev => prev.map(t => t.tempId === tempId
+                ? { ...t, synthesisComplete: true, sources: event.sources ?? t.sources ?? [] }
+                : t
+              ))
+              break
+            }
+            case 'meta': {
+              const turnData = {
+                render_path:       'interactive',
+                isLoading:         true,
+                title:             event.title ?? '',
+                followUps:         event.follow_ups ?? [],
+                learningObjective: event.learning_objective ?? null,
+                blocks:            [],
               }
               if (isFirstTurn) {
                 setTurns([{
                   tempId, id: null, prompt: submittedPrompt,
                   stage: null, framesData: null, videoPhase: 'disabled',
-                  parentSessionId, parentFrameIndex: capturedPauseContext?.frameIndex ?? null,
-                  ...baseTurnData,
+                  parentSessionId,
+                  parentFrameIndex: capturedPauseContext?.frameIndex ?? null,
+                  stages: [], sources: [], synthesisText: '', synthesisComplete: false,
+                  ...turnData,
                 }])
                 setBootstrap(null)
               } else {
-                updateTurn(baseTurnData)
+                setTurns(prev => prev.map(t => t.tempId === tempId ? { ...t, ...turnData } : t))
               }
+              break
             }
-
-            if (event.type === 'block') {
-              setTurns((prev) => prev.map((t) => t.tempId === tempId
+            case 'block': {
+              setTurns(prev => prev.map(t => t.tempId === tempId
                 ? { ...t, blocks: [...(t.blocks ?? []), event.block] }
                 : t
               ))
+              break
             }
-
-            if (event.type === 'done') {
-              resolvedConvId.current = event.conversation_id || resolvedConvId.current
-              setTurns((prev) => prev.map((t) => t.tempId === tempId
-                ? { ...t, isLoading: false, id: event.session_id, conversation_id: event.conversation_id }
+            case 'frame': {
+              setTurns(prev => prev.map(t => t.tempId === tempId
+                ? { ...t, pendingFrames: [...(t.pendingFrames ?? []), { index: event.index, caption: event.caption }] }
                 : t
               ))
+              break
             }
-
-            if (event.type === 'error') {
+            case 'done': {
+              resolvedConvId.current = event.conversation_id ?? resolvedConvId.current
+              donePayload.current    = event
+              break
+            }
+            case 'error': {
               toast.error(event.message || 'Generation failed. Please try again.')
               if (isFirstTurn) {
                 setBootstrap(null)
                 setTurns([])
                 onActiveConvIdChange(null)
               } else {
-                updateTurn({ isLoading: false, videoPhase: 'error' })
+                setTurns(prev => prev.map(t => t.tempId === tempId
+                  ? { ...t, isLoading: false, videoPhase: 'error' }
+                  : t
+                ))
               }
+              break
             }
-          },
-          genController.signal,
-        )
-
-        // interactiveGeneration() swallows AbortError and returns normally.
-        // If the controller was aborted (stop button / nav), clean up silently.
-        if (genController.signal.aborted) {
-          if (isFirstTurn) {
-            setBootstrap(null)
-            setTurns([])
-          } else {
-            setTurns((prev) => prev.filter((t) => t.tempId !== tempId))
           }
-          return
-        }
+        },
+        genController.signal,
+      )
 
-        if (isFirstTurn && resolvedConvId.current) {
-          loadedConvIdRef.current = resolvedConvId.current
-          onActiveConvIdChange(resolvedConvId.current)
+      // ── Post-stream ────────────────────────────────────────────────────────
+      if (genController.signal.aborted) {
+        if (isFirstTurn) {
+          setBootstrap(null)
+          setTurns([])
+        } else {
+          setTurns(prev => prev.filter(t => t.tempId !== tempId))
         }
-        await onConversationsRefresh()
         return
       }
 
-      // ── Video mode ─────────────────────────────────────────────────────────
-      const renderModeId = selectedRenderMode?.id !== 'auto' ? selectedRenderMode.id : null
-
-      const data = await api.imageGeneration({
-        message:        submittedPrompt,
-        conversationId: activeConvId,
-        pauseContext:   capturedPauseContext,
-        notesEnabled,
-        provider:       selectedModel.provider,
-        model:          selectedModel.model,
-        signal:         genController.signal,
-        renderMode:     renderModeId,
-        parentSessionId,
-        textOnly:       false,
-      })
-
-      if (isStale()) return
-
-      const realTurn = buildRealTurn({
-        tempId,
-        prompt:           submittedPrompt,
-        data,
-        videoEnabled,
-        parentSessionId,
-        parentFrameIndex: capturedPauseContext?.frameIndex ?? null,
-      })
+      const done = donePayload.current
+      if (!done) return   // stream ended without done — error already surfaced via 'error' event
 
       if (isFirstTurn) {
-        loadedConvIdRef.current = data.conversation_id
-        onActiveConvIdChange(data.conversation_id)
-        setBootstrap((b) => b ? { ...b, stage: 'frames', frames: { framesData: realTurn.framesData, sessionId: data.session_id } } : b)
-        setTurns([realTurn])
-        await onConversationsRefresh()
-        setBootstrap((b) => b ? { ...b, stage: 'video' } : b)
-        runVideoGenerationForTurn(tempId, data.session_id, () => setBootstrap(null))
+        loadedConvIdRef.current = done.conversation_id
+        onActiveConvIdChange(done.conversation_id)
+
+        if (videoEnabled) {
+          const framesData = normalizeFramesData(done)
+          setBootstrap(b => b ? { ...b, stage: 'frames', frames: { framesData, sessionId: done.session_id } } : b)
+          setTurns([{
+            tempId, id: done.session_id,
+            conversation_id:  done.conversation_id,
+            turn_index:       done.turn_index,
+            prompt:           submittedPrompt,
+            intent_type:      done.intent_type,
+            render_path:      done.render_path,
+            frame_count:      done.frame_count,
+            isLoading:        false,
+            stage:            null,
+            framesData,
+            videoPhase:       'generating',
+            parentSessionId,
+            parentFrameIndex: capturedPauseContext?.frameIndex ?? null,
+            stages: [], sources: [], synthesisText: '', synthesisComplete: false,
+          }])
+        } else {
+          // meta/block events already built the turn — finalize it
+          setTurns(prev => prev.map(t => t.tempId === tempId ? {
+            ...t, isLoading: false, id: done.session_id,
+            conversation_id: done.conversation_id, turn_index: done.turn_index,
+            intent_type: done.intent_type, render_path: done.render_path,
+          } : t))
+          setBootstrap(null)
+        }
       } else {
-        setTurns((prev) => prev.map((t) => t.tempId === tempId ? realTurn : t))
-        await onConversationsRefresh()
-        runVideoGenerationForTurn(tempId, data.session_id)
+        setTurns(prev => prev.map(t => t.tempId === tempId ? {
+          ...t,
+          isLoading:       false,
+          id:              done.session_id,
+          conversation_id: done.conversation_id,
+          turn_index:      done.turn_index,
+          intent_type:     done.intent_type,
+          render_path:     done.render_path,
+          frame_count:     done.frame_count ?? t.frame_count,
+          ...(videoEnabled ? {
+            framesData:  normalizeFramesData(done),
+            videoPhase:  'generating',
+          } : {}),
+        } : t))
       }
+
+      await onConversationsRefresh()
+
+      if (videoEnabled) {
+        if (isFirstTurn) {
+          setBootstrap(b => b ? { ...b, stage: 'video' } : b)
+          runVideoGenerationForTurn(tempId, done.session_id, () => setBootstrap(null))
+        } else {
+          runVideoGenerationForTurn(tempId, done.session_id)
+        }
+      }
+
     } catch (err) {
-      // _request() rethrows AbortError as a plain Error('Request cancelled.')
-      // so we can't check err.name — check the controller instead.
       if (genController.signal.aborted) {
         if (isFirstTurn) {
           setBootstrap(null)
           setTurns([])
           onActiveConvIdChange(null)
         } else {
-          setTurns((prev) => prev.filter((t) => t.tempId !== tempId))
+          setTurns(prev => prev.filter(t => t.tempId !== tempId))
         }
         return
       }
@@ -359,30 +340,22 @@ export function useGeneration({
         setTurns([])
         onActiveConvIdChange(null)
       } else {
-        setTurns((prev) => prev.map((t) =>
+        setTurns(prev => prev.map(t =>
           t.tempId === tempId ? { ...t, isLoading: false, videoPhase: 'error' } : t
         ))
       }
-    } finally {
-      clearTimeout(bt1)
-      clearTimeout(bt2)
-      clearTurnTimers()
     }
+
     }) // end withSpan
   }, [
     isAnyGenerating, lastCompletedTurnId, activeConvId, notesEnabled, videoEnabled,
-    pauseContext, selectedModel, selectedRenderMode, onActiveConvIdChange,
-    onConversationsRefresh, runVideoGenerationForTurn, scrollToTop, toast,
-    loadedConvIdRef, setBootstrap, setPauseContext, setPrompt,
+    pauseContext, selectedModel, selectedRenderMode, selectedMode, stagedFiles,
+    onActiveConvIdChange, onConversationsRefresh, runVideoGenerationForTurn,
+    scrollToTop, toast, loadedConvIdRef, setBootstrap, setPauseContext, setPrompt, setTurns,
   ])
 
   // ── handleLearnGenerate ───────────────────────────────────────────────────
 
-  /**
-   * Generates a new turn from the learning canvas (AskNode ghost node).
-   * Accepts per-ask model and videoEnabled overrides so the user can pick
-   * different settings per canvas branch without touching the global toolbar.
-   */
   const handleLearnGenerate = useCallback(async ({
     question,
     sessionId,
@@ -401,128 +374,216 @@ export function useGeneration({
     const genController = new AbortController()
     generationAbortRef.current = genController
 
-    const tempId           = `temp_${Date.now()}`
-    const capturedPauseCtx = { sessionId, frameIndex: undefined, caption: undefined }
+    const tempId   = `temp_${Date.now()}`
+    const pauseCtx = { sessionId, frameIndex: undefined, caption: undefined }
 
-    setTurns((prev) => [...prev, createTempTurn({
-      tempId,
-      prompt:           question,
-      videoEnabled:     effectiveVideoEnabled,
-      parentSessionId:  sessionId ?? null,
-      parentFrameIndex: null,
-    })])
-
-    const { clear: clearTurnTimers } = startTurnStageTimers(tempId, effectiveVideoEnabled, setTurns)
-
-    try {
-      const renderModeId = selectedRenderMode?.id !== 'auto' ? selectedRenderMode.id : null
-
-      const data = await api.imageGeneration({
-        message:        question,
-        conversationId: activeConvId,
-        pauseContext:   capturedPauseCtx,
-        notesEnabled,
-        provider:       effectiveModel.provider,
-        model:          effectiveModel.model,
-        signal:         genController.signal,
-        renderMode:     renderModeId,
-        textOnly:       !effectiveVideoEnabled,
-      })
-
-      if (isStale()) return
-
-      const realTurn = buildRealTurn({
+    setTurns((prev) => [...prev, {
+      ...createTempTurn({
         tempId,
         prompt:           question,
-        data,
         videoEnabled:     effectiveVideoEnabled,
-        parentSessionId:  capturedPauseCtx.sessionId ?? null,
+        parentSessionId:  sessionId ?? null,
         parentFrameIndex: null,
-      })
+      }),
+      stages: [], sources: [], synthesisText: '', synthesisComplete: false,
+    }])
 
-      setTurns((prev) => prev.map((t) => t.tempId === tempId ? realTurn : t))
-      await onConversationsRefresh()
-      if (effectiveVideoEnabled) runVideoGenerationForTurn(tempId, data.session_id)
-    } catch (err) {
-      if (err?.name !== 'AbortError') {
-        console.error('[Studio] handleLearnGenerate:', err)
-        toast.error('Generation failed. Please try again.')
-        setTurns((prev) => prev.map((t) =>
-          t.tempId === tempId ? { ...t, isLoading: false, videoPhase: 'error' } : t
-        ))
+    const renderModeId = selectedRenderMode?.id !== 'auto' ? selectedRenderMode?.id : null
+    const donePayload  = { current: null }
+
+    try {
+      await api.generateStream(
+        {
+          message:         question,
+          conversationId:  activeConvId,
+          pauseContext:    pauseCtx,
+          notesEnabled,
+          provider:        effectiveModel.provider,
+          model:           effectiveModel.model,
+          renderMode:      renderModeId,
+          parentSessionId: sessionId ?? null,
+          videoEnabled:    effectiveVideoEnabled,
+          researchMode:    'instant',
+        },
+        (event) => {
+          if (isStale()) return
+          switch (event.type) {
+            case 'stage':
+              setTurns(prev => prev.map(t => t.tempId === tempId ? _withStage(t, event) : t))
+              break
+            case 'stage_done':
+              setTurns(prev => prev.map(t => t.tempId === tempId ? _withStageDone(t, event) : t))
+              break
+            case 'meta':
+              setTurns(prev => prev.map(t => t.tempId === tempId ? {
+                ...t, render_path: 'interactive', isLoading: true,
+                title: event.title ?? '', followUps: event.follow_ups ?? [],
+                learningObjective: event.learning_objective ?? null, blocks: [],
+              } : t))
+              break
+            case 'block':
+              setTurns(prev => prev.map(t => t.tempId === tempId
+                ? { ...t, blocks: [...(t.blocks ?? []), event.block] }
+                : t
+              ))
+              break
+            case 'done':
+              donePayload.current = event
+              break
+            case 'error':
+              toast.error(event.message || 'Generation failed. Please try again.')
+              setTurns(prev => prev.map(t => t.tempId === tempId
+                ? { ...t, isLoading: false, videoPhase: 'error' }
+                : t
+              ))
+              break
+          }
+        },
+        genController.signal,
+      )
+
+      if (genController.signal.aborted) {
+        setTurns(prev => prev.filter(t => t.tempId !== tempId))
+        return
       }
-    } finally {
-      clearTurnTimers()
+
+      const done = donePayload.current
+      if (!done) return
+
+      setTurns(prev => prev.map(t => t.tempId === tempId ? {
+        ...t,
+        isLoading:       false,
+        id:              done.session_id,
+        conversation_id: done.conversation_id,
+        turn_index:      done.turn_index,
+        intent_type:     done.intent_type,
+        render_path:     done.render_path,
+        frame_count:     done.frame_count ?? t.frame_count,
+        ...(effectiveVideoEnabled ? {
+          framesData:  normalizeFramesData(done),
+          videoPhase:  'generating',
+        } : {}),
+      } : t))
+
+      await onConversationsRefresh()
+      if (effectiveVideoEnabled) runVideoGenerationForTurn(tempId, done.session_id)
+
+    } catch (err) {
+      if (genController.signal.aborted) {
+        setTurns(prev => prev.filter(t => t.tempId !== tempId))
+        return
+      }
+      console.error('[Studio] handleLearnGenerate:', err)
+      toast.error('Generation failed. Please try again.')
+      setTurns(prev => prev.map(t =>
+        t.tempId === tempId ? { ...t, isLoading: false, videoPhase: 'error' } : t
+      ))
     }
   }, [
     activeConvId, notesEnabled, videoEnabled, selectedModel, selectedRenderMode,
-    onConversationsRefresh, runVideoGenerationForTurn, toast,
+    onConversationsRefresh, runVideoGenerationForTurn, toast, setTurns,
   ])
 
   // ── handleRetryGeneration ─────────────────────────────────────────────────
 
-  /**
-   * Retries a generation that failed before a session id was created (i.e.
-   * the API call itself failed, not just video assembly).  Resets the turn to
-   * loading state in-place and re-runs imageGeneration with current preferences.
-   */
   const handleRetryGeneration = useCallback(async (turn) => {
     setTurns((prev) => prev.map((t) =>
-      t.tempId === turn.tempId
-        ? { ...t, isLoading: true, stage: 'planning', videoPhase: null, id: null }
-        : t
+      t.tempId === turn.tempId ? {
+        ...t, isLoading: true, stage: 'planning', stages: [],
+        videoPhase: null, id: null, synthesisText: '', synthesisComplete: false, sources: [],
+      } : t
     ))
 
     const pauseCtx = turn.parentSessionId
-      ? {
-          sessionId:  turn.parentSessionId,
-          frameIndex: turn.parentFrameIndex ?? undefined,
-          caption:    undefined,
-        }
+      ? { sessionId: turn.parentSessionId, frameIndex: turn.parentFrameIndex ?? undefined, caption: undefined }
       : null
 
-    const { clear: clearTurnTimers } = startTurnStageTimers(turn.tempId, videoEnabled, setTurns)
+    const renderModeId = selectedRenderMode?.id !== 'auto' ? selectedRenderMode?.id : null
+    const donePayload  = { current: null }
 
     try {
-      const renderModeId = selectedRenderMode?.id !== 'auto' ? selectedRenderMode.id : null
+      await api.generateStream(
+        {
+          message:         turn.prompt,
+          conversationId:  activeConvId,
+          pauseContext:    pauseCtx,
+          notesEnabled,
+          provider:        selectedModel.provider,
+          model:           selectedModel.model,
+          renderMode:      renderModeId,
+          parentSessionId: turn.parentSessionId ?? null,
+          videoEnabled,
+          researchMode:    'instant',
+          // No signal — retries are user-initiated and not cancelled by navigation.
+        },
+        (event) => {
+          switch (event.type) {
+            case 'stage':
+              setTurns(prev => prev.map(t => t.tempId === turn.tempId ? _withStage(t, event) : t))
+              break
+            case 'stage_done':
+              setTurns(prev => prev.map(t => t.tempId === turn.tempId ? _withStageDone(t, event) : t))
+              break
+            case 'meta':
+              setTurns(prev => prev.map(t => t.tempId === turn.tempId ? {
+                ...t, render_path: 'interactive', isLoading: true,
+                title: event.title ?? '', followUps: event.follow_ups ?? [],
+                learningObjective: event.learning_objective ?? null, blocks: [],
+              } : t))
+              break
+            case 'block':
+              setTurns(prev => prev.map(t => t.tempId === turn.tempId
+                ? { ...t, blocks: [...(t.blocks ?? []), event.block] }
+                : t
+              ))
+              break
+            case 'done':
+              donePayload.current = event
+              break
+            case 'error':
+              toast.error(event.message || 'Generation failed. Please try again.')
+              setTurns(prev => prev.map(t => t.tempId === turn.tempId
+                ? { ...t, isLoading: false, videoPhase: 'error' }
+                : t
+              ))
+              break
+          }
+        },
+        // No AbortSignal — retries run to completion
+      )
 
-      const data = await api.imageGeneration({
-        message:        turn.prompt,
-        conversationId: activeConvId,
-        pauseContext:   pauseCtx,
-        notesEnabled,
-        provider:       selectedModel.provider,
-        model:          selectedModel.model,
-        renderMode:     renderModeId,
-        textOnly:       !videoEnabled,
-        // No signal — retries are user-initiated and shouldn't be cancelled by nav.
-      })
+      const done = donePayload.current
+      if (!done) return
 
-      const realTurn = buildRealTurn({
-        tempId:           turn.tempId,
-        prompt:           turn.prompt,
-        data,
-        videoEnabled,
-        parentSessionId:  turn.parentSessionId  ?? null,
-        parentFrameIndex: turn.parentFrameIndex ?? null,
-      })
+      setTurns(prev => prev.map(t => t.tempId === turn.tempId ? {
+        ...t,
+        isLoading:       false,
+        id:              done.session_id,
+        conversation_id: done.conversation_id,
+        turn_index:      done.turn_index,
+        intent_type:     done.intent_type,
+        render_path:     done.render_path,
+        frame_count:     done.frame_count ?? t.frame_count,
+        ...(videoEnabled ? {
+          framesData: normalizeFramesData(done),
+          videoPhase: 'generating',
+        } : {}),
+      } : t))
 
-      setTurns((prev) => prev.map((t) => t.tempId === turn.tempId ? realTurn : t))
       await onConversationsRefresh()
-      if (videoEnabled) runVideoGenerationForTurn(turn.tempId, data.session_id)
+      if (videoEnabled) runVideoGenerationForTurn(turn.tempId, done.session_id)
+
     } catch (err) {
       if (err?.name !== 'AbortError') {
         toast.error('Generation failed. Please try again.')
-        setTurns((prev) => prev.map((t) =>
+        setTurns(prev => prev.map(t =>
           t.tempId === turn.tempId ? { ...t, isLoading: false, videoPhase: 'error' } : t
         ))
       }
-    } finally {
-      clearTurnTimers()
     }
   }, [
     activeConvId, notesEnabled, videoEnabled, selectedModel, selectedRenderMode,
-    onConversationsRefresh, runVideoGenerationForTurn, toast,
+    onConversationsRefresh, runVideoGenerationForTurn, toast, setTurns,
   ])
 
   return {

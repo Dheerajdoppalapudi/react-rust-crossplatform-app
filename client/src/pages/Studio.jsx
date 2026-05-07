@@ -12,7 +12,7 @@ import UserNotesPanel       from '../components/Studio/UserNotesPanel/index'
 import ConversationMiniTree from '../components/Studio/ConversationMiniTree'
 
 import { useToast }         from '../contexts/ToastContext'
-import { DEFAULT_MODEL, DEFAULT_RENDER_MODE, FOLLOWUP_SUGGESTIONS } from '../components/Studio/constants'
+import { DEFAULT_MODEL, DEFAULT_RENDER_MODE, DEFAULT_MODE, FOLLOWUP_SUGGESTIONS, MODES } from '../components/Studio/constants'
 import { STORAGE_KEYS } from '../constants/storage.js'
 
 import { useVideoStream }   from '../hooks/useVideoStream'
@@ -22,13 +22,8 @@ import { useGeneration }    from '../hooks/useGeneration'
 
 export default function Studio({
   activeConvId,
-  activeConvTitle,
-  activeConvStarred,
   onActiveConvIdChange,
   onConversationsRefresh,
-  onRenameConv,
-  onStarConv,
-  onDeleteConv,
 }) {
   const theme    = useTheme()
   const isDark   = theme.palette.mode === 'dark'
@@ -64,6 +59,8 @@ export default function Studio({
   const [prompt, setPrompt]                         = useState('')
   const [selectedModel, setSelectedModel]           = useState(DEFAULT_MODEL)
   const [selectedRenderMode, setSelectedRenderMode] = useState(DEFAULT_RENDER_MODE)
+  const [selectedMode, setSelectedMode]             = useState(DEFAULT_MODE)
+  const [stagedFiles, setStagedFiles]               = useState([])
   const [turns, setTurns]                           = useState([])
   const [viewMode, setViewMode]                     = useState('chat')
 
@@ -78,7 +75,6 @@ export default function Studio({
   // ── Custom hooks ────────────────────────────────────────────────────────────
 
   const {
-    videoAbortControllersRef,
     runVideoGenerationForTurn,
     handleRetryTurn,
     abortAll: abortAllVideoStreams,
@@ -129,6 +125,8 @@ export default function Studio({
     notesEnabled,
     selectedModel,
     selectedRenderMode,
+    selectedMode,
+    stagedFiles,
     pauseContext,
     setPauseContext,
     setBootstrap,
@@ -277,7 +275,17 @@ export default function Studio({
 
   const handleSuggestionClick = useCallback((s) => {
     setPrompt(s)
+    // Suggestions on the empty state are research-oriented — switch to deep research
+    setSelectedMode(MODES.find(m => m.id === 'deep_research') ?? DEFAULT_MODE)
     inputRef.current?.focus()
+  }, [])
+
+  const handleAddFiles = useCallback((files) => {
+    setStagedFiles(prev => [...prev, ...files.filter(f => !prev.find(p => p.id === f.id))])
+  }, [])
+
+  const handleRemoveFile = useCallback((id) => {
+    setStagedFiles(prev => prev.filter(f => f.id !== id))
   }, [])
 
   const handleMiniTreeNavigate = useCallback((tempId) => {
@@ -429,6 +437,11 @@ export default function Studio({
             onModelChange={setSelectedModel}
             selectedRenderMode={selectedRenderMode}
             onRenderModeChange={setSelectedRenderMode}
+            selectedMode={selectedMode}
+            onModeChange={setSelectedMode}
+            stagedFiles={stagedFiles}
+            onAddFiles={handleAddFiles}
+            onRemoveFile={handleRemoveFile}
           />
         </Box>
 

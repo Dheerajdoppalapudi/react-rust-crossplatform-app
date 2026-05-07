@@ -12,6 +12,38 @@ import VideoPanel from '../VideoPanel'
 import { api } from '../../../services/api'
 import { parseNotes, formatIntentType } from '../studioUtils'
 
+function NotesList({ lines, loading, emptyText }) {
+  if (loading && !lines.length) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', pt: 2 }}>
+        <CircularProgress size={18} />
+      </Box>
+    )
+  }
+  if (lines.length > 0) {
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+        {lines.map((line, i) => (
+          <Box key={i} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.25 }}>
+            <Box sx={{
+              width: 4, height: 4, borderRadius: '50%', flexShrink: 0,
+              bgcolor: 'primary.main', opacity: 0.5, mt: 0.9,
+            }} />
+            <Typography sx={{ fontSize: 13, color: 'text.secondary', lineHeight: 1.65 }}>
+              {line}
+            </Typography>
+          </Box>
+        ))}
+      </Box>
+    )
+  }
+  return (
+    <Typography sx={{ fontSize: 13, color: 'text.secondary', opacity: 0.45, fontStyle: 'italic' }}>
+      {emptyText}
+    </Typography>
+  )
+}
+
 function FrameStrip({ sessionId, captions, activeFrame, onSelect, isDark, theme }) {
   const { getFrameUrl } = useMediaUrl(sessionId)
   return (
@@ -212,7 +244,7 @@ export default function NodeModal({ node, onClose, onAsk }) {
           '&::-webkit-scrollbar': { width: 4 },
           '&::-webkit-scrollbar-thumb': { backgroundColor: theme.palette.divider, borderRadius: 2 },
         }}>
-          {node.render_path === 'text' || node.render_path === 'interactive' ? (
+          {node.render_path === 'interactive' ? (
             // Non-video node: show the prompt + notes content
             <Box sx={{ flex: 1, overflow: 'auto',
               '&::-webkit-scrollbar': { width: 4 },
@@ -231,34 +263,13 @@ export default function NodeModal({ node, onClose, onAsk }) {
                 </Typography>
               </Box>
 
-              {loadingMeta && !noteLines.length ? (
-                <Box sx={{ display: 'flex', justifyContent: 'center', pt: 3 }}>
-                  <CircularProgress size={20} />
-                </Box>
-              ) : noteLines.length > 0 ? (
-                <Box>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1.25 }}>
-                    <NotesOutlinedIcon sx={{ fontSize: 13, color: theme.palette.text.secondary }} />
-                    <Typography sx={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.palette.text.secondary, opacity: 0.6 }}>
-                      Response
-                    </Typography>
-                  </Box>
-                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
-                    {noteLines.map((line, i) => (
-                      <Box key={i} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.25 }}>
-                        <Box sx={{ width: 4, height: 4, borderRadius: '50%', flexShrink: 0, bgcolor: theme.palette.primary.main, opacity: 0.5, mt: 0.9 }} />
-                        <Typography sx={{ fontSize: 13, color: theme.palette.text.secondary, lineHeight: 1.65 }}>
-                          {line}
-                        </Typography>
-                      </Box>
-                    ))}
-                  </Box>
-                </Box>
-              ) : !loadingMeta ? (
-                <Typography sx={{ fontSize: 13, color: theme.palette.text.secondary, opacity: 0.45, fontStyle: 'italic' }}>
-                  No content for this session.
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1.25 }}>
+                <NotesOutlinedIcon sx={{ fontSize: 13, color: theme.palette.text.secondary }} />
+                <Typography sx={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.palette.text.secondary, opacity: 0.6 }}>
+                  Response
                 </Typography>
-              ) : null}
+              </Box>
+              <NotesList lines={noteLines} loading={loadingMeta} emptyText="No content for this session." />
             </Box>
           ) : node.videoPhase === 'generating' ? (
             <VideoGeneratingPlaceholder isDark={isDark} theme={theme} />
@@ -266,7 +277,7 @@ export default function NodeModal({ node, onClose, onAsk }) {
             <VideoPanel sessionId={node.id} videoPhase={node.videoPhase} onPauseAsk={null} />
           )}
 
-          {node.render_path !== 'text' && node.render_path !== 'interactive' && (
+          {node.render_path !== 'interactive' && (
             <>
               {loadingMeta && !captions.length && (
                 <Box sx={{ display: 'flex', justifyContent: 'center', pt: 3 }}>
@@ -305,34 +316,7 @@ export default function NodeModal({ node, onClose, onAsk }) {
               </Typography>
             </Box>
 
-            {loadingMeta && !noteLines.length ? (
-              <Box sx={{ display: 'flex', justifyContent: 'center', pt: 2 }}>
-                <CircularProgress size={18} />
-              </Box>
-            ) : noteLines.length > 0 ? (
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
-                {noteLines.map((line, i) => (
-                  <Box key={i} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.25 }}>
-                    <Box sx={{
-                      width: 4, height: 4, borderRadius: '50%', flexShrink: 0,
-                      bgcolor: theme.palette.primary.main, opacity: 0.5, mt: 0.9,
-                    }} />
-                    <Typography sx={{
-                      fontSize: 13, color: theme.palette.text.secondary, lineHeight: 1.65,
-                    }}>
-                      {line}
-                    </Typography>
-                  </Box>
-                ))}
-              </Box>
-            ) : (
-              <Typography sx={{
-                fontSize: 13, color: theme.palette.text.secondary,
-                opacity: 0.45, fontStyle: 'italic',
-              }}>
-                No lesson notes for this session.
-              </Typography>
-            )}
+            <NotesList lines={noteLines} loading={loadingMeta} emptyText="No lesson notes for this session." />
           </Box>
 
           <Box sx={{

@@ -21,7 +21,12 @@
       "Bash(mkdir -p \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/client/src/test/mocks\")",
       "Bash(mkdir -p \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/client/src/components/__tests__\" \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/client/src/hooks/__tests__\")",
       "Bash(npm test *)",
-      "Bash(node --input-type=module --experimental-vm-modules /dev/null)"
+      "Bash(node --input-type=module --experimental-vm-modules /dev/null)",
+      "Bash(rm \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/routers/generation.py\" && echo \"deleted\")",
+      "Bash(mkdir -p \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/services/research\" && echo \"dir created\")",
+      "Bash(rm \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/client/src/pages/Product.jsx\")",
+      "Bash(rm \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/client/src/components/product/ChatWindow.jsx\" \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/client/src/components/product/ChatMessage.jsx\" \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/client/src/components/product/ChatInput.jsx\" \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/client/src/components/product/ChatEmptyState.jsx\")",
+      "Bash(rmdir \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/client/src/components/product/\")"
     ],
     "additionalDirectories": [
       "/tmp",
@@ -29,7 +34,9 @@
       "/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/services/interactive/prompts/catalog",
       "/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/client/src",
       "/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/client/src/test",
-      "/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/client/src/components"
+      "/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/client/src/components",
+      "/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/routers",
+      "/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/services"
     ]
   }
 }

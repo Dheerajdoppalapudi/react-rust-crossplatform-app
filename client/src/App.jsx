@@ -231,13 +231,8 @@ function AppInner() {
                   <ProtectedRoute>
                     <Studio
                       activeConvId={activeConvId}
-                      activeConvTitle={conversations.find((c) => c.id === activeConvId)?.title ?? null}
-                      activeConvStarred={!!(conversations.find((c) => c.id === activeConvId)?.starred)}
                       onActiveConvIdChange={onActiveConvIdChange}
                       onConversationsRefresh={fetchConversations}
-                      onRenameConv={handleRenameConv}
-                      onStarConv={handleStarConv}
-                      onDeleteConv={handleDeleteConv}
                     />
                   </ProtectedRoute>
                 } />
@@ -245,13 +240,8 @@ function AppInner() {
                   <ProtectedRoute>
                     <Studio
                       activeConvId={activeConvId}
-                      activeConvTitle={conversations.find((c) => c.id === activeConvId)?.title ?? null}
-                      activeConvStarred={!!(conversations.find((c) => c.id === activeConvId)?.starred)}
                       onActiveConvIdChange={onActiveConvIdChange}
                       onConversationsRefresh={fetchConversations}
-                      onRenameConv={handleRenameConv}
-                      onStarConv={handleStarConv}
-                      onDeleteConv={handleDeleteConv}
                     />
                   </ProtectedRoute>
                 } />

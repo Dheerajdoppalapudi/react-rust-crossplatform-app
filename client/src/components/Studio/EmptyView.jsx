@@ -1,8 +1,8 @@
 import { Box, Typography } from '@mui/material'
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
 import { useTheme } from '@mui/material'
-import { INITIAL_SUGGESTIONS } from './constants'
-import { BRAND, PALETTE } from '../../theme/tokens.js'
+import { BRAND } from '../../theme/tokens.js'
+import SuggestionBoxes from './SuggestionBoxes'
 
 export default function EmptyView({ onSuggestionClick }) {
   const theme  = useTheme()
@@ -14,7 +14,7 @@ export default function EmptyView({ onSuggestionClick }) {
       minHeight: 420,
       display: 'flex', flexDirection: 'column',
       alignItems: 'center', justifyContent: 'center',
-      gap: 2.5, px: 3,
+      gap: 3, px: 3,
     }}>
       {/* Icon badge */}
       <Box sx={{
@@ -34,36 +34,11 @@ export default function EmptyView({ onSuggestionClick }) {
           What do you want to learn?
         </Typography>
         <Typography sx={{ fontSize: 13.5, color: theme.palette.text.secondary, lineHeight: 1.65 }}>
-          Type a topic and Zenith will generate a visual lesson — animations, diagrams, or illustrations.
+          Type a topic and Zenith will generate a visual lesson — or pick one below to start with deep research.
         </Typography>
       </Box>
 
-      {/* Quick suggestions */}
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, justifyContent: 'center', maxWidth: 500, mt: 0.5 }}>
-        {INITIAL_SUGGESTIONS.map((s) => (
-          <Box
-            key={s}
-            component="button"
-            type="button"
-            onClick={() => onSuggestionClick(s)}
-            sx={{
-              px: 1.75, py: 0.75, borderRadius: '20px',
-              border: `1px solid ${theme.palette.divider}`,
-              backgroundColor: theme.palette.background.paper,
-              cursor: 'pointer', fontSize: 12.5, color: theme.palette.text.secondary,
-              fontFamily: 'inherit',
-              '&:hover': {
-                borderColor: theme.palette.primary.main,
-                color: theme.palette.primary.main,
-                backgroundColor: isDark ? 'rgba(75,114,255,0.08)' : `${BRAND.primary}08`,
-              },
-              transition: 'all 0.15s',
-            }}
-          >
-            {s}
-          </Box>
-        ))}
-      </Box>
+      <SuggestionBoxes onSuggestionClick={onSuggestionClick} />
     </Box>
   )
 }

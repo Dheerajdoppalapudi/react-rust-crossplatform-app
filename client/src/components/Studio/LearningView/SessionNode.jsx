@@ -9,17 +9,12 @@ import { useMediaUrl }       from '../../../hooks/useMediaUrl'
 import { NODE_W, NODE_H }    from './useFlowData'
 import { BRAND, PALETTE }    from '../../../theme/tokens.js'
 import { isTextTurn, formatIntentType, getFrameCount } from '../studioUtils'
+import { getActiveStageLabel } from './utils'
 import { shimmer, fadeIn }   from '../../../theme/animations'
 
 const THUMB_H = Math.round(NODE_W * 9 / 16)
 const ASK_W   = 340
 const ASK_H   = 138
-
-const STAGE_LABELS = {
-  planning:   'Planning…',
-  generating: 'Generating…',
-  rendering:  'Rendering…',
-}
 
 export default function SessionNode({ data }) {
   const { turn }                           = data
@@ -114,7 +109,7 @@ export default function SessionNode({ data }) {
   }
 
   if (turn.isLoading) {
-    const stageLabel = STAGE_LABELS[turn.stage] || 'Processing…'
+    const stageLabel = getActiveStageLabel(turn)
     return (
       <>
         <Handle type="target" position={Position.Top}    style={{ opacity: 0 }} />
@@ -287,11 +282,6 @@ export default function SessionNode({ data }) {
                     <Typography sx={{ fontSize: 9.5, color: theme.palette.text.secondary, ml: 0.5 }}>{frameCount} slides</Typography>
                   </Box>
                 ) : <Box />}
-                {intentLabel && (
-                  <Typography sx={{ fontSize: 9, fontWeight: 600, px: 0.75, py: 0.25, borderRadius: '5px', textTransform: 'capitalize', flexShrink: 0, bgcolor: isDark ? `${primary}18` : `${primary}12`, color: primary }}>
-                    {intentLabel}
-                  </Typography>
-                )}
               </Box>
             </Box>
           </Box>

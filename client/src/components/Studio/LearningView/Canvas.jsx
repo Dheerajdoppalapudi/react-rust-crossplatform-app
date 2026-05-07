@@ -58,10 +58,6 @@ export default function Canvas({ turns, onNodeClick, onAsk, defaultModel, defaul
               strokeWidth:     solid ? (e.data?.isFrame ? 2.5 : 2) : 1.5,
               strokeDasharray: solid ? undefined : '5 4',
             },
-            markerEnd: {
-              type:  'arrowclosed',
-              color: solid ? (e.data?.isFrame ? primary : 'rgba(150,150,150,0.6)') : 'rgba(150,150,150,0.4)',
-            },
           }
         }),
         ...ghostEdges,

@@ -1,13 +1,14 @@
 """
 Generation pipeline — all frame-generation business logic.
 
-The route handler in routers/generation.py is responsible for:
+The route handler in routers/generate.py is responsible for:
   - DB setup (session/conversation creation)
   - Context var lifecycle (request_log, token_usage, request_llm_service)
-  - Calling run_generation_pipeline()
-  - Persisting results to DB and returning the HTTP response
+  - Calling run_generation_pipeline_stream() / run_text_pipeline_stream()
+  - Persisting results to DB
 
-This module owns everything in between.
+This module owns the async generator pipelines. Each yields SSE-compatible
+dicts; the route handler serialises them to text/event-stream format.
 """
 
 import json
@@ -15,7 +16,7 @@ import logging
 import os
 import time
 from pathlib import Path
-from typing import Optional
+from typing import AsyncGenerator, Optional
 
 from core.config import (
     MANIM_INTENT_TYPES,
@@ -52,12 +53,10 @@ _SVG_PROMPT_TEMPLATE   = _load_prompt("svg_prompt.md")
 # ── Utilities ─────────────────────────────────────────────────────────────────
 
 def count_llm_calls(log: list) -> int:
-    """Count LLM calls recorded in the lifecycle log."""
     return sum(1 for e in log if e.get("event") in ("llm_call", "llm_call_fast"))
 
 
 def _parse_narrations_from_file(narration_path: str) -> list[str]:
-    """Read narration.txt and return a list of per-frame narration strings."""
     if not os.path.exists(narration_path):
         return []
     with open(narration_path) as f:
@@ -77,7 +76,6 @@ def _parse_narrations_from_file(narration_path: str) -> list[str]:
     return blocks
 
 
-
 def _interleave_slides(
     png_paths: list,
     captions: list[str],
@@ -86,25 +84,9 @@ def _interleave_slides(
     output_dir: str,
     accent_color: str,
 ) -> tuple[list, list[str], list[str]]:
-    """
-    Generate slide PNGs and interleave them with diagram frames.
-
-    Args:
-        png_paths:    per-diagram-frame PNG paths (may include None for failed frames)
-        captions:     per-diagram-frame captions
-        narrations:   per-diagram-frame narration strings
-        slide_specs:  list of slide_frames dicts from the planner
-        output_dir:   session output directory; slides go into output_dir/slides/
-        accent_color: fallback accent if a slide spec omits accent_color
-
-    Returns:
-        (all_images, all_captions, all_narrations) with slides interleaved.
-        Slide entries use their narration field as the per-frame narration text.
-    """
     slides_dir = os.path.join(output_dir, "slides")
     os.makedirs(slides_dir, exist_ok=True)
 
-    # Build insertion map: diagram_index → list of (slide_png, slide_caption, slide_narration)
     insertions: dict[int, list] = {}
     for i, spec in enumerate(slide_specs or []):
         insert_before = spec.get("insert_before", 0)
@@ -121,7 +103,6 @@ def _interleave_slides(
             (slide_path, slide_caption, slide_narration)
         )
 
-    # Build interleaved lists
     all_images, all_captions, all_narrations = [], [], []
     for idx, (png, cap, narr) in enumerate(zip(png_paths, captions, narrations)):
         for slide_path, slide_cap, slide_narr in insertions.get(idx, []):
@@ -132,7 +113,6 @@ def _interleave_slides(
         all_captions.append(cap)
         all_narrations.append(narr)
 
-    # Slides with insert_before >= len(png_paths) go at the end (before summary)
     for idx in sorted(k for k in insertions if k >= len(png_paths)):
         for slide_path, slide_cap, slide_narr in insertions[idx]:
             all_images.append(slide_path)
@@ -150,9 +130,6 @@ def _append_summary_slide(
     accent_color: str,
     output_dir: str,
 ) -> tuple[list, list[str], list[str]]:
-    """
-    Generate a 'Key Takeaways' summary slide from plan.notes and append it.
-    """
     if not notes:
         return all_images, all_captions, all_narrations
 
@@ -177,28 +154,18 @@ def _append_summary_slide(
     return all_images, all_captions, all_narrations
 
 
+# ── Conversation context builders ─────────────────────────────────────────────
+
 def build_conversation_context(
     parent_session_id: Optional[str],
     pause_session_id:  Optional[str] = None,
     pause_frame_index: Optional[int] = None,
     pause_caption:     Optional[str] = None,
 ) -> str:
-    """
-    Build the conversation context string injected into the planning prompt.
-
-    Walks the parent_session_id ancestor chain so branched follow-ups only see
-    their own lineage, not sibling branches.
-
-    Strategy:
-      - All ancestors except the most recent: prompt + frame captions only
-      - Most recent ancestor:                 prompt + full narration
-      - Pause context (if provided):          which frame + caption + narration at that frame
-    """
     if not parent_session_id:
         return ""
 
     prior_turns = _collect_ancestor_chain(parent_session_id, INTERACTIVE_CONTEXT_TURNS)
-
     if not prior_turns:
         return ""
 
@@ -222,7 +189,6 @@ def build_conversation_context(
                 captions = json.load(f).get("captions", [])
 
         lines.append(f"Turn {turn['turn_index']}: \"{turn['prompt']}\"")
-
         if captions:
             lines.append(f"  Frames: {', '.join(captions)}")
 
@@ -275,10 +241,6 @@ def _collect_ancestor_chain(
     parent_session_id: Optional[str],
     limit: int,
 ) -> list:
-    """
-    Walk parent_session_id pointers up the tree, collecting up to `limit` ancestors.
-    Returns rows ordered oldest-first (root ancestor first, direct parent last).
-    """
     chain: list = []
     current_id = parent_session_id
 
@@ -294,30 +256,17 @@ def _collect_ancestor_chain(
             chain.append(row)
             current_id = row["parent_session_id"]
 
-    chain.reverse()  # oldest first
+    chain.reverse()
     return chain
 
 
 def build_interactive_context(
     parent_session_id: Optional[str],
 ) -> str:
-    """
-    Build conversation context for interactive follow-up prompts.
-
-    Walks the parent_session_id ancestor chain (not all sessions in conversation)
-    so branched follow-ups only see their own lineage, not sibling branches.
-
-    Reads scene_ir.json from each ancestor and extracts:
-      - Text block content (what was actually explained)
-      - Entity block summaries (what widget was shown and its key props)
-
-    Capped at INTERACTIVE_CONTEXT_TURNS ancestors to stay within token budget.
-    """
     if not parent_session_id:
         return ""
 
     prior_turns = _collect_ancestor_chain(parent_session_id, INTERACTIVE_CONTEXT_TURNS)
-
     if not prior_turns:
         return ""
 
@@ -349,7 +298,6 @@ def build_interactive_context(
                 elif block.get("type") == "entity":
                     entity_type = block.get("entity_type", "")
                     props = block.get("props", {})
-                    # Summarise the entity without dumping all its data
                     if entity_type == "mermaid_viewer":
                         lines.append(f"  Widget: diagram — {props.get('caption', entity_type)}")
                     elif entity_type == "code_walkthrough":
@@ -380,87 +328,81 @@ def build_interactive_context(
     return "\n".join(lines)
 
 
-# ── Text-only pipeline (video off) ────────────────────────────────────────────
+# ── Intent routing ────────────────────────────────────────────────────────────
 
-async def run_text_pipeline(
-    message:              str,
-    session_id:           str,
-    output_dir:           str,
-    conversation_context: str,
-) -> dict:
-    """
-    Lightweight single-LLM-call path used when the user has video generation off.
-
-    Calls classify_intent (Haiku) which returns notes + suggested_followups
-    alongside intent metadata. Writes a minimal frames.json and returns a
-    result payload with render_path='text'.
-    """
-    _log({"event": "stage_start", "stage": "text_classify"})
-
-    intent_type, frame_count, notes_list, followups, _domain = await classify_intent(
-        message, conversation_context
-    )
-    notes = "\n".join(notes_list) if notes_list else ""
-    suggested_followups = followups or []
-
-    _log({"event": "stage_complete", "stage": "text_classify",
-          "intent_type": intent_type, "frame_count": frame_count})
-    logger.info(
-        "Text pipeline complete  session=%s  intent=%s  notes=%d  followups=%d",
-        session_id, intent_type, len(notes_list), len(suggested_followups),
-    )
-
-    os.makedirs(output_dir, exist_ok=True)
-    with open(os.path.join(output_dir, "frames.json"), "w") as f:
-        json.dump({
-            "render_path":         "text",
-            "images":              [],
-            "captions":            [],
-            "notes":               notes,
-            "suggested_followups": suggested_followups,
-        }, f, indent=2)
-
-    return {
-        "session_id":          session_id,
-        "render_path":         "text",
-        "frame_count":         0,
-        "intent_type":         intent_type,
-        "captions":            [],
-        "images":              [],
-        "notes":               notes,
-        "suggested_followups": suggested_followups,
-    }
-
-
-# ── Main pipeline ─────────────────────────────────────────────────────────────
-
-# Maps frontend render_mode value → canonical intent_type for the planner
 _FORCED_INTENT: dict[str, str] = {
     "manim": "math",
     "svg":   "illustration",
 }
 
 
-async def run_generation_pipeline(
+# ── Text pipeline (interactive mode — video off) ──────────────────────────────
+
+async def run_text_pipeline_stream(
+    message:              str,
+    session_id:           str,
+    output_dir:           str,
+    conversation_context: str,
+) -> AsyncGenerator[dict, None]:
+    """
+    Async generator for interactive (non-video) mode.
+
+    Yields stage events, then meta/block events from run_interactive_pipeline,
+    then a final 'result' event with the payload for the router to persist.
+    """
+    from services.interactive.interactive_service import run_interactive_pipeline
+
+    yield {"type": "stage", "stage": "designing", "label": "Designing the lesson…"}
+
+    result_payload = {
+        "session_id":  session_id,
+        "render_path": "interactive",
+        "frame_count": 0,
+        "intent_type": "general",
+        "captions":    [],
+        "images":      [],
+        "notes":       "",
+        "suggested_followups": [],
+    }
+
+    async for event in run_interactive_pipeline(
+        message=message,
+        session_id=session_id,
+        output_dir=output_dir,
+        conversation_context=conversation_context,
+    ):
+        if event["type"] == "meta":
+            result_payload["suggested_followups"] = event.get("follow_ups", [])
+        elif event["type"] == "done":
+            # Don't re-emit done — router emits the unified done
+            continue
+        yield event
+
+    yield {"type": "result", "payload": result_payload}
+
+
+# ── Video pipeline (frame generation) ────────────────────────────────────────
+
+async def run_generation_pipeline_stream(
     message:              str,
     session_id:           str,
     output_dir:           str,
     conversation_context: str,
     notes_enabled:        bool,
     forced_render_mode:   Optional[str] = None,
-) -> dict:
+) -> AsyncGenerator[dict, None]:
     """
-    Runs the full generation pipeline: Planning → Frame generation → Save outputs.
+    Async generator for video (frame generation) mode.
 
-    Returns result_payload dict ready to be returned to the client.
-    The caller (route handler) is responsible for setting/resetting context vars
-    (request_log, token_usage, request_llm_service) before/after this call.
+    Yields stage events as each phase completes, then individual frame events
+    as frames are generated, then a final 'result' event with the full payload.
     """
+    t0 = time.time()
+
     # ── Stage 1: Planning ─────────────────────────────────────────────────────
+    yield {"type": "stage", "stage": "planning", "label": "Planning visual content…"}
     _log({"event": "stage_start", "stage": "planning"})
 
-    # Always run classify — it produces notes/followups cheaply.
-    # If the user forced a render mode, we override intent_type/frame_count after.
     intent_type, frame_count, notes_list, followups, _domain = await classify_intent(
         message, conversation_context
     )
@@ -470,24 +412,18 @@ async def run_generation_pipeline(
     if forced_render_mode and forced_render_mode in _FORCED_INTENT:
         intent_type = _FORCED_INTENT[forced_render_mode]
         frame_count = 4
-        logger.info("Intent forced  render_mode=%s  intent=%s  frames=%d", forced_render_mode, intent_type, frame_count)
-    else:
-        logger.info("Intent classified  intent=%s  frames=%d", intent_type, frame_count)
 
-    _log({"event": "stage_complete", "stage": "planning_classify",
-          "intent_type": intent_type, "frame_count": frame_count,
-          "forced": forced_render_mode or "auto"})
-
-    # Call 2 — intent-specific planning
     vocab_plan = await create_vocab_plan(message, conversation_context, intent_type, frame_count)
     plan = _vocab_plan_to_generation_plan(vocab_plan)
 
     _log({"event": "stage_complete", "stage": "planning",
-          "intent_type": plan.intent_type, "frame_count": plan.frame_count, "layout": plan.layout})
-    logger.info(
-        "Planning complete  session=%s  intent=%s  frames=%d  layout=%s",
-        session_id, plan.intent_type, plan.frame_count, plan.layout,
-    )
+          "intent_type": plan.intent_type, "frame_count": plan.frame_count})
+
+    yield {
+        "type": "stage_done",
+        "stage": "planning",
+        "duration_s": round(time.time() - t0, 2),
+    }
 
     captions         = [frame.caption for frame in plan.frames]
     frame_narrations = [frame.narration for frame in plan.frames]
@@ -499,32 +435,41 @@ async def run_generation_pipeline(
         narration_lines.append("")
 
     # ── Stage 2: Frame generation ─────────────────────────────────────────────
-    result_payload, ui_output_file = await _run_frame_generation(
+    yield {"type": "stage", "stage": "generating_frames", "label": "Generating frames…"}
+    t1 = time.time()
+
+    result_payload, ui_output_file, all_narrations = await _run_frame_generation_with_events(
         plan, session_id, output_dir, captions, frame_narrations,
         suggested_followups, notes,
     )
 
-    # ── Save narration (includes slide narrations from interleaving) ──────────
-    final_narrations = result_payload.get("_narrations", [])
-    if final_narrations:
-        final_captions_list = result_payload.get("captions", captions)
-        interleaved_lines: list[str] = []
-        for i, (cap, narr) in enumerate(zip(final_captions_list, final_narrations)):
-            interleaved_lines.append(f"Frame {i + 1}: {cap}")
-            interleaved_lines.append(narr)
-            interleaved_lines.append("")
-        with open(os.path.join(output_dir, "narration.txt"), "w") as f:
-            f.write("\n".join(interleaved_lines).strip() + "\n")
-    else:
-        with open(os.path.join(output_dir, "narration.txt"), "w") as f:
-            f.write("\n".join(narration_lines).strip() + "\n")
-    result_payload.pop("_narrations", None)
+    # Emit each frame as it's ready
+    for i, (img, cap) in enumerate(zip(result_payload["images"], result_payload["captions"])):
+        yield {"type": "frame", "index": i, "image": img, "caption": cap}
+
+    yield {
+        "type": "stage_done",
+        "stage": "generating_frames",
+        "duration_s": round(time.time() - t1, 2),
+    }
+
+    # ── Save narration ────────────────────────────────────────────────────────
+    final_captions = result_payload.get("captions", captions)
+    interleaved_lines: list[str] = []
+    for i, (cap, narr) in enumerate(zip(final_captions, all_narrations)):
+        interleaved_lines.append(f"Frame {i + 1}: {cap}")
+        interleaved_lines.append(narr)
+        interleaved_lines.append("")
+
+    os.makedirs(output_dir, exist_ok=True)
+    with open(os.path.join(output_dir, "narration.txt"), "w") as f:
+        f.write("\n".join(interleaved_lines).strip() + "\n")
 
     result_payload["ui_output_file"] = ui_output_file
-    return result_payload
+    yield {"type": "result", "payload": result_payload}
 
 
-async def _run_frame_generation(
+async def _run_frame_generation_with_events(
     plan:                GenerationPlan,
     session_id:          str,
     output_dir:          str,
@@ -532,21 +477,18 @@ async def _run_frame_generation(
     frame_narrations:    list[str],
     suggested_followups: list[str],
     notes:               str,
-) -> tuple[dict, Optional[str]]:
+) -> tuple[dict, Optional[str], list[str]]:
     """
-    Dispatch to the correct frame renderer: Manim (math) or SVG (everything else).
-    Returns (result_payload, ui_output_file_path).
+    Runs the frame renderer (Manim or SVG) and returns
+    (result_payload, ui_output_file, all_narrations).
     """
     accent = plan.shared_style.backgroundColor
 
     # ── Manim ─────────────────────────────────────────────────────────────────
     if plan.intent_type in MANIM_INTENT_TYPES and manim_available():
-        logger.info("Render path → manim  session=%s  frames=%d", session_id, plan.frame_count)
-        _log({"event": "stage_start", "stage": "frame_generation", "path": "manim",
-              "frame_count": plan.frame_count})
-
-        manim_dir = os.path.join(output_dir, "manim")
-        png_paths = await generate_manim_frames(plan, _MANIM_PROMPT_TEMPLATE, manim_dir)
+        _log({"event": "stage_start", "stage": "frame_generation", "path": "manim"})
+        manim_dir  = os.path.join(output_dir, "manim")
+        png_paths  = await generate_manim_frames(plan, _MANIM_PROMPT_TEMPLATE, manim_dir)
         _log({"event": "stage_complete", "stage": "frame_generation", "path": "manim"})
 
         from services.frame_generation.planner import request_log
@@ -582,27 +524,20 @@ async def _run_frame_generation(
             "ui_file_type":        "python",
             "suggested_followups": suggested_followups,
             "notes":               notes,
-            "_narrations":         all_narrations,
-        }, ui_output_file
+        }, ui_output_file, all_narrations
 
-    # ── SVG (all non-math intents) ────────────────────────────────────────────
+    # ── SVG ───────────────────────────────────────────────────────────────────
     if not svg_available():
-        logger.error("cairosvg unavailable and no fallback — session=%s", session_id)
         raise RuntimeError("SVG renderer (cairosvg) is not installed.")
 
     if plan.intent_type in MANIM_INTENT_TYPES:
         logger.warning("Manim not available — falling back to SVG  session=%s", session_id)
 
-    logger.info("Render path → svg  session=%s  frames=%d  intent=%s",
-                session_id, plan.frame_count, plan.intent_type)
-    _log({"event": "stage_start", "stage": "frame_generation", "path": "svg",
-          "frame_count": plan.frame_count})
-
+    _log({"event": "stage_start", "stage": "frame_generation", "path": "svg"})
     svg_dir    = os.path.join(output_dir, "svg")
-    frame_narrations_per_frame = [f.narration for f in plan.frames]
     frame_paths = await generate_svg_frames(
         plan, _SVG_PROMPT_TEMPLATE, svg_dir,
-        frame_narrations=frame_narrations_per_frame,
+        frame_narrations=[f.narration for f in plan.frames],
     )
     _log({"event": "stage_complete", "stage": "frame_generation", "path": "svg"})
 
@@ -630,5 +565,4 @@ async def _run_frame_generation(
         "ui_file_type":        "images",
         "suggested_followups": suggested_followups,
         "notes":               notes,
-        "_narrations":         all_narrations,
-    }, ui_output_file
+    }, ui_output_file, all_narrations

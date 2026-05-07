@@ -71,8 +71,8 @@ export default function ConversationMiniTree({ turns, onNavigate }) {
 
         {/* Dots */}
         {nodes.map(({ turn, x, y }) => {
-          const isText = turn.framesData?.render_path === 'text' || turn.render_path === 'text'
-          const fill   = isText
+          const isInteractive = turn.render_path === 'interactive' || turn.videoPhase === 'disabled'
+          const fill = isInteractive
             ? (isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.45)')
             : turn.videoPhase === 'ready'
               ? '#16a34a'
