@@ -1,4 +1,5 @@
 import { memo } from 'react'
+import PropTypes from 'prop-types'
 import { Box, Tooltip, IconButton, useTheme } from '@mui/material'
 import NotesOutlinedIcon    from '@mui/icons-material/NotesOutlined'
 import EditNoteIcon         from '@mui/icons-material/EditNote'
@@ -140,6 +141,18 @@ function StudioToolbar({
       <Tooltip title={`My Notes (${isMac ? '⇧⌘N' : 'Ctrl+Shift+N'})`}>{userNotesBtn}</Tooltip>
     </>
   )
+}
+
+StudioToolbar.propTypes = {
+  compact:          PropTypes.bool,
+  viewMode:         PropTypes.oneOf(['chat', 'learn']).isRequired,
+  onViewModeChange: PropTypes.func.isRequired,
+  notesEnabled:     PropTypes.bool.isRequired,
+  onToggleNotes:    PropTypes.func.isRequired,
+  videoEnabled:     PropTypes.bool.isRequired,
+  onToggleVideo:    PropTypes.func.isRequired,
+  userNotesOpen:    PropTypes.bool.isRequired,
+  onToggleUserNotes: PropTypes.func.isRequired,
 }
 
 export default memo(StudioToolbar)

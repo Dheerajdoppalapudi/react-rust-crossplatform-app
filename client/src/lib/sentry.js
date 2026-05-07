@@ -44,3 +44,38 @@ export async function setUser(user) {
   // user = { id, email, name } or null on logout
   Sentry.setUser(user ? { id: user.id, email: user.email } : null)
 }
+
+/**
+ * Wrap an async operation in a Sentry performance span.
+ * No-op in dev or when Sentry is not initialized.
+ *
+ * @param {string}   name - Span name shown in Sentry Performance.
+ * @param {string}   op   - Operation type: 'ui.action', 'http.client', etc.
+ * @param {Function} fn   - Async function to instrument.
+ */
+export async function withSpan(name, op, fn) {
+  if (import.meta.env.DEV || !_initialized) return fn()
+  const Sentry = await import('@sentry/react')
+  return Sentry.startSpan({ name, op }, fn)
+}
+
+/**
+ * Higher-order component that wraps a component with Sentry's React profiler.
+ * Returns the component unchanged in dev / when Sentry is not initialized.
+ *
+ * @param {React.ComponentType} Component
+ * @param {string} [name] - Optional display name override.
+ */
+export function withProfiler(Component, name) {
+  if (import.meta.env.DEV) return Component
+  // Use dynamic require pattern — @sentry/react is always in the vendor chunk.
+  // We access it synchronously here because withProfiler is called at module
+  // definition time (not inside a render), so dynamic import is not viable.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const Sentry = require('@sentry/react')
+    return Sentry.withProfiler(Component, { name: name ?? Component.displayName ?? Component.name })
+  } catch {
+    return Component
+  }
+}

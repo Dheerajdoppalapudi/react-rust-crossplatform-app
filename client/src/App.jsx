@@ -1,4 +1,4 @@
-import { useState, useMemo, createContext, useContext, useCallback, useEffect } from 'react'
+import { useState, useMemo, createContext, useContext, useCallback, useEffect, lazy, Suspense } from 'react'
 import { Routes, Route, useLocation, useNavigate, useMatch, Navigate } from 'react-router-dom'
 import { Box, ThemeProvider, CssBaseline, IconButton, Typography, useTheme, useMediaQuery } from '@mui/material'
 import MenuIcon from '@mui/icons-material/Menu'
@@ -10,11 +10,13 @@ import Footer from './components/common/Footer'
 import { BRAND } from './theme/tokens.js'
 import { STORAGE_KEYS, VALID_THEMES } from './constants/storage.js'
 import { ROUTES, studioConvUrl } from './constants/routes.js'
-import AboutUs from './pages/AboutUs'
-import Settings from './pages/Settings'
-import Studio from './pages/Studio'
-import Login from './pages/Login'
-import Register from './pages/Register'
+// Lazy-loaded pages — each page only loads when first visited.
+// This cuts the initial JS parse time significantly.
+const AboutUs  = lazy(() => import('./pages/AboutUs'))
+const Settings = lazy(() => import('./pages/Settings'))
+const Studio   = lazy(() => import('./pages/Studio'))
+const Login    = lazy(() => import('./pages/Login'))
+const Register = lazy(() => import('./pages/Register'))
 import ProtectedRoute from './components/common/ProtectedRoute'
 import ErrorBoundary from './components/error/ErrorBoundary'
 import { ToastProvider, useToast } from './contexts/ToastContext'
@@ -214,7 +216,7 @@ function AppInner() {
             {/* Route-level boundary: page crashes don't take down the sidebar.
                 Key stays constant within /studio/* so Studio never remounts on conv switch. */}
             <ErrorBoundary level="page" key={location.pathname.startsWith(ROUTES.STUDIO) ? ROUTES.STUDIO : location.pathname}>
-              <Routes>
+              <Suspense fallback={null}><Routes>
                 {/* Always public */}
                 <Route path={ROUTES.HOME}     element={<AboutUs />} />
                 <Route path={ROUTES.LOGIN}    element={
@@ -258,7 +260,7 @@ function AppInner() {
                     <Settings />
                   </ProtectedRoute>
                 } />
-              </Routes>
+              </Routes></Suspense>
             </ErrorBoundary>
           </Box>
 

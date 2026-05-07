@@ -14,13 +14,22 @@
       "Bash(mkdir -p \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/client/src/lib\")",
       "Bash(mkdir -p \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/client/src/constants\")",
       "Bash(grep -n \"SAVED_RESET\\\\|DEBOUNCE_MS\\\\|const.*=.*[0-9]\\\\{3,\\\\}\" \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/client/src/components/Studio/UserNotesPanel/index.jsx\")",
-      "Bash(grep -n \"const.*=.*[0-9]\\\\{3,\\\\}\\\\|TOAST\\\\|ms\\\\b\\\\|_MS\\\\b\" \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/client/src/contexts/ToastContext.jsx\")"
+      "Bash(grep -n \"const.*=.*[0-9]\\\\{3,\\\\}\\\\|TOAST\\\\|ms\\\\b\\\\|_MS\\\\b\" \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/client/src/contexts/ToastContext.jsx\")",
+      "Bash(grep -v \"^$\")",
+      "Bash(sort -t'│' -k2 -rn)",
+      "Bash(sort -k5 -rn)",
+      "Bash(mkdir -p \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/client/src/test/mocks\")",
+      "Bash(mkdir -p \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/client/src/components/__tests__\" \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/client/src/hooks/__tests__\")",
+      "Bash(npm test *)",
+      "Bash(node --input-type=module --experimental-vm-modules /dev/null)"
     ],
     "additionalDirectories": [
       "/tmp",
       "/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/services/interactive/prompts",
       "/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/services/interactive/prompts/catalog",
-      "/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/client/src"
+      "/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/client/src",
+      "/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/client/src/test",
+      "/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/client/src/components"
     ]
   }
 }

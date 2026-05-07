@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect, memo } from 'react'
+import PropTypes from 'prop-types'
 import {
   Box, Typography, Chip, Dialog, DialogContent, IconButton, useTheme,
 } from '@mui/material'
@@ -375,6 +376,18 @@ function SessionView({ session, videoPhase, framesData, onPauseAsk }) {
 
     </Box>
   )
+}
+
+SessionView.propTypes = {
+  session:    PropTypes.shape({
+    id:         PropTypes.string.isRequired,
+    prompt:     PropTypes.string,
+    videoPhase: PropTypes.string,
+    framesData: PropTypes.object,
+  }).isRequired,
+  videoPhase: PropTypes.string.isRequired,
+  framesData: PropTypes.object,
+  onPauseAsk: PropTypes.func.isRequired,
 }
 
 export default memo(SessionView, (prev, next) =>

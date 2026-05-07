@@ -1,6 +1,7 @@
 import { useRef, useCallback } from 'react'
 import { api } from '../services/api'
 import { createTempTurn, normalizeFramesData } from '../components/Studio/studioUtils'
+import { withSpan } from '../lib/sentry.js'
 
 // ── Shared generation utilities (C1) ─────────────────────────────────────────
 //
@@ -118,6 +119,13 @@ export function useGeneration({
   scrollToTop,
   toast,
 }) {
+  if (import.meta.env.DEV) {
+    if (!onActiveConvIdChange) console.warn('[useGeneration] onActiveConvIdChange is required')
+    if (!onConversationsRefresh) console.warn('[useGeneration] onConversationsRefresh is required')
+    if (!runVideoGenerationForTurn) console.warn('[useGeneration] runVideoGenerationForTurn is required')
+    if (!toast) console.warn('[useGeneration] toast context is required')
+  }
+
   // Monotonic counter — incremented on every new generation.  Each generation
   // captures the counter value at creation time and checks isStale() before
   // applying any async result.  This prevents a slow in-flight response from
@@ -151,6 +159,8 @@ export function useGeneration({
 
     const submittedPrompt = currentPrompt.trim()
     setPrompt('')
+
+    await withSpan('generate', 'ui.action', async () => {
 
     const thisGenId = ++generationIdRef.current
     const isStale   = () => generationIdRef.current !== thisGenId
@@ -358,6 +368,7 @@ export function useGeneration({
       clearTimeout(bt2)
       clearTurnTimers()
     }
+    }) // end withSpan
   }, [
     isAnyGenerating, lastCompletedTurnId, activeConvId, notesEnabled, videoEnabled,
     pauseContext, selectedModel, selectedRenderMode, onActiveConvIdChange,

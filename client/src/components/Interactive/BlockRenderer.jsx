@@ -1,5 +1,6 @@
-import { useEffect } from 'react'
+import { useEffect, Suspense } from 'react'
 import { Box, Stack, Skeleton, Typography, useTheme } from '@mui/material'
+import { withProfiler } from '../../lib/sentry.js'
 import MarkdownText from './MarkdownText'
 import { resolveEntity, getBlockMeta } from './registry'
 import { useSceneStore } from './useSceneStore'
@@ -24,7 +25,7 @@ function FallbackCard({ entityType }) {
   )
 }
 
-export default function BlockRenderer({ title, learningObjective, blocks = [], isLoading }) {
+function BlockRenderer({ title, learningObjective, blocks = [], isLoading }) {
   const resetScene = useSceneStore(s => s.resetScene)
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
@@ -84,11 +85,13 @@ export default function BlockRenderer({ title, learningObjective, blocks = [], i
             fallback={<FallbackCard entityType={block.entity_type} />}
           >
             <BlockWrapper copyText={copyText || null} label={label} noExpand={noExpand}>
-              <Component
-                entityId={block.id}
-                {...(block.props ?? {})}
-                html={block.html ?? null}
-              />
+              <Suspense fallback={<Skeleton variant="rectangular" height={120} sx={{ borderRadius: 2 }} />}>
+                <Component
+                  entityId={block.id}
+                  {...(block.props ?? {})}
+                  html={block.html ?? null}
+                />
+              </Suspense>
             </BlockWrapper>
           </ErrorBoundary>
         )
@@ -104,3 +107,5 @@ export default function BlockRenderer({ title, learningObjective, blocks = [], i
     </Stack>
   )
 }
+
+export default withProfiler(BlockRenderer, 'BlockRenderer')

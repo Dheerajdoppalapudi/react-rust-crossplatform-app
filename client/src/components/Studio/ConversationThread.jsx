@@ -1,5 +1,7 @@
 import { useState, memo } from 'react'
+import PropTypes from 'prop-types'
 import { Box, Typography, Button, CircularProgress, useTheme } from '@mui/material'
+import { withProfiler } from '../../lib/sentry.js'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import ErrorBoundary from '../error/ErrorBoundary'
 import SessionView from './SessionView'
@@ -150,4 +152,27 @@ const ConversationThread = memo(function ConversationThread({ turns, onPauseAsk,
   )
 })
 
-export default ConversationThread
+const turnShape = PropTypes.shape({
+  tempId:          PropTypes.string.isRequired,
+  id:              PropTypes.string,
+  prompt:          PropTypes.string.isRequired,
+  isLoading:       PropTypes.bool,
+  stage:           PropTypes.string,
+  videoPhase:      PropTypes.string,
+  render_path:     PropTypes.string,
+  title:           PropTypes.string,
+  learningObjective: PropTypes.string,
+  blocks:          PropTypes.array,
+  framesData:      PropTypes.object,
+})
+
+UserBubble.propTypes = { prompt: PropTypes.string.isRequired }
+
+ConversationThread.propTypes = {
+  turns:              PropTypes.arrayOf(turnShape).isRequired,
+  onPauseAsk:         PropTypes.func.isRequired,
+  onRetryTurn:        PropTypes.func.isRequired,
+  onRetryGeneration:  PropTypes.func.isRequired,
+}
+
+export default withProfiler(ConversationThread, 'ConversationThread')

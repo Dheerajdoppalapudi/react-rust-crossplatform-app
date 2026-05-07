@@ -1,4 +1,5 @@
 import { useState, memo } from 'react'
+import PropTypes from 'prop-types'
 import { Box, Typography, TextField, IconButton, Tooltip, Divider,
          Menu, MenuItem } from '@mui/material'
 import SendIcon from '@mui/icons-material/Send'
@@ -79,6 +80,7 @@ function PromptBar({
               <IconButton
                 size="small"
                 onClick={onClearPauseContext}
+                aria-label="Clear pause context"
                 sx={{ p: 0.25, color: theme.palette.primary.main, opacity: 0.6, flexShrink: 0, '&:hover': { opacity: 1 } }}
               >
                 <CloseIcon sx={{ fontSize: 12 }} />
@@ -346,6 +348,7 @@ function PromptBar({
                   <IconButton
                     onClick={onStop}
                     size="small"
+                    aria-label="Stop generation"
                     sx={{
                       width: 32, height: 32,
                       backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
@@ -369,6 +372,7 @@ function PromptBar({
                       onClick={onSubmit}
                       disabled={!canSend}
                       size="small"
+                      aria-label="Send message"
                       sx={{
                         width: 32, height: 32,
                         backgroundColor: canSend ? theme.palette.primary.main : (isDark ? PALETTE.darkSubsurface : PALETTE.warmSand),
@@ -389,6 +393,41 @@ function PromptBar({
       </Box>
     </Box>
   )
+}
+
+const modelShape = PropTypes.shape({
+  id:          PropTypes.string.isRequired,
+  provider:    PropTypes.string.isRequired,
+  model:       PropTypes.string.isRequired,
+  label:       PropTypes.string.isRequired,
+  short:       PropTypes.string,
+  description: PropTypes.string,
+})
+
+const renderModeShape = PropTypes.shape({
+  id:          PropTypes.string.isRequired,
+  label:       PropTypes.string.isRequired,
+  description: PropTypes.string,
+  color:       PropTypes.string,
+  bg:          PropTypes.string,
+})
+
+PromptBar.propTypes = {
+  prompt:              PropTypes.string.isRequired,
+  onPromptChange:      PropTypes.func.isRequired,
+  onSubmit:            PropTypes.func.isRequired,
+  onStop:              PropTypes.func.isRequired,
+  onKeyDown:           PropTypes.func.isRequired,
+  inputRef:            PropTypes.object.isRequired,
+  isGenerating:        PropTypes.bool.isRequired,
+  activeConversation:  PropTypes.shape({ id: PropTypes.string, intent_type: PropTypes.string }),
+  onNewConversation:   PropTypes.func.isRequired,
+  pauseContext:        PropTypes.shape({ sessionId: PropTypes.string, frameIndex: PropTypes.number, caption: PropTypes.string }),
+  onClearPauseContext: PropTypes.func.isRequired,
+  selectedModel:       modelShape.isRequired,
+  onModelChange:       PropTypes.func.isRequired,
+  selectedRenderMode:  renderModeShape,
+  onRenderModeChange:  PropTypes.func.isRequired,
 }
 
 export default memo(PromptBar)

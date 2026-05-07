@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
+import PropTypes from 'prop-types'
 import { Box, Typography, Tooltip, IconButton, Chip, CircularProgress, useTheme } from '@mui/material'
 import DownloadOutlinedIcon       from '@mui/icons-material/DownloadOutlined'
 import QuestionAnswerOutlinedIcon from '@mui/icons-material/QuestionAnswerOutlined'
@@ -285,6 +286,16 @@ function ErrorState() {
  *   frameCount  — number
  *   onFrameSync — (frameIndex: number) => void
  */
+VideoPanel.propTypes = {
+  sessionId:   PropTypes.string.isRequired,
+  videoPhase:  PropTypes.oneOf(['ready', 'error']).isRequired,
+  prompt:      PropTypes.string,
+  onPauseAsk:  PropTypes.func.isRequired,
+  captions:    PropTypes.arrayOf(PropTypes.string),
+  frameCount:  PropTypes.number,
+  onFrameSync: PropTypes.func,
+}
+
 export default function VideoPanel({ sessionId, videoPhase, prompt, onPauseAsk, captions, frameCount, onFrameSync }) {
   return (
     <>

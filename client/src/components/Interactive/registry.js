@@ -1,19 +1,25 @@
-import MermaidViewer   from './entities/MermaidViewer'
+import { lazy } from 'react'
+import SandboxedFrame  from './SandboxedFrame'
+
+// Light — loaded eagerly (small, used on nearly every session)
 import CodeWalkthrough from './entities/CodeWalkthrough'
 import StepControls    from './entities/StepControls'
-import SandboxedFrame  from './SandboxedFrame'
 import MathFormula     from './entities/MathFormula'
-import ChartViewer     from './entities/ChartViewer'
-import GraphCanvas     from './entities/GraphCanvas'
-import MoleculeViewer  from './entities/MoleculeViewer'
-import MapViewer       from './entities/MapViewer'
 import TimelineViewer  from './entities/TimelineViewer'
 import TableViewer     from './entities/TableViewer'
 import TerminalOutput  from './entities/TerminalOutput'
 import DiffViewer      from './entities/DiffViewer'
-import P5Sketch        from './entities/P5Sketch'
 import QuizBlock       from './entities/QuizBlock'
 import FlashcardDeck   from './entities/FlashcardDeck'
+
+// Heavy — lazy loaded so they only download when actually rendered.
+// mermaid ~400 KB, reactflow ~300 KB, leaflet ~280 KB, recharts ~200 KB
+const MermaidViewer  = lazy(() => import('./entities/MermaidViewer'))
+const GraphCanvas    = lazy(() => import('./entities/GraphCanvas'))
+const MoleculeViewer = lazy(() => import('./entities/MoleculeViewer'))
+const MapViewer      = lazy(() => import('./entities/MapViewer'))
+const P5Sketch       = lazy(() => import('./entities/P5Sketch'))
+const ChartViewer    = lazy(() => import('./entities/ChartViewer'))
 
 // Each entry: { component, getCopyText?, noExpand? }
 // getCopyText(props) → string | null — used by BlockWrapper's copy button
