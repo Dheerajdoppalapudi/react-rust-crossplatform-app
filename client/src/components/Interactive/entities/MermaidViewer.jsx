@@ -50,10 +50,17 @@ export default function MermaidViewer({ entityId, diagram, caption }) {
     setScale(1)
 
     mermaid.render(idRef.current, fixNewlines(diagram))
-      .then(({ svg: rendered }) => setSvg(rendered))
+      .then(({ svg: rendered }) => {
+        // Mermaid v11 may resolve with an error SVG instead of rejecting.
+        // Detect by checking for known error markers in the returned string.
+        if (!rendered || rendered.includes('Syntax error') || rendered.includes('Parse error') || rendered.includes('mermaid-error')) {
+          setError('Could not render diagram — the generated syntax had errors.')
+        } else {
+          setSvg(rendered)
+        }
+      })
       .catch(err => {
-        console.error('MermaidViewer render error:', err)
-        setError('Could not render diagram.')
+        setError('Could not render diagram — the generated syntax had errors.')
       })
   }, [diagram, isDark])
 

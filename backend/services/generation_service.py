@@ -353,6 +353,7 @@ async def run_text_pipeline_stream(
     from services.interactive.interactive_service import run_interactive_pipeline
 
     yield {"type": "stage", "stage": "designing", "label": "Designing the lesson…"}
+    _t_designing = time.time()
 
     result_payload = {
         "session_id":  session_id,
@@ -378,6 +379,7 @@ async def run_text_pipeline_stream(
             continue
         yield event
 
+    yield {"type": "stage_done", "stage": "designing", "duration_s": round(time.time() - _t_designing, 2)}
     yield {"type": "result", "payload": result_payload}
 
 

@@ -55,7 +55,7 @@ class TavilyProvider:
                 self._client.search,
                 query=query,
                 max_results=max_results,
-                include_raw_content=False,
+                include_raw_content=True,
                 search_depth="advanced",
             )
             results = []

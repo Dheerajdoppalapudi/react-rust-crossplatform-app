@@ -7,15 +7,16 @@ Flow:
   3. Fetch extra URL content via Tavily extract (user-pasted URLs + uploads)
   4. Rank + deduplicate sources
   5. Optional round 2 if significant gaps detected
-  6. Stream synthesis tokens                                   (Haiku → Sonnet later)
+  6. Stream synthesis tokens
   7. Yield synthesis_done with synthesised text + source list
 """
 
 import asyncio
 import logging
 import time
-from dataclasses import asdict
-from typing import AsyncGenerator, Optional
+from pathlib import Path
+from typing import AsyncGenerator
+from urllib.parse import urlparse
 
 from core.config import (
     DEEP_SEARCH_ROUNDS,
@@ -31,6 +32,30 @@ from services.research.search_provider import SearchResult, tavily
 from services.research.source_processor import rank_and_deduplicate, truncate_content
 
 logger = logging.getLogger(__name__)
+
+
+def _source_summary(s: SearchResult) -> dict:
+    """Compact dict for the frontend (no full content)."""
+    return {
+        "title":          s.title,
+        "url":            s.url,
+        "snippet":        s.snippet[:300],
+        "domain":         s.domain,
+        "published_date": s.published_date,
+    }
+
+
+def _source_full(s: SearchResult) -> dict:
+    """Full dict for DB storage — includes content for follow-up reuse."""
+    return {
+        "title":          s.title,
+        "url":            s.url,
+        "snippet":        s.snippet,
+        "content":        s.content,
+        "domain":         s.domain,
+        "score":          s.score,
+        "published_date": s.published_date,
+    }
 
 
 async def run_deep_research(
@@ -57,6 +82,99 @@ async def run_deep_research(
     except Exception as e:
         logger.error("deep_research failed  query=%r  error=%s", query[:80], e, exc_info=True)
         yield {"type": "error", "message": "Research failed. Please try again."}
+
+
+async def run_followup_research(
+    query: str,
+    prior_sources: list[dict],
+    conversation_context: str,
+    llm_service: LLMService,
+) -> AsyncGenerator[dict, None]:
+    """
+    Lightweight research for follow-up questions.
+
+    Runs 1 targeted Tavily search and merges results with prior sources.
+    Much faster than full research (~4s vs ~15s) while still getting fresh
+    information if the follow-up asks about something new.
+    """
+    t0 = time.time()
+
+    try:
+        async for event in _followup_loop(query, prior_sources, conversation_context, llm_service, t0):
+            yield event
+    except Exception as e:
+        logger.error("followup_research failed  query=%r  error=%s", query[:80], e, exc_info=True)
+        yield {"type": "error", "message": "Research failed. Please try again."}
+
+
+async def _followup_loop(
+    query: str,
+    prior_sources: list[dict],
+    conversation_context: str,
+    llm_service: LLMService,
+    t0: float,
+) -> AsyncGenerator[dict, None]:
+    # ── Stage: targeted search ────────────────────────────────────────────────
+    yield {"type": "stage", "stage": "searching", "label": "Searching for new information…", "queries": [query]}
+    t_search = time.time()
+
+    new_results = await tavily.search(query, max_results=5)
+
+    prior_urls = {s["url"] for s in prior_sources}
+    new_only   = [r for r in new_results if r.url not in prior_urls]
+
+    for r in new_only:
+        yield {"type": "source", "source": _source_summary(r)}
+
+    yield {"type": "stage_done", "stage": "searching", "duration_s": round(time.time() - t_search, 2)}
+
+    # ── Stage: reading — merge prior + new, deduplicate ───────────────────────
+    # Reconstruct SearchResult objects from stored prior source dicts
+    prior_sr: list[SearchResult] = []
+    for s in prior_sources:
+        prior_sr.append(SearchResult(
+            title=s.get("title", ""),
+            url=s.get("url", ""),
+            snippet=s.get("snippet", ""),
+            content=s.get("content", "") or s.get("snippet", ""),
+            domain=s.get("domain", ""),
+            score=s.get("score", 0.5),
+            published_date=s.get("published_date"),
+        ))
+
+    merged = prior_sr + new_only
+    merged = merged[:DEEP_SOURCES_IN_ANSWER]
+
+    n_merged = len(merged)
+    yield {"type": "stage", "stage": "reading", "label": f"Reading {n_merged} sources…"}
+    t_read = time.time()
+
+    for s in merged:
+        s.content = truncate_content(s.content or s.snippet)
+
+    yield {"type": "stage_done", "stage": "reading", "duration_s": round(time.time() - t_read, 2)}
+
+    # ── Stage: synthesising ───────────────────────────────────────────────────
+    yield {"type": "stage", "stage": "synthesising", "label": "Synthesising answer…"}
+    t_synth = time.time()
+
+    full_text = ""
+    async for token in synthesiser.stream(query, merged, llm_service, conversation_context):
+        yield {"type": "token", "text": token}
+        full_text += token
+
+    yield {"type": "stage_done", "stage": "synthesising", "duration_s": round(time.time() - t_synth, 2)}
+    yield {
+        "type":             "synthesis_done",
+        "synthesized_text": full_text,
+        "sources":          [_source_summary(s) for s in merged],
+        "sources_full":     [_source_full(s) for s in merged],
+    }
+
+    logger.info(
+        "followup_research_complete  query=%r  prior=%d  new=%d  elapsed_s=%.1f",
+        query[:80], len(prior_sr), len(new_only), time.time() - t0,
+    )
 
 
 async def _research_loop(
@@ -90,63 +208,50 @@ async def _research_loop(
 
         n_queries = len(queries_used)
         yield {
-            "type": "stage",
-            "stage": "searching",
-            "label": f"Searching {n_queries} {'query' if n_queries == 1 else 'queries'}…",
-            "round": round_n + 1,
+            "type":    "stage",
+            "stage":   "searching",
+            "label":   f"Searching {n_queries} {'query' if n_queries == 1 else 'queries'}…",
+            "round":   round_n + 1,
             "queries": queries_used,
         }
         t2 = time.time()
 
-        search_tasks = [tavily.search(q, max_results=5) for q in queries_used]
-        batches = await asyncio.gather(*search_tasks)
+        batches = await asyncio.gather(*[tavily.search(q, max_results=5) for q in queries_used])
 
         round_results: list[SearchResult] = []
         for batch in batches:
             round_results.extend(batch)
 
-        # Deduplicate within this round before emitting
         seen = {r.url for r in all_results}
         new_results = [r for r in round_results if r.url not in seen]
         all_results.extend(new_results)
 
         for r in new_results:
-            yield {
-                "type": "source",
-                "source": {
-                    "title":  r.title,
-                    "url":    r.url,
-                    "snippet": r.snippet[:300],
-                    "domain": r.domain,
-                    "score":  r.score,
-                },
-            }
+            yield {"type": "source", "source": _source_summary(r)}
 
         yield {
-            "type": "stage_done",
-            "stage": "searching",
-            "duration_s": round(time.time() - t2, 2),
+            "type":          "stage_done",
+            "stage":         "searching",
+            "duration_s":    round(time.time() - t2, 2),
             "sources_found": len(new_results),
         }
 
-        # Check for knowledge gaps — if results are thin and we have rounds left,
-        # generate follow-up queries on the weakest sub-questions
         if round_n < DEEP_SEARCH_ROUNDS - 1 and len(all_results) < 5:
             queries_used = [f"{q} explained" for q in plan.sub_questions[:2]]
         else:
-            break  # Sufficient results or last round
+            break
 
     # ── Stage 3: Read sources ─────────────────────────────────────────────────
     ranked = rank_and_deduplicate(all_results, DEEP_SEARCH_SOURCES)
 
-    # Fetch extra URL content in parallel (user-pasted URLs)
-    url_sources: list[SearchResult] = []
+    # Fetch extra URL content + uploaded file text concurrently
+    url_sources:  list[SearchResult] = []
+    file_sources: list[SearchResult] = []
+
     if extra_urls:
-        yield {"type": "stage", "stage": "reading", "label": f"Reading {len(extra_urls)} provided URL(s)…"}
         url_contents = await asyncio.gather(*[tavily.extract(u) for u in extra_urls])
         for url, content in zip(extra_urls, url_contents):
             if content:
-                from urllib.parse import urlparse
                 domain = urlparse(url).netloc.lstrip("www.")
                 url_sources.append(SearchResult(
                     title=f"User-provided: {domain}",
@@ -154,12 +259,9 @@ async def _research_loop(
                     content=content, domain=domain, score=1.0,
                 ))
 
-    # Extract uploaded file text as sources
-    file_sources: list[SearchResult] = []
     for fp in file_paths:
         text = extract_text(fp)
         if text:
-            from pathlib import Path
             name = Path(fp).name
             file_sources.append(SearchResult(
                 title=f"Uploaded: {name}",
@@ -167,40 +269,34 @@ async def _research_loop(
                 content=text, domain="uploaded_file", score=1.0,
             ))
 
-    # Combine: user-provided sources first (highest priority), then web results
-    all_final = file_sources + url_sources + ranked
+    # Combine: uploaded files + user URLs first (highest priority), then web results
+    all_final   = file_sources + url_sources + ranked
     final_sources = all_final[:DEEP_SOURCES_IN_ANSWER]
 
     n_reading = len(final_sources)
     yield {"type": "stage", "stage": "reading", "label": f"Reading {n_reading} sources…"}
+    t_read = time.time()
 
-    # Truncate content to token budget per source
     for s in final_sources:
         s.content = truncate_content(s.content or s.snippet)
 
-    yield {"type": "stage_done", "stage": "reading", "duration_s": 0.0}
+    yield {"type": "stage_done", "stage": "reading", "duration_s": round(time.time() - t_read, 2)}
 
     # ── Stage 4: Synthesise ───────────────────────────────────────────────────
     yield {"type": "stage", "stage": "synthesising", "label": "Synthesising answer…"}
+    t_synth = time.time()
 
     full_text = ""
     async for token in synthesiser.stream(query, final_sources, llm_service, conversation_context):
         yield {"type": "token", "text": token}
         full_text += token
 
+    yield {"type": "stage_done", "stage": "synthesising", "duration_s": round(time.time() - t_synth, 2)}
     yield {
-        "type": "synthesis_done",
+        "type":             "synthesis_done",
         "synthesized_text": full_text,
-        "sources": [
-            {
-                "title":          s.title,
-                "url":            s.url,
-                "snippet":        s.snippet[:300],
-                "domain":         s.domain,
-                "published_date": s.published_date,
-            }
-            for s in final_sources
-        ],
+        "sources":          [_source_summary(s) for s in final_sources],
+        "sources_full":     [_source_full(s) for s in final_sources],
     }
 
     logger.info(

@@ -168,7 +168,7 @@ function QueryItem({ query, idx, isDark }) {
   return (
     <Box sx={{
       display: 'flex', alignItems: 'center', gap: 1,
-      py: 0.45,
+      py: 0.45, minWidth: 0,
       animation: `${fadeIn} 0.25s ease both`,
       animationDelay: `${idx * 0.06}s`,
     }}>
@@ -180,6 +180,8 @@ function QueryItem({ query, idx, isDark }) {
         fontSize: 12.5,
         color: isDark ? 'rgba(255,255,255,0.48)' : 'rgba(0,0,0,0.45)',
         lineHeight: 1.4,
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        minWidth: 0,
       }}>
         {query}
       </Typography>
@@ -244,25 +246,20 @@ function StageRow({ stage, sources, isLast, compact, isDark }) {
 
   const lineColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)'
 
-  // Sub-items: queries only on searching stage, sources on searching or reading
   const queries      = stage.queries ?? []
   const stageSources = (stage.id === 'searching' || stage.id === 'reading') ? sources : []
   const hasSubItems  = queries.length > 0 || stageSources.length > 0
 
-  // Auto-collapse when stage completes; user can still manually toggle
   const [expanded, setExpanded] = useState(stage.status !== 'done')
   useEffect(() => {
     if (stage.status === 'done') setExpanded(false)
   }, [stage.status])
 
-  // Expand-all for overflow sources
   const [showAll, setShowAll] = useState(false)
 
-  // Visual generation skeleton cards
   const showFrameSkeleton = (stage.id === 'generating_frames' || stage.id === 'generating' || stage.id === 'rendering' || stage.id === 'frames') && isActive
   const showVideoSkeleton = stage.id === 'video' && isActive
   const showBlockSkeleton = stage.id === 'designing' && isActive
-  const hasSkeletons = showFrameSkeleton || showVideoSkeleton || showBlockSkeleton
 
   return (
     <Box sx={{
@@ -283,15 +280,12 @@ function StageRow({ stage, sources, isLast, compact, isDark }) {
           }} />
         </Box>
         {!isLast && (
-          <Box sx={{
-            width: '1px', flex: 1, minHeight: 10,
-            backgroundColor: lineColor,
-          }} />
+          <Box sx={{ width: '1px', flex: 1, minHeight: 10, backgroundColor: lineColor }} />
         )}
       </Box>
 
       {/* Content area */}
-      <Box sx={{ flex: 1, pb: isLast ? 0 : (compact ? 0.5 : 0.75), pl: 0.5 }}>
+      <Box sx={{ flex: 1, minWidth: 0, pb: isLast ? 0 : (compact ? 0.5 : 0.75), pl: 0.5 }}>
         {/* Stage header */}
         <Box
           onClick={hasSubItems ? () => setExpanded(v => !v) : undefined}
@@ -304,74 +298,56 @@ function StageRow({ stage, sources, isLast, compact, isDark }) {
           }}
         >
           <Typography sx={{
-            flex: 1,
-            fontSize: 13,
-            fontWeight: 400,
+            flex: 1, minWidth: 0,
+            fontSize: 13, fontWeight: 400,
             color: textColor,
             lineHeight: 1.4,
             transition: 'color 0.3s',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           }}>
             {stage.label}
           </Typography>
 
           {isDone && stage.duration_s != null && (
             <Typography sx={{
-              fontSize: 11,
+              fontSize: 11, flexShrink: 0,
               color: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)',
-              flexShrink: 0, mr: hasSubItems ? 0.25 : 0,
+              mr: hasSubItems ? 0.25 : 0,
             }}>
               {stage.duration_s}s
             </Typography>
           )}
 
           {hasSubItems && (
-            <Box sx={{
-              display: 'flex', alignItems: 'center',
-              color: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)',
-            }}>
-              {expanded
-                ? <KeyboardArrowUpIcon sx={{ fontSize: 14 }} />
-                : <KeyboardArrowDownIcon sx={{ fontSize: 14 }} />
-              }
+            <Box sx={{ display: 'flex', alignItems: 'center', color: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)' }}>
+              {expanded ? <KeyboardArrowUpIcon sx={{ fontSize: 14 }} /> : <KeyboardArrowDownIcon sx={{ fontSize: 14 }} />}
             </Box>
           )}
         </Box>
 
-        {/* Skeleton previews (visual generation) */}
+        {/* Skeleton previews (live only) */}
         {showFrameSkeleton && <FrameSkeletonCards isDark={isDark} />}
         {showVideoSkeleton && <VideoSkeletonCard isDark={isDark} />}
         {showBlockSkeleton && <BlockSkeletonPreview isDark={isDark} />}
 
-        {/* Research sub-items */}
+        {/* Research sub-items (live only) */}
         {hasSubItems && (
           <Collapse in={expanded} timeout={180}>
-            <Box sx={{
-              mt: 0.5,
-              mb: 0.75,
-              pl: 1.25,
-              borderLeft: `1.5px solid ${lineColor}`,
-              ml: 0.25,
-            }}>
+            <Box sx={{ mt: 0.5, mb: 0.75, pl: 1.25, borderLeft: `1.5px solid ${lineColor}`, ml: 0.25, overflow: 'hidden' }}>
               {queries.map((q, i) => <QueryItem key={i} query={q} idx={i} isDark={isDark} />)}
-              {queries.length > 0 && stageSources.length > 0 && (
-                <Box sx={{ height: 6 }} />
-              )}
+              {queries.length > 0 && stageSources.length > 0 && <Box sx={{ height: 6 }} />}
               {(showAll ? stageSources : stageSources.slice(0, MAX_SHOWN_SOURCES)).map((s, i) => (
                 <SourceItem key={s.url ?? i} source={s} idx={i} isDark={isDark} />
               ))}
               {!showAll && stageSources.length > MAX_SHOWN_SOURCES && (
-                <Box
-                  component="button"
-                  onClick={() => setShowAll(true)}
-                  sx={{
-                    fontSize: 12, mt: 0.5, pl: 0.25,
-                    color: isDark ? 'rgba(255,255,255,0.30)' : 'rgba(0,0,0,0.30)',
-                    background: 'none', border: 'none', cursor: 'pointer',
-                    fontFamily: 'inherit', p: 0,
-                    '&:hover': { color: isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.55)' },
-                    transition: 'color 0.15s',
-                  }}
-                >
+                <Box component="button" onClick={() => setShowAll(true)} sx={{
+                  fontSize: 12, mt: 0.5, pl: 0.25,
+                  color: isDark ? 'rgba(255,255,255,0.30)' : 'rgba(0,0,0,0.30)',
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  fontFamily: 'inherit', p: 0,
+                  '&:hover': { color: isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.55)' },
+                  transition: 'color 0.15s',
+                }}>
                   +{stageSources.length - MAX_SHOWN_SOURCES} more
                 </Box>
               )}

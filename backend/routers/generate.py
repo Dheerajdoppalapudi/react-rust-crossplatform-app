@@ -59,6 +59,7 @@ from services.generation_service import (
     count_llm_calls,
 )
 from services.llm_service import LLMService, OpenAIProvider, ClaudeProvider
+from services.research.research_service import run_deep_research, run_followup_research
 from dependencies.auth import get_current_user
 
 logger = logging.getLogger(__name__)
@@ -225,6 +226,28 @@ async def _generate_stream(p: dict):
     usage_token  = token_usage.set(usage_acc)
     svc_token    = request_llm_service.set(LLMService(provider=llm_provider))
 
+    # Accumulate stages as events flow — saved to DB at the end for persistence.
+    stages_log: list[dict] = []
+
+    def _apply_stage_log(event: dict) -> None:
+        if event["type"] == "stage":
+            existing = next((s for s in stages_log if s["id"] == event["stage"]), None)
+            if existing:
+                existing["status"] = "active"
+                existing["label"]  = event.get("label", existing["label"])
+            else:
+                stages_log.append({
+                    "id":     event["stage"],
+                    "label":  event.get("label", event["stage"]),
+                    "status": "active",
+                })
+        elif event["type"] == "stage_done":
+            for s in stages_log:
+                if s["id"] == event["stage"]:
+                    s["status"]     = "done"
+                    s["duration_s"] = event.get("duration_s")
+                    break
+
     _log({"event": "request_received", "prompt": message,
           "session_id": session_id, "model": model_name,
           "research_mode": research_mode, "video_enabled": video_enabled})
@@ -242,34 +265,55 @@ async def _generate_stream(p: dict):
 
     try:
         effective_message = message
-        sources: list     = []
+        sources:      list = []
+        sources_full: list = []
 
         # ── DEEP RESEARCH PHASE ───────────────────────────────────────────────
         if research_mode == "deep_research":
-            from services.research.research_service import run_deep_research
             from services.research.file_extractor import extract_urls_from_text
 
-            file_paths = _resolve_file_ids(uploaded_file_ids, current_user.id)
-            extra_urls = extract_urls_from_text(message)
-            # Strip URLs from message so they don't confuse the LLM
+            file_paths    = _resolve_file_ids(uploaded_file_ids, current_user.id)
+            extra_urls    = extract_urls_from_text(message)
             clean_message = _strip_urls(message)
+            llm_svc       = request_llm_service.get()
 
-            llm_svc = request_llm_service.get()
+            # Load prior session's full sources for follow-up reuse
+            prior_sources_full: list = []
+            if parent_session_id:
+                with get_db() as conn:
+                    row = conn.execute(
+                        "SELECT sources_json FROM sessions WHERE id = ? AND user_id = ?",
+                        (parent_session_id, current_user.id),
+                    ).fetchone()
+                if row and row["sources_json"]:
+                    prior_sources_full = json.loads(row["sources_json"])
 
-            async for event in run_deep_research(
-                query=clean_message,
-                conversation_context=conversation_context,
-                file_paths=file_paths,
-                extra_urls=extra_urls,
-                llm_service=llm_svc,
-            ):
-                # Drain any heartbeats while yielding research events
+            # Choose pipeline: follow-up (prior sources exist) vs full research
+            if prior_sources_full:
+                pipeline_gen = run_followup_research(
+                    query=clean_message,
+                    prior_sources=prior_sources_full,
+                    conversation_context=conversation_context,
+                    llm_service=llm_svc,
+                )
+            else:
+                pipeline_gen = run_deep_research(
+                    query=clean_message,
+                    conversation_context=conversation_context,
+                    file_paths=file_paths,
+                    extra_urls=extra_urls,
+                    llm_service=llm_svc,
+                )
+
+            async for event in pipeline_gen:
                 while not heartbeat_queue.empty():
                     yield _sse(await heartbeat_queue.get())
-                yield _sse(event)
+                _apply_stage_log(event)
                 if event["type"] == "synthesis_done":
+                    sources_full      = event.pop("sources_full", [])
                     effective_message = event["synthesized_text"]
                     sources           = event["sources"]
+                yield _sse(event)
 
         # ── VISUAL GENERATION PHASE ───────────────────────────────────────────
         result_payload: dict = {}
@@ -294,6 +338,7 @@ async def _generate_stream(p: dict):
         async for event in pipeline:
             while not heartbeat_queue.empty():
                 yield _sse(await heartbeat_queue.get())
+            _apply_stage_log(event)
             if event["type"] == "result":
                 result_payload = event["payload"]
             else:
@@ -314,6 +359,12 @@ async def _generate_stream(p: dict):
 
         await asyncio.to_thread(_write_activity_log, output_dir, lifecycle_log)
 
+        # Ensure no stage is left active before persisting — any stage that didn't
+        # receive an explicit stage_done is finalized here so reloads show correctly.
+        for s in stages_log:
+            if s.get("status") == "active":
+                s["status"] = "done"
+
         # Persist session
         update_session(
             session_id,
@@ -329,7 +380,8 @@ async def _generate_stream(p: dict):
             total_tokens=final_usage.get("total_tokens", 0),
             model_name=model_name,
             research_mode=research_mode,
-            sources_json=json.dumps(sources) if sources else None,
+            sources_json=json.dumps(sources_full) if sources_full else (json.dumps(sources) if sources else None),
+            stages_json=json.dumps(stages_log) if stages_log else None,
         )
 
         done_event = {

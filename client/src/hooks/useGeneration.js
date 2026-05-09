@@ -21,6 +21,12 @@ function _applyStageDone(stages, event) {
   )
 }
 
+// Mark every still-active stage as done — called defensively on stream completion
+// so any stage that never received stage_done (backend bug / missing event) is finalized.
+function _finalizeAllStages(stages) {
+  return stages.map(s => s.status === 'active' ? { ...s, status: 'done' } : s)
+}
+
 // ── Hook ─────────────────────────────────────────────────────────────────────
 
 export function useGeneration({
@@ -157,24 +163,25 @@ export function useGeneration({
               if (isFirstTurn) {
                 firstTurnStagingRef.current.stages = _applyStage(firstTurnStagingRef.current.stages, event)
                 setBootstrap(b => b ? { ...b, stage: event.stage, stages: firstTurnStagingRef.current.stages } : b)
-              } else {
-                setTurns(prev => prev.map(t => t.tempId === tempId
-                  ? { ...t, stages: _applyStage(t.stages ?? [], event) }
-                  : t
-                ))
               }
+              // Always update turns too — no-op before meta (turn doesn't exist yet),
+              // correctly updates the turn after meta for stages like 'designing'.
+              setTurns(prev => prev.map(t => t.tempId === tempId
+                ? { ...t, stages: _applyStage(t.stages ?? [], event) }
+                : t
+              ))
               break
             }
             case 'stage_done': {
               if (isFirstTurn) {
                 firstTurnStagingRef.current.stages = _applyStageDone(firstTurnStagingRef.current.stages, event)
                 setBootstrap(b => b ? { ...b, stages: firstTurnStagingRef.current.stages } : b)
-              } else {
-                setTurns(prev => prev.map(t => t.tempId === tempId
-                  ? { ...t, stages: _applyStageDone(t.stages ?? [], event) }
-                  : t
-                ))
               }
+              // Always update turns too.
+              setTurns(prev => prev.map(t => t.tempId === tempId
+                ? { ...t, stages: _applyStageDone(t.stages ?? [], event) }
+                : t
+              ))
               break
             }
             case 'source': {
@@ -258,6 +265,18 @@ export function useGeneration({
             case 'done': {
               resolvedConvId.current = event.conversation_id ?? resolvedConvId.current
               donePayload.current    = event
+              // For first-turn: the ref has the complete stages list (including stages added
+              // after meta, like 'designing'). Use it directly so nothing is lost.
+              // For follow-up: turns state has everything; just finalize any stragglers.
+              if (isFirstTurn) {
+                firstTurnStagingRef.current.stages = _finalizeAllStages(firstTurnStagingRef.current.stages)
+              }
+              setTurns(prev => prev.map(t => t.tempId === tempId
+                ? { ...t, stages: isFirstTurn
+                    ? firstTurnStagingRef.current.stages
+                    : _finalizeAllStages(t.stages ?? []) }
+                : t
+              ))
               break
             }
             case 'error': {
@@ -469,6 +488,10 @@ export function useGeneration({
               break
             case 'done':
               donePayload.current = event
+              setTurns(prev => prev.map(t => t.tempId === tempId
+                ? { ...t, stages: _finalizeAllStages(t.stages ?? []) }
+                : t
+              ))
               break
             case 'error':
               toast.error(event.message || 'Generation failed. Please try again.')
@@ -559,10 +582,16 @@ export function useGeneration({
         (event) => {
           switch (event.type) {
             case 'stage':
-              setTurns(prev => prev.map(t => t.tempId === turn.tempId ? _withStage(t, event) : t))
+              setTurns(prev => prev.map(t => t.tempId === turn.tempId
+                ? { ...t, stages: _applyStage(t.stages ?? [], event) }
+                : t
+              ))
               break
             case 'stage_done':
-              setTurns(prev => prev.map(t => t.tempId === turn.tempId ? _withStageDone(t, event) : t))
+              setTurns(prev => prev.map(t => t.tempId === turn.tempId
+                ? { ...t, stages: _applyStageDone(t.stages ?? [], event) }
+                : t
+              ))
               break
             case 'meta':
               setTurns(prev => prev.map(t => t.tempId === turn.tempId ? {
@@ -579,6 +608,10 @@ export function useGeneration({
               break
             case 'done':
               donePayload.current = event
+              setTurns(prev => prev.map(t => t.tempId === turn.tempId
+                ? { ...t, stages: _finalizeAllStages(t.stages ?? []) }
+                : t
+              ))
               break
             case 'error':
               toast.error(event.message || 'Generation failed. Please try again.')

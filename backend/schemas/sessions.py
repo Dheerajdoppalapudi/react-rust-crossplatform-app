@@ -31,6 +31,8 @@ class SessionTurn(BaseModel):
     turn_index:         int
     parent_session_id:  Optional[str] = None
     parent_frame_index: Optional[int] = None
+    stages_json:        Optional[str] = None
+    sources_json:       Optional[str] = None
 
 
 class ConversationSummary(BaseModel):

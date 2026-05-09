@@ -7,7 +7,7 @@ Citation format: inline [1], [2], [3] matching the source index in the evidence 
 
 import asyncio
 import logging
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 
 from services.research.search_provider import SearchResult
 from services.research.source_processor import build_evidence_table
@@ -72,9 +72,12 @@ async def stream(
 
 
 async def _stream_anthropic(llm_service: LLMService, user_msg: str) -> AsyncGenerator[str, None]:
-    """Stream tokens directly from the Anthropic client if available."""
+    """
+    Real token-by-token streaming via asyncio.Queue bridge.
+    The sync Anthropic stream runs in a thread and puts tokens onto a queue;
+    the async generator drains the queue so tokens reach the caller as they arrive.
+    """
     provider = llm_service.provider
-    # Only attempt if the underlying provider is Anthropic
     if not hasattr(provider, "_client") or provider.__class__.__name__ != "ClaudeProvider":
         raise NotImplementedError("streaming only implemented for ClaudeProvider")
 
@@ -82,19 +85,29 @@ async def _stream_anthropic(llm_service: LLMService, user_msg: str) -> AsyncGene
 
     client: anthropic.Anthropic = provider._client
     model = getattr(provider, "model", "claude-haiku-4-5-20251001")
+    loop  = asyncio.get_event_loop()
+    queue: asyncio.Queue[Optional[str]] = asyncio.Queue()
 
     def _run_stream():
-        chunks = []
-        with client.messages.stream(
-            model=model,
-            max_tokens=4096,
-            system=_SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": user_msg}],
-        ) as stream:
-            for text in stream.text_stream:
-                chunks.append(text)
-        return chunks
+        try:
+            with client.messages.stream(
+                model=model,
+                max_tokens=4096,
+                system=_SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": user_msg}],
+            ) as s:
+                for text in s.text_stream:
+                    loop.call_soon_threadsafe(queue.put_nowait, text)
+        except Exception as exc:
+            loop.call_soon_threadsafe(queue.put_nowait, exc)
+        finally:
+            loop.call_soon_threadsafe(queue.put_nowait, None)  # sentinel
 
-    tokens = await asyncio.to_thread(_run_stream)
-    for token in tokens:
-        yield token
+    asyncio.create_task(asyncio.to_thread(_run_stream))
+    while True:
+        item = await queue.get()
+        if item is None:
+            break
+        if isinstance(item, Exception):
+            raise item
+        yield item

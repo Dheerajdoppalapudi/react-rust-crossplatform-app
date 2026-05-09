@@ -41,6 +41,7 @@ _ALLOWED_SESSION_COLUMNS: frozenset[str] = frozenset({
     "merged_video_path",
     "research_mode",
     "sources_json",
+    "stages_json",
 })
 
 
@@ -180,6 +181,7 @@ def init_db() -> None:
             (11, "SELECT 1"),  # previously used for a different column
             (12, "ALTER TABLE sessions ADD COLUMN research_mode TEXT DEFAULT 'instant'"),
             (13, "ALTER TABLE sessions ADD COLUMN sources_json TEXT"),
+            (14, "ALTER TABLE sessions ADD COLUMN stages_json TEXT"),
         ]
 
         current = _current_schema_version(conn)

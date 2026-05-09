@@ -83,6 +83,9 @@ export function useConversation({
             : (t.video_path ? 'ready' : (t.status === 'error' ? 'error' : 'generating')),
         parentSessionId:  t.parent_session_id  ?? null,
         parentFrameIndex: t.parent_frame_index ?? null,
+        // Finalize any stage left active in DB (e.g. from sessions before backend fix).
+        stages:  t.stages_json  ? JSON.parse(t.stages_json).map(s => s.status === 'active' ? { ...s, status: 'done' } : s)  : [],
+        sources: t.sources_json ? JSON.parse(t.sources_json) : [],
         // Interactive turns: blocks populated after getFramesMeta resolves.
         ...(t.render_path === 'interactive' && {
           title:     '',
