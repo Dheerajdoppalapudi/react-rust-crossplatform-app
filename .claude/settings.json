@@ -26,7 +26,8 @@
       "Bash(mkdir -p \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/services/research\" && echo \"dir created\")",
       "Bash(rm \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/client/src/pages/Product.jsx\")",
       "Bash(rm \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/client/src/components/product/ChatWindow.jsx\" \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/client/src/components/product/ChatMessage.jsx\" \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/client/src/components/product/ChatInput.jsx\" \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/client/src/components/product/ChatEmptyState.jsx\")",
-      "Bash(rmdir \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/client/src/components/product/\")"
+      "Bash(rmdir \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/client/src/components/product/\")",
+      "Bash(python -c ' *)"
     ],
     "additionalDirectories": [
       "/tmp",

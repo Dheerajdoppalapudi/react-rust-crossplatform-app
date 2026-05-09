@@ -176,8 +176,10 @@ def init_db() -> None:
             (7,  "SELECT 1"),  # user_id on sessions
             (8,  "SELECT 1"),  # merged_video_path, user_id, starred, deleted_at on conversations
             (9,  "SELECT 1"),  # password_hash, auth_provider on users
-            (10, "ALTER TABLE sessions ADD COLUMN research_mode TEXT DEFAULT 'instant'"),
-            (11, "ALTER TABLE sessions ADD COLUMN sources_json TEXT"),
+            (10, "SELECT 1"),  # previously used for a different column
+            (11, "SELECT 1"),  # previously used for a different column
+            (12, "ALTER TABLE sessions ADD COLUMN research_mode TEXT DEFAULT 'instant'"),
+            (13, "ALTER TABLE sessions ADD COLUMN sources_json TEXT"),
         ]
 
         current = _current_schema_version(conn)

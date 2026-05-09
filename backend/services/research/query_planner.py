@@ -1,6 +1,7 @@
 """
 Query decomposition — breaks a user query into sub-questions and search strings.
-Uses Haiku for speed; output feeds the search orchestrator.
+Always uses Haiku regardless of the user's chosen model — this is a cheap
+600-token JSON task; no need to spend Sonnet tokens on it.
 """
 
 import asyncio
@@ -8,9 +9,12 @@ import logging
 from dataclasses import dataclass, field
 
 from services.frame_generation.planner import _extract_json
-from services.llm_service import LLMService
+from services.llm_service import LLMService, ClaudeProvider
 
 logger = logging.getLogger(__name__)
+
+# Dedicated cheap service for planning — always Haiku, never the user's model.
+_haiku_service = LLMService(provider=ClaudeProvider(model="claude-haiku-4-5-20251001"))
 
 _SYSTEM_PROMPT = """You are a research planning assistant. Given a user question, produce a JSON research plan.
 
@@ -42,7 +46,7 @@ class ResearchPlan:
 async def decompose(
     query: str,
     conversation_context: str,
-    llm_service: LLMService,
+    llm_service: LLMService = None,  # kept for API compatibility; planning always uses Haiku
 ) -> ResearchPlan:
     """
     Decompose the query into a research plan via Haiku LLM call.
@@ -53,7 +57,7 @@ async def decompose(
 
     try:
         raw, _ = await asyncio.to_thread(
-            llm_service.make_system_user_request,
+            _haiku_service.make_system_user_request,
             _SYSTEM_PROMPT,
             user_msg,
             max_tokens=600,

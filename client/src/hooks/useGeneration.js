@@ -5,24 +5,20 @@ import { withSpan } from '../lib/sentry.js'
 
 // ── Stage array helpers ───────────────────────────────────────────────────────
 
-function _withStage(turn, event) {
-  const stages = turn.stages ?? []
-  const exists  = stages.find(s => s.id === event.stage)
-  return {
-    ...turn,
-    stages: exists
-      ? stages.map(s => s.id === event.stage ? { ...s, status: 'active', label: event.label ?? s.label } : s)
-      : [...stages, { id: event.stage, label: event.label ?? event.stage, status: 'active' }],
-  }
+function _applyStage(stages, event) {
+  const exists = stages.find(s => s.id === event.stage)
+  const extra  = event.queries ? { queries: event.queries } : {}
+  return exists
+    ? stages.map(s => s.id === event.stage
+        ? { ...s, status: 'active', label: event.label ?? s.label, ...extra }
+        : s)
+    : [...stages, { id: event.stage, label: event.label ?? event.stage, status: 'active', ...extra }]
 }
 
-function _withStageDone(turn, event) {
-  return {
-    ...turn,
-    stages: (turn.stages ?? []).map(s =>
-      s.id === event.stage ? { ...s, status: 'done', duration_s: event.duration_s } : s
-    ),
-  }
+function _applyStageDone(stages, event) {
+  return stages.map(s =>
+    s.id === event.stage ? { ...s, status: 'done', duration_s: event.duration_s } : s
+  )
 }
 
 // ── Hook ─────────────────────────────────────────────────────────────────────
@@ -58,16 +54,12 @@ export function useGeneration({
   scrollToTop,
   toast,
 }) {
-  if (import.meta.env.DEV) {
-    if (!onActiveConvIdChange)    console.warn('[useGeneration] onActiveConvIdChange is required')
-    if (!onConversationsRefresh)  console.warn('[useGeneration] onConversationsRefresh is required')
-    if (!runVideoGenerationForTurn) console.warn('[useGeneration] runVideoGenerationForTurn is required')
-    if (!toast)                   console.warn('[useGeneration] toast context is required')
-  }
-
   const generationIdRef    = useRef(0)
   const generationAbortRef = useRef(null)
   const lastSubmitRef      = useRef(0)
+  // Staging buffer for the first turn — accumulates stages/sources/tokens
+  // before the turn row exists in state (turns starts as []).
+  const firstTurnStagingRef = useRef({ stages: [], sources: [], synthesisText: '' })
 
   const promptRef = useRef(prompt)
   useEffect(() => { promptRef.current = prompt })
@@ -90,6 +82,9 @@ export function useGeneration({
     const thisGenId = ++generationIdRef.current
     const isStale   = () => generationIdRef.current !== thisGenId
 
+    // Reset first-turn staging buffer for this generation run
+    firstTurnStagingRef.current = { stages: [], sources: [], synthesisText: '' }
+
     generationAbortRef.current?.abort()
     const genController = new AbortController()
     generationAbortRef.current = genController
@@ -110,7 +105,11 @@ export function useGeneration({
 
     // ── Optimistic UI ─────────────────────────────────────────────────────────
     if (isFirstTurn) {
-      setBootstrap({ stage: 'planning', prompt: submittedPrompt, frames: null })
+      setBootstrap({
+        stage: 'planning',
+        prompt: submittedPrompt,
+        stages: [{ id: 'planning', label: 'Planning…', status: 'active' }],
+      })
       setTurns([])
       scrollToTop()
     } else {
@@ -156,34 +155,62 @@ export function useGeneration({
           switch (event.type) {
             case 'stage': {
               if (isFirstTurn) {
-                setBootstrap(b => b ? { ...b, stage: event.stage } : b)
+                firstTurnStagingRef.current.stages = _applyStage(firstTurnStagingRef.current.stages, event)
+                setBootstrap(b => b ? { ...b, stage: event.stage, stages: firstTurnStagingRef.current.stages } : b)
+              } else {
+                setTurns(prev => prev.map(t => t.tempId === tempId
+                  ? { ...t, stages: _applyStage(t.stages ?? [], event) }
+                  : t
+                ))
               }
-              setTurns(prev => prev.map(t => t.tempId === tempId ? _withStage(t, event) : t))
               break
             }
             case 'stage_done': {
-              setTurns(prev => prev.map(t => t.tempId === tempId ? _withStageDone(t, event) : t))
+              if (isFirstTurn) {
+                firstTurnStagingRef.current.stages = _applyStageDone(firstTurnStagingRef.current.stages, event)
+                setBootstrap(b => b ? { ...b, stages: firstTurnStagingRef.current.stages } : b)
+              } else {
+                setTurns(prev => prev.map(t => t.tempId === tempId
+                  ? { ...t, stages: _applyStageDone(t.stages ?? [], event) }
+                  : t
+                ))
+              }
               break
             }
             case 'source': {
-              setTurns(prev => prev.map(t => t.tempId === tempId
-                ? { ...t, sources: [...(t.sources ?? []), event.source] }
-                : t
-              ))
+              if (isFirstTurn) {
+                firstTurnStagingRef.current.sources = [...firstTurnStagingRef.current.sources, event.source]
+                setBootstrap(b => b ? { ...b, sources: firstTurnStagingRef.current.sources } : b)
+              } else {
+                setTurns(prev => prev.map(t => t.tempId === tempId
+                  ? { ...t, sources: [...(t.sources ?? []), event.source] }
+                  : t
+                ))
+              }
               break
             }
             case 'token': {
-              setTurns(prev => prev.map(t => t.tempId === tempId
-                ? { ...t, synthesisText: (t.synthesisText ?? '') + event.text }
-                : t
-              ))
+              if (isFirstTurn) {
+                firstTurnStagingRef.current.synthesisText += event.text
+                setBootstrap(b => b ? { ...b, synthesisText: firstTurnStagingRef.current.synthesisText } : b)
+              } else {
+                setTurns(prev => prev.map(t => t.tempId === tempId
+                  ? { ...t, synthesisText: (t.synthesisText ?? '') + event.text }
+                  : t
+                ))
+              }
               break
             }
             case 'synthesis_done': {
-              setTurns(prev => prev.map(t => t.tempId === tempId
-                ? { ...t, synthesisComplete: true, sources: event.sources ?? t.sources ?? [] }
-                : t
-              ))
+              if (isFirstTurn) {
+                if (event.sources) firstTurnStagingRef.current.sources = event.sources
+                setBootstrap(b => b ? { ...b, sources: firstTurnStagingRef.current.sources } : b)
+              } else {
+                setTurns(prev => prev.map(t => t.tempId === tempId
+                  ? { ...t, synthesisComplete: true, sources: event.sources ?? t.sources ?? [] }
+                  : t
+                ))
+              }
               break
             }
             case 'meta': {
@@ -201,7 +228,11 @@ export function useGeneration({
                   stage: null, framesData: null, videoPhase: 'disabled',
                   parentSessionId,
                   parentFrameIndex: capturedPauseContext?.frameIndex ?? null,
-                  stages: [], sources: [], synthesisText: '', synthesisComplete: false,
+                  // Carry forward all stages/sources/tokens buffered before meta arrived
+                  stages:        firstTurnStagingRef.current.stages,
+                  sources:       firstTurnStagingRef.current.sources,
+                  synthesisText: firstTurnStagingRef.current.synthesisText,
+                  synthesisComplete: false,
                   ...turnData,
                 }])
                 setBootstrap(null)
@@ -283,7 +314,10 @@ export function useGeneration({
             videoPhase:       'generating',
             parentSessionId,
             parentFrameIndex: capturedPauseContext?.frameIndex ?? null,
-            stages: [], sources: [], synthesisText: '', synthesisComplete: false,
+            stages:        firstTurnStagingRef.current.stages,
+            sources:       firstTurnStagingRef.current.sources,
+            synthesisText: firstTurnStagingRef.current.synthesisText,
+            synthesisComplete: false,
           }])
         } else {
           // meta/block events already built the turn — finalize it
@@ -409,10 +443,16 @@ export function useGeneration({
           if (isStale()) return
           switch (event.type) {
             case 'stage':
-              setTurns(prev => prev.map(t => t.tempId === tempId ? _withStage(t, event) : t))
+              setTurns(prev => prev.map(t => t.tempId === tempId
+                ? { ...t, stages: _applyStage(t.stages ?? [], event) }
+                : t
+              ))
               break
             case 'stage_done':
-              setTurns(prev => prev.map(t => t.tempId === tempId ? _withStageDone(t, event) : t))
+              setTurns(prev => prev.map(t => t.tempId === tempId
+                ? { ...t, stages: _applyStageDone(t.stages ?? [], event) }
+                : t
+              ))
               break
             case 'meta':
               setTurns(prev => prev.map(t => t.tempId === tempId ? {

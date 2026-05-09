@@ -1,37 +1,77 @@
 import { useState, useEffect } from 'react'
-import { Box, Typography, useTheme } from '@mui/material'
-import CheckCircleOutlineIcon    from '@mui/icons-material/CheckCircleOutline'
-import MovieCreationOutlinedIcon from '@mui/icons-material/MovieCreationOutlined'
-import { pulse, fadeIn, shimmer, blink } from '../../theme/animations'
-import { useMediaUrl } from '../../hooks/useMediaUrl'
+import { Box, Typography, Collapse, useTheme } from '@mui/material'
+import LightbulbOutlinedIcon        from '@mui/icons-material/LightbulbOutlined'
+import TravelExploreOutlinedIcon    from '@mui/icons-material/TravelExploreOutlined'
+import ArticleOutlinedIcon          from '@mui/icons-material/ArticleOutlined'
+import AutoFixHighOutlinedIcon      from '@mui/icons-material/AutoFixHighOutlined'
+import AccountTreeOutlinedIcon      from '@mui/icons-material/AccountTreeOutlined'
+import DashboardOutlinedIcon        from '@mui/icons-material/DashboardOutlined'
+import GridViewOutlinedIcon         from '@mui/icons-material/GridViewOutlined'
+import MovieCreationOutlinedIcon    from '@mui/icons-material/MovieCreationOutlined'
+import BurstModeOutlinedIcon        from '@mui/icons-material/BurstModeOutlined'
+import PhotoFilterOutlinedIcon      from '@mui/icons-material/PhotoFilterOutlined'
+import SearchOutlinedIcon           from '@mui/icons-material/SearchOutlined'
+import CheckCircleOutlineIcon       from '@mui/icons-material/CheckCircleOutline'
+import KeyboardArrowDownIcon        from '@mui/icons-material/KeyboardArrowDown'
+import KeyboardArrowUpIcon          from '@mui/icons-material/KeyboardArrowUp'
+import RadioButtonUncheckedIcon     from '@mui/icons-material/RadioButtonUnchecked'
+import { pulse, fadeIn, shimmer } from '../../theme/animations'
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+const MAX_SHOWN_SOURCES = 5
+const FRAME_COUNT       = 5
+const FRAME_INDICES     = Array.from({ length: FRAME_COUNT }, (_, i) => i)
+
+// ── Stage icon map ────────────────────────────────────────────────────────────
+
+const STAGE_ICONS = {
+  thinking:          LightbulbOutlinedIcon,
+  decomposing:       LightbulbOutlinedIcon,
+  searching:         TravelExploreOutlinedIcon,
+  reading:           ArticleOutlinedIcon,
+  synthesising:      AutoFixHighOutlinedIcon,
+  planning:          AccountTreeOutlinedIcon,
+  designing:         DashboardOutlinedIcon,
+  generating_frames: GridViewOutlinedIcon,
+  generating:        GridViewOutlinedIcon,
+  rendering:         PhotoFilterOutlinedIcon,
+  frames:            BurstModeOutlinedIcon,
+  video:             MovieCreationOutlinedIcon,
+}
+
+// ── Skeleton helpers (visual generation stages) ───────────────────────────────
 
 function shimmerBg(isDark) { return isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }
 function skeletonBg(isDark) { return isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)' }
 
-const FRAME_COUNT   = 5
-const FRAME_INDICES = Array.from({ length: FRAME_COUNT }, (_, i) => i)
+function ShimmerOverlay({ isDark, delay = 0 }) {
+  return (
+    <Box sx={{
+      position: 'absolute', inset: 0,
+      background: `linear-gradient(90deg, transparent 0%, ${shimmerBg(isDark)} 50%, transparent 100%)`,
+      animation: `${shimmer} 1.7s ease-in-out infinite`,
+      animationDelay: `${delay}s`,
+    }} />
+  )
+}
 
 function FrameSkeletonCards({ isDark }) {
   return (
-    <Box sx={{ display: 'flex', gap: 1, mt: 1.25, mb: 0.5, flexWrap: 'wrap' }}>
+    <Box sx={{ display: 'flex', gap: 1, mt: 1.5, mb: 0.5, flexWrap: 'wrap' }}>
       {FRAME_INDICES.map((i) => (
         <Box key={i} sx={{
-          width: 72, height: 54, borderRadius: '6px',
+          width: 68, height: 50, borderRadius: '6px',
           backgroundColor: skeletonBg(isDark),
           overflow: 'hidden', position: 'relative', flexShrink: 0,
           animation: `${fadeIn} 0.4s ease both`,
-          animationDelay: `${i * 0.12}s`,
+          animationDelay: `${i * 0.1}s`,
         }}>
-          <Box sx={{
-            position: 'absolute', inset: 0,
-            background: `linear-gradient(90deg, transparent 0%, ${shimmerBg(isDark)} 50%, transparent 100%)`,
-            animation: `${shimmer} 1.6s ease-in-out infinite`,
-            animationDelay: `${i * 0.2}s`,
-          }} />
+          <ShimmerOverlay isDark={isDark} delay={i * 0.18} />
           <Typography sx={{
-            position: 'absolute', bottom: 4, right: 5,
-            fontSize: 9, fontWeight: 600, userSelect: 'none',
-            color: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.18)',
+            position: 'absolute', bottom: 3, right: 4,
+            fontSize: 8, fontWeight: 600, userSelect: 'none',
+            color: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.15)',
           }}>
             {i + 1}
           </Typography>
@@ -41,54 +81,17 @@ function FrameSkeletonCards({ isDark }) {
   )
 }
 
-function ActualFrames({ sessionId, count, isDark }) {
-  const { getFrameUrl } = useMediaUrl(sessionId)
-  const overlayColor = isDark ? 'rgba(255,255,255,1)' : 'rgba(0,0,0,1)'
-  const indices = Array.from({ length: Math.min(count, FRAME_COUNT) }, (_, i) => i)
-  return (
-    <Box sx={{ display: 'flex', gap: 1, mt: 1.25, mb: 0.5, flexWrap: 'wrap' }}>
-      {indices.map((i) => {
-        const src = getFrameUrl(i)
-        return (
-          <Box key={i} sx={{
-            width: 72, height: 54, borderRadius: '6px', overflow: 'hidden',
-            flexShrink: 0, position: 'relative',
-            animation: `${fadeIn} 0.4s ease both`,
-            animationDelay: `${i * 0.1}s`,
-            border: `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`,
-          }}>
-            {src && (
-              <img src={src} alt={`frame ${i + 1}`}
-                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-            )}
-            <Box sx={{
-              position: 'absolute', inset: 0,
-              backgroundColor: overlayColor,
-              animation: `${blink} 1.6s ease-in-out infinite`,
-              animationDelay: `${i * 0.2}s`,
-              borderRadius: '6px',
-            }} />
-          </Box>
-        )
-      })}
-    </Box>
-  )
-}
 
 function VideoSkeletonCard({ isDark }) {
   return (
     <Box sx={{
-      width: '100%', maxWidth: 290, aspectRatio: '16/9', borderRadius: '8px',
+      width: '100%', maxWidth: 280, aspectRatio: '16/9', borderRadius: '8px',
       backgroundColor: skeletonBg(isDark), overflow: 'hidden', position: 'relative',
-      mt: 1.25, mb: 0.5, animation: `${fadeIn} 0.4s ease both`,
+      mt: 1.5, mb: 0.5, animation: `${fadeIn} 0.4s ease both`,
     }}>
-      <Box sx={{
-        position: 'absolute', inset: 0,
-        background: `linear-gradient(90deg, transparent 0%, ${shimmerBg(isDark)} 50%, transparent 100%)`,
-        animation: `${shimmer} 1.8s ease-in-out infinite`,
-      }} />
+      <ShimmerOverlay isDark={isDark} />
       <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <MovieCreationOutlinedIcon sx={{ fontSize: 30, opacity: 0.12, color: isDark ? '#fff' : '#000' }} />
+        <MovieCreationOutlinedIcon sx={{ fontSize: 28, opacity: 0.1, color: isDark ? '#fff' : '#000' }} />
       </Box>
     </Box>
   )
@@ -101,7 +104,7 @@ function BlockSkeletonPreview({ isDark }) {
     { type: 'text',   lines: [1, 0.68]        },
   ]
   return (
-    <Box sx={{ mt: 1.5, display: 'flex', flexDirection: 'column', gap: 1, width: '100%', maxWidth: 340 }}>
+    <Box sx={{ mt: 1.5, display: 'flex', flexDirection: 'column', gap: 1, width: '100%', maxWidth: 320 }}>
       {BLOCKS.map((block, i) => (
         <Box key={i} sx={{
           borderRadius: '8px',
@@ -109,14 +112,9 @@ function BlockSkeletonPreview({ isDark }) {
           backgroundColor: skeletonBg(isDark),
           overflow: 'hidden', position: 'relative',
           animation: `${fadeIn} 0.5s ease both`,
-          animationDelay: `${i * 0.22}s`,
+          animationDelay: `${i * 0.2}s`,
         }}>
-          <Box sx={{
-            position: 'absolute', inset: 0,
-            background: `linear-gradient(90deg, transparent 0%, ${shimmerBg(isDark)} 50%, transparent 100%)`,
-            animation: `${shimmer} 1.8s ease-in-out infinite`,
-            animationDelay: `${i * 0.3}s`,
-          }} />
+          <ShimmerOverlay isDark={isDark} delay={i * 0.25} />
           {block.type === 'text' ? (
             <Box sx={{ px: 1.5, py: 1.25, display: 'flex', flexDirection: 'column', gap: 0.75 }}>
               {block.lines.map((w, li) => (
@@ -128,8 +126,8 @@ function BlockSkeletonPreview({ isDark }) {
               ))}
             </Box>
           ) : (
-            <Box sx={{ height: 112, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Box sx={{ opacity: 0.09, display: 'flex', flexDirection: 'column', gap: 0.75, alignItems: 'center' }}>
+            <Box sx={{ height: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Box sx={{ opacity: 0.08, display: 'flex', flexDirection: 'column', gap: 0.75, alignItems: 'center' }}>
                 <Box sx={{ display: 'flex', gap: 1.5 }}>
                   <Box sx={{ width: 28, height: 18, borderRadius: '4px', backgroundColor: isDark ? '#fff' : '#000' }} />
                   <Box sx={{ width: 28, height: 18, borderRadius: '4px', backgroundColor: isDark ? '#fff' : '#000' }} />
@@ -145,163 +143,340 @@ function BlockSkeletonPreview({ isDark }) {
   )
 }
 
-// ── Fallback stage arrays for the old stage-string API (bootstrap overlay) ────
+// ── Research sub-item components ──────────────────────────────────────────────
 
-const _STEPS = [
-  { key: 'planning',         label: 'Analyzing your question'  },
-  { key: 'designing',        label: 'Designing the lesson'     },
-  { key: 'generating',       label: 'Generating visual content'},
-  { key: 'generating_frames',label: 'Generating frames'        },
-  { key: 'rendering',        label: 'Rendering frames'         },
-  { key: 'frames',           label: 'Visual frames ready'      },
-  { key: 'video',            label: 'Generating video'         },
-  // Research stages (used by bootstrap when SSE stage events arrive)
-  { key: 'decomposing',      label: 'Understanding your question…'},
-  { key: 'searching',        label: 'Searching the web…'       },
-  { key: 'reading',          label: 'Reading sources…'         },
-  { key: 'synthesising',     label: 'Synthesising answer…'     },
-]
+function DomainCircle({ domain, isDark }) {
+  const initial = (domain || '?')[0].toUpperCase()
+  return (
+    <Box sx={{
+      width: 16, height: 16, borderRadius: '50%', flexShrink: 0,
+      backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)',
+      border: `1px solid ${isDark ? 'rgba(255,255,255,0.13)' : 'rgba(0,0,0,0.10)'}`,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }}>
+      <Typography sx={{
+        fontSize: 8, fontWeight: 700, lineHeight: 1,
+        color: isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.38)',
+      }}>
+        {initial}
+      </Typography>
+    </Box>
+  )
+}
 
-function _stageStringToArray(stageStr) {
-  const idx = _STEPS.findIndex(s => s.key === stageStr)
-  if (idx === -1) return [{ id: stageStr, label: stageStr, status: 'active' }]
-  return [{ id: stageStr, label: _STEPS[idx].label, status: 'active' }]
+function QueryItem({ query, idx, isDark }) {
+  return (
+    <Box sx={{
+      display: 'flex', alignItems: 'center', gap: 1,
+      py: 0.45,
+      animation: `${fadeIn} 0.25s ease both`,
+      animationDelay: `${idx * 0.06}s`,
+    }}>
+      <SearchOutlinedIcon sx={{
+        fontSize: 11.5, flexShrink: 0,
+        color: isDark ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.25)',
+      }} />
+      <Typography sx={{
+        fontSize: 12.5,
+        color: isDark ? 'rgba(255,255,255,0.48)' : 'rgba(0,0,0,0.45)',
+        lineHeight: 1.4,
+      }}>
+        {query}
+      </Typography>
+    </Box>
+  )
+}
+
+function SourceItem({ source, idx, isDark }) {
+  return (
+    <Box sx={{
+      display: 'flex', alignItems: 'center', gap: 1,
+      py: 0.4,
+      animation: `${fadeIn} 0.25s ease both`,
+      animationDelay: `${idx * 0.05}s`,
+    }}>
+      <DomainCircle domain={source.domain} isDark={isDark} />
+      <Box
+        component="a"
+        href={source.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        sx={{
+          flex: 1, minWidth: 0,
+          fontSize: 12.5, lineHeight: 1.4,
+          color: isDark ? 'rgba(255,255,255,0.52)' : 'rgba(0,0,0,0.48)',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          textDecoration: 'none',
+          '&:hover': {
+            color: isDark ? 'rgba(255,255,255,0.82)' : 'rgba(0,0,0,0.75)',
+            textDecoration: 'underline',
+          },
+          transition: 'color 0.15s',
+        }}
+      >
+        {source.title}
+      </Box>
+      <Typography sx={{
+        fontSize: 10.5, flexShrink: 0,
+        color: isDark ? 'rgba(255,255,255,0.20)' : 'rgba(0,0,0,0.20)',
+      }}>
+        {source.domain}
+      </Typography>
+    </Box>
+  )
+}
+
+// ── Single stage row ──────────────────────────────────────────────────────────
+
+function StageRow({ stage, sources, isLast, compact, isDark }) {
+  const IconComponent = STAGE_ICONS[stage.id] ?? RadioButtonUncheckedIcon
+  const isActive  = stage.status === 'active'
+  const isDone    = stage.status === 'done'
+  const isPending = stage.status === 'pending'
+
+  const iconColor = isActive  ? (isDark ? 'rgba(75,114,255,0.58)'  : 'rgba(24,71,214,0.48)')
+                  : isDone    ? (isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.18)')
+                              : (isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)')
+
+  const textColor = isActive  ? (isDark ? 'rgba(255,255,255,0.88)' : 'rgba(0,0,0,0.82)')
+                  : isDone    ? (isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.30)')
+                              : (isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.14)')
+
+  const lineColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)'
+
+  // Sub-items: queries only on searching stage, sources on searching or reading
+  const queries      = stage.queries ?? []
+  const stageSources = (stage.id === 'searching' || stage.id === 'reading') ? sources : []
+  const hasSubItems  = queries.length > 0 || stageSources.length > 0
+
+  // Auto-collapse when stage completes; user can still manually toggle
+  const [expanded, setExpanded] = useState(stage.status !== 'done')
+  useEffect(() => {
+    if (stage.status === 'done') setExpanded(false)
+  }, [stage.status])
+
+  // Expand-all for overflow sources
+  const [showAll, setShowAll] = useState(false)
+
+  // Visual generation skeleton cards
+  const showFrameSkeleton = (stage.id === 'generating_frames' || stage.id === 'generating' || stage.id === 'rendering' || stage.id === 'frames') && isActive
+  const showVideoSkeleton = stage.id === 'video' && isActive
+  const showBlockSkeleton = stage.id === 'designing' && isActive
+  const hasSkeletons = showFrameSkeleton || showVideoSkeleton || showBlockSkeleton
+
+  return (
+    <Box sx={{
+      display: 'flex', gap: 0,
+      opacity: isPending ? 0.4 : 1,
+      animation: !isPending ? `${fadeIn} 0.3s ease both` : 'none',
+    }}>
+      {/* Left track: icon + connector line */}
+      <Box sx={{ width: 28, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <Box sx={{
+          width: 28, height: compact ? 28 : 32,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          flexShrink: 0,
+        }}>
+          <IconComponent sx={{
+            fontSize: 15, color: iconColor,
+            ...(isActive ? { animation: `${pulse} 2s ease-in-out infinite` } : {}),
+          }} />
+        </Box>
+        {!isLast && (
+          <Box sx={{
+            width: '1px', flex: 1, minHeight: 10,
+            backgroundColor: lineColor,
+          }} />
+        )}
+      </Box>
+
+      {/* Content area */}
+      <Box sx={{ flex: 1, pb: isLast ? 0 : (compact ? 0.5 : 0.75), pl: 0.5 }}>
+        {/* Stage header */}
+        <Box
+          onClick={hasSubItems ? () => setExpanded(v => !v) : undefined}
+          sx={{
+            display: 'flex', alignItems: 'center', gap: 0.5,
+            minHeight: compact ? 28 : 32,
+            cursor: hasSubItems ? 'pointer' : 'default',
+            '&:hover': hasSubItems ? { opacity: 0.85 } : {},
+            transition: 'opacity 0.15s',
+          }}
+        >
+          <Typography sx={{
+            flex: 1,
+            fontSize: 13,
+            fontWeight: 400,
+            color: textColor,
+            lineHeight: 1.4,
+            transition: 'color 0.3s',
+          }}>
+            {stage.label}
+          </Typography>
+
+          {isDone && stage.duration_s != null && (
+            <Typography sx={{
+              fontSize: 11,
+              color: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)',
+              flexShrink: 0, mr: hasSubItems ? 0.25 : 0,
+            }}>
+              {stage.duration_s}s
+            </Typography>
+          )}
+
+          {hasSubItems && (
+            <Box sx={{
+              display: 'flex', alignItems: 'center',
+              color: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)',
+            }}>
+              {expanded
+                ? <KeyboardArrowUpIcon sx={{ fontSize: 14 }} />
+                : <KeyboardArrowDownIcon sx={{ fontSize: 14 }} />
+              }
+            </Box>
+          )}
+        </Box>
+
+        {/* Skeleton previews (visual generation) */}
+        {showFrameSkeleton && <FrameSkeletonCards isDark={isDark} />}
+        {showVideoSkeleton && <VideoSkeletonCard isDark={isDark} />}
+        {showBlockSkeleton && <BlockSkeletonPreview isDark={isDark} />}
+
+        {/* Research sub-items */}
+        {hasSubItems && (
+          <Collapse in={expanded} timeout={180}>
+            <Box sx={{
+              mt: 0.5,
+              mb: 0.75,
+              pl: 1.25,
+              borderLeft: `1.5px solid ${lineColor}`,
+              ml: 0.25,
+            }}>
+              {queries.map((q, i) => <QueryItem key={i} query={q} idx={i} isDark={isDark} />)}
+              {queries.length > 0 && stageSources.length > 0 && (
+                <Box sx={{ height: 6 }} />
+              )}
+              {(showAll ? stageSources : stageSources.slice(0, MAX_SHOWN_SOURCES)).map((s, i) => (
+                <SourceItem key={s.url ?? i} source={s} idx={i} isDark={isDark} />
+              ))}
+              {!showAll && stageSources.length > MAX_SHOWN_SOURCES && (
+                <Box
+                  component="button"
+                  onClick={() => setShowAll(true)}
+                  sx={{
+                    fontSize: 12, mt: 0.5, pl: 0.25,
+                    color: isDark ? 'rgba(255,255,255,0.30)' : 'rgba(0,0,0,0.30)',
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    fontFamily: 'inherit', p: 0,
+                    '&:hover': { color: isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.55)' },
+                    transition: 'color 0.15s',
+                  }}
+                >
+                  +{stageSources.length - MAX_SHOWN_SOURCES} more
+                </Box>
+              )}
+            </Box>
+          </Collapse>
+        )}
+      </Box>
+    </Box>
+  )
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-/**
- * Renders a live stage progress list.
- *
- * Primary API: pass `stages` (SSE-driven array, no timers).
- * Fallback API: pass `stage` string (bootstrap overlay, old style).
- *
- * stages[].status: 'pending' | 'active' | 'done'
- * stages[].id: matches SSE stage names ('decomposing', 'searching', 'designing', etc.)
- */
 export default function LoadingView({
-  stages        = null,   // Array<{id, label, status, duration_s?}> — primary prop
-  stage         = null,   // string fallback for bootstrap overlay
+  stages        = null,
+  stage         = null,
   compact       = false,
-  framesData    = null,
-  textMode      = false,
-  mode          = null,
-  synthesisText = '',     // streaming research tokens shown below stages
+  synthesisText = '',
+  sources       = [],
+  defaultOpen   = true,
 }) {
   const theme     = useTheme()
   const isDark    = theme.palette.mode === 'dark'
-  const isInteractive = mode === 'interactive'
 
-  // Timer only fires when using the old string API (bootstrap + interactive, no stages prop)
-  const [timerFired, setTimerFired] = useState(false)
-  useEffect(() => {
-    if (stages?.length || !isInteractive || stage !== 'planning') return
-    const t = setTimeout(() => setTimerFired(true), 1400)
-    return () => clearTimeout(t)
-  }, [stages, stage, isInteractive])
+  const displayStages = stages?.length
+    ? stages
+    : [{ id: stage ?? 'planning', label: 'Planning…', status: 'active' }]
 
-  // Derive the display stages array from whichever API was used
-  let displayStages
-  if (stages?.length) {
-    displayStages = stages
-  } else if (stage) {
-    const effectiveStage = (isInteractive && stage === 'planning' && timerFired) ? 'designing' : stage
-    displayStages = _stageStringToArray(effectiveStage)
-  } else {
-    displayStages = [{ id: 'planning', label: 'Planning…', status: 'active' }]
-  }
+  const allDone   = displayStages.length >= 2 && displayStages.every(s => s.status === 'done')
+  const doneCount = displayStages.filter(s => s.status === 'done').length
+  const [masterOpen, setMasterOpen] = useState(defaultOpen)
 
-  const mutedColor   = isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)'
-  const activeColor  = isDark ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.8)'
-  const pendingColor = isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'
-  const lineColor    = isDark ? 'rgba(255,255,255,0.1)'  : 'rgba(0,0,0,0.1)'
+  const subduedColor   = isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.28)'
+  const synthColor     = isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.52)'
 
   return (
-    <Box role="status" aria-live="polite" aria-atomic="false" sx={{
-      position: 'relative', display: 'flex', flexDirection: 'column',
-      alignItems: 'flex-start',
-      minHeight: compact ? 80 : (textMode || isInteractive ? 80 : 240),
-      py: compact ? 1.5 : 3,
-      px: compact ? 0   : 4,
-    }}>
-      {/* Screen reader live region */}
+    <Box
+      role="status" aria-live="polite" aria-atomic="false"
+      sx={{
+        position: 'relative',
+        display: 'flex', flexDirection: 'column',
+        py: compact ? 1 : 2,
+        px: compact ? 0 : 0,
+        minHeight: compact ? 40 : 60,
+        width: '100%',
+      }}
+    >
+      {/* Screen-reader live region */}
       <Box sx={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0,0,0,0)', whiteSpace: 'nowrap' }}>
         {displayStages.find(s => s.status === 'active')?.label ?? 'Complete'}
       </Box>
 
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0, maxWidth: 400 }}>
-        {displayStages.map((s, i) => {
-          const color = s.status === 'active' ? activeColor : s.status === 'done' ? mutedColor : pendingColor
+      {/* "Completed N steps" collapsible header */}
+      {allDone && (
+        <Box
+          onClick={() => setMasterOpen(v => !v)}
+          sx={{
+            display: 'flex', alignItems: 'center', gap: 0.75,
+            mb: masterOpen ? 1.5 : 0,
+            cursor: 'pointer',
+            userSelect: 'none',
+            '&:hover': { opacity: 0.75 },
+            transition: 'opacity 0.15s',
+          }}
+        >
+          <CheckCircleOutlineIcon sx={{ fontSize: 13, color: subduedColor }} />
+          <Typography sx={{ fontSize: 12.5, fontWeight: 500, color: subduedColor }}>
+            Completed {doneCount} step{doneCount !== 1 ? 's' : ''}
+          </Typography>
+          {masterOpen
+            ? <KeyboardArrowUpIcon   sx={{ fontSize: 13, color: subduedColor }} />
+            : <KeyboardArrowDownIcon sx={{ fontSize: 13, color: subduedColor }} />
+          }
+        </Box>
+      )}
 
-          const showFrameSkeleton = (s.id === 'generating_frames' || s.id === 'generating' || s.id === 'rendering') && s.status === 'active'
-          const showActualFrames  = s.id === 'frames' && s.status !== 'pending'
-          const showVideoSkeleton = s.id === 'video' && s.status === 'active'
-          const showBlockSkeleton = s.id === 'designing' && s.status === 'active'
-          const showCards = showFrameSkeleton || showActualFrames || showVideoSkeleton || showBlockSkeleton
-          const lineH = showCards
-            ? (showVideoSkeleton ? 128 : showBlockSkeleton ? 260 : 96)
-            : (compact ? 18 : 22)
+      {/* Stage list */}
+      <Collapse in={!allDone || masterOpen} timeout={220}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+          {displayStages.map((s, i) => (
+            <StageRow
+              key={`${s.id}-${i}`}
+              stage={s}
+              sources={sources}
+              isLast={i === displayStages.length - 1}
+              compact={compact}
+              isDark={isDark}
+            />
+          ))}
+        </Box>
+      </Collapse>
 
-          return (
-            <Box key={`${s.id}-${i}`} sx={{
-              display: 'flex', alignItems: 'flex-start', gap: 1.5,
-              opacity:        s.status === 'pending' ? 0.4 : 1,
-              animation:      s.status !== 'pending' ? `${fadeIn} 0.35s ease both` : 'none',
-              animationDelay: `${i * 0.08}s`,
-            }}>
-              {/* Vertical track */}
-              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0, pt: '5px' }}>
-                {s.status === 'done' ? (
-                  <CheckCircleOutlineIcon sx={{ fontSize: 10, color, flexShrink: 0 }} />
-                ) : (
-                  <Box sx={{
-                    width: 7, height: 7, borderRadius: '50%', backgroundColor: color, flexShrink: 0,
-                    ...(s.status === 'active' ? { animation: `${pulse} 1.2s ease-in-out infinite` } : {}),
-                  }} />
-                )}
-                {i < displayStages.length - 1 && (
-                  <Box sx={{ width: 1.5, height: lineH, backgroundColor: lineColor, mt: 0.5 }} />
-                )}
-              </Box>
-
-              {/* Label row */}
-              <Box sx={{ pb: i < displayStages.length - 1 ? 0.75 : 0 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                  <Typography sx={{ fontSize: compact ? 12.5 : 13, color, lineHeight: 1.4, transition: 'color 0.3s' }}>
-                    {s.label}
-                    {s.status === 'active' && (
-                      <Box component="span" sx={{ animation: `${pulse} 1.2s ease-in-out infinite`, ml: 0.25 }}>…</Box>
-                    )}
-                  </Typography>
-                  {s.status === 'done' && s.duration_s != null && (
-                    <Typography sx={{ fontSize: 10, color: pendingColor }}>
-                      {s.duration_s}s
-                    </Typography>
-                  )}
-                </Box>
-
-                {showFrameSkeleton  && <FrameSkeletonCards isDark={isDark} />}
-                {showActualFrames   && (framesData?.sessionId
-                  ? <ActualFrames sessionId={framesData.sessionId} count={framesData.framesData?.images?.length || 5} isDark={isDark} />
-                  : <FrameSkeletonCards isDark={isDark} />
-                )}
-                {showVideoSkeleton  && <VideoSkeletonCard isDark={isDark} />}
-                {showBlockSkeleton  && <BlockSkeletonPreview isDark={isDark} />}
-              </Box>
-            </Box>
-          )
-        })}
-      </Box>
-
-      {/* Streaming research synthesis tokens */}
+      {/* Streaming synthesis preview */}
       {synthesisText && (
-        <Box sx={{ mt: 1.5, maxWidth: 400 }}>
+        <Box sx={{
+          mt: 1.5,
+          borderLeft: `1.5px solid ${isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)'}`,
+          pl: 1.5, ml: 0.25,
+        }}>
           <Typography sx={{
-            fontSize: 12, color: mutedColor, lineHeight: 1.6,
-            fontStyle: 'italic', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+            fontSize: 13, color: synthColor, lineHeight: 1.7,
+            whiteSpace: 'pre-wrap', wordBreak: 'break-word',
           }}>
-            {synthesisText.length > 500
-              ? `…${synthesisText.slice(-500)}`
+            {synthesisText.length > 400
+              ? `…${synthesisText.slice(-400)}`
               : synthesisText
             }
           </Typography>

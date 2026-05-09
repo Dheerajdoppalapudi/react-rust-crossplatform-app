@@ -96,10 +96,12 @@ export default function Studio({
   } = useConversation({ setTurns, runVideoGenerationForTurn, abortAllVideoStreams, scrollToTop, toast })
 
   // Derived bootstrap values — kept out of render so Studio.jsx stays declarative.
-  const isBootstrapping  = bootstrap !== null
-  const bootstrapStage   = bootstrap?.stage  ?? 'planning'
-  const bootstrapPrompt  = bootstrap?.prompt ?? ''
-  const bootstrapFrames  = bootstrap?.frames ?? null
+  const isBootstrapping       = bootstrap !== null
+  const bootstrapStage        = bootstrap?.stage         ?? 'planning'
+  const bootstrapPrompt       = bootstrap?.prompt        ?? ''
+  const bootstrapStages       = bootstrap?.stages        ?? null
+  const bootstrapSources      = bootstrap?.sources       ?? []
+  const bootstrapSynthesisText = bootstrap?.synthesisText ?? ''
 
   // Memoized derived scalars — O(n) scans run only when turns change, not on
   // every render triggered by unrelated state (prompt, viewMode, etc.).
@@ -369,10 +371,10 @@ export default function Studio({
                   </Box>
                 )}
                 <LoadingView
+                  stages={bootstrapStages?.length ? bootstrapStages : null}
                   stage={bootstrapStage}
-                  framesData={bootstrapFrames}
-                  mode={!videoEnabled ? 'interactive' : undefined}
-                  textMode={false}
+                  sources={bootstrapSources}
+                  synthesisText={bootstrapSynthesisText}
                 />
               </Box>
             )}

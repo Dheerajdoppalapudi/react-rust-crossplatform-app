@@ -90,6 +90,15 @@ const TurnView = memo(function TurnView({ turn, onPauseAsk, onRetryTurn, onRetry
       <ContentColumn>
         <UserBubble prompt={turn.prompt} />
 
+        {!turn.isLoading && (turn.stages?.length ?? 0) >= 2 && (
+          <LoadingView
+            stages={turn.stages}
+            sources={turn.sources ?? []}
+            compact
+            defaultOpen={false}
+          />
+        )}
+
         {turn.render_path === 'interactive' ? (
           (turn.title || (turn.blocks ?? []).length > 0 || turn.synthesisText || turn.sources?.length > 0) ? (
             (turn.synthesisText || turn.sources?.length > 0) ? (
@@ -111,10 +120,10 @@ const TurnView = memo(function TurnView({ turn, onPauseAsk, onRetryTurn, onRetry
               />
             )
           ) : (
-            <LoadingView stages={turn.stages} compact mode="interactive" synthesisText={turn.synthesisText} />
+            <LoadingView stages={turn.stages} sources={turn.sources ?? []} compact synthesisText={turn.synthesisText} />
           )
         ) : turn.isLoading ? (
-          <LoadingView stages={turn.stages} compact textMode={turn.videoPhase === 'disabled'} synthesisText={turn.synthesisText} />
+          <LoadingView stages={turn.stages} sources={turn.sources ?? []} compact synthesisText={turn.synthesisText} />
         ) : turn.videoPhase === 'error' && !turn.id ? (
           <Box sx={{
             py: 2.5, px: 3, borderRadius: '12px',
@@ -127,7 +136,7 @@ const TurnView = memo(function TurnView({ turn, onPauseAsk, onRetryTurn, onRetry
             <RetryBanner turn={turn} onRetry={onRetryGeneration} />
           </Box>
         ) : turn.id && turn.videoPhase === 'generating' ? (
-          <LoadingView stages={[{id:'video', label:'Assembling video', status:'active'}]} compact framesData={{ sessionId: turn.id, framesData: turn.framesData }} />
+          <LoadingView stages={[{id:'video', label:'Assembling video', status:'active'}]} compact />
         ) : turn.id && turn.videoPhase === 'error' ? (
           <>
             {turn.framesData && (

@@ -68,7 +68,7 @@ async def _research_loop(
     t0: float,
 ) -> AsyncGenerator[dict, None]:
     # ── Stage 1: Decompose ────────────────────────────────────────────────────
-    yield {"type": "stage", "stage": "decomposing", "label": "Understanding your question…"}
+    yield {"type": "stage", "stage": "thinking", "label": "Thinking about your question…"}
     t1 = time.time()
 
     plan = await asyncio.wait_for(
@@ -78,7 +78,7 @@ async def _research_loop(
     logger.info("research_plan  queries=%d  sub_questions=%d",
                 len(plan.search_queries), len(plan.sub_questions))
 
-    yield {"type": "stage_done", "stage": "decomposing", "duration_s": round(time.time() - t1, 2)}
+    yield {"type": "stage_done", "stage": "thinking", "duration_s": round(time.time() - t1, 2)}
 
     # ── Stages 2–4: Search rounds ─────────────────────────────────────────────
     all_results: list[SearchResult] = []
@@ -94,6 +94,7 @@ async def _research_loop(
             "stage": "searching",
             "label": f"Searching {n_queries} {'query' if n_queries == 1 else 'queries'}…",
             "round": round_n + 1,
+            "queries": queries_used,
         }
         t2 = time.time()
 

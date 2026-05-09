@@ -62,7 +62,7 @@ async def stream(
             llm_service.make_system_user_request,
             _SYSTEM_PROMPT,
             user_msg,
-            max_tokens=1200,
+            max_tokens=4096,
         )
         if raw:
             yield raw
@@ -87,7 +87,7 @@ async def _stream_anthropic(llm_service: LLMService, user_msg: str) -> AsyncGene
         chunks = []
         with client.messages.stream(
             model=model,
-            max_tokens=1200,
+            max_tokens=4096,
             system=_SYSTEM_PROMPT,
             messages=[{"role": "user", "content": user_msg}],
         ) as stream:
