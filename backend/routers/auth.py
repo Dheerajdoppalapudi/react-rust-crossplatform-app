@@ -8,9 +8,10 @@ from datetime import datetime, timedelta, timezone
 
 import bcrypt
 import jwt
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, EmailStr
 
+from core.limiter import limiter
 from core.config import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
     COOKIE_SAMESITE,
@@ -111,7 +112,8 @@ def _get_google_user_info(access_token: str) -> dict:
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.post("/google")
-def login_with_google(body: GoogleLoginRequest, response: Response):
+@limiter.limit("10/minute")
+def login_with_google(request: Request, body: GoogleLoginRequest, response: Response):
     """
     Verify a Google OAuth access token via Google's userinfo endpoint.
     Upserts the user, issues an access JWT + sets a refresh token cookie.
@@ -207,7 +209,8 @@ def logout(
 
 
 @router.post("/register")
-def register(body: RegisterRequest, response: Response):
+@limiter.limit("5/minute")
+def register(request: Request, body: RegisterRequest, response: Response):
     """
     Register a new user with name, email, and password.
     Returns an access token and sets a refresh cookie — same as Google login.
@@ -257,7 +260,8 @@ def register(body: RegisterRequest, response: Response):
 
 
 @router.post("/login")
-def login_with_password(body: PasswordLoginRequest, response: Response):
+@limiter.limit("5/minute")
+def login_with_password(request: Request, body: PasswordLoginRequest, response: Response):
     """
     Authenticate with email + password.
     Returns an access token and sets a refresh cookie.

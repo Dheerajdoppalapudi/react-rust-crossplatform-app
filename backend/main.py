@@ -28,21 +28,16 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from slowapi.util import get_remote_address
 
-from core.config import CORS_ORIGINS
+from core.config import ANTHROPIC_API_KEY, CORS_ORIGINS, OPENAI_API_KEY
 from core.database import init_db, get_db
+from core.limiter import limiter
 from core.responses import success
 from routers import auth, conversations, generate, sessions, upload, video
 
 logger = logging.getLogger(__name__)
-
-
-# ── Rate limiter (M-3) ────────────────────────────────────────────────────────
-
-limiter = Limiter(key_func=get_remote_address)
 
 
 # ── Lifespan ──────────────────────────────────────────────────────────────────
@@ -59,9 +54,18 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Zenith API", lifespan=lifespan)
 
-# M-3: Attach limiter to app state so slowapi middleware can read it.
+# Attach limiter to app state so slowapi middleware can read it.
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# ── Prometheus metrics ────────────────────────────────────────────────────────
+try:
+    from prometheus_client import make_asgi_app as _make_metrics_app
+    _metrics_app = _make_metrics_app()
+    app.mount("/metrics", _metrics_app)
+    logger.info("prometheus_metrics_mounted  path=/metrics")
+except ImportError:
+    logger.warning("prometheus-client not installed — /metrics endpoint unavailable")
 
 app.add_middleware(
     CORSMiddleware,
@@ -139,24 +143,37 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 @app.get("/api/health")
 def health_check():
     """
-    Liveness + readiness probe.
-    Verifies the database is reachable — returns 503 if not.
+    Liveness + readiness probe. Checks DB, ChromaDB, and LLM key presence.
+    Returns 503 if the database is unreachable (hard dependency).
     """
+    checks: dict[str, bool] = {"db": False, "chromadb": False, "llm": False}
+
     try:
         with get_db() as conn:
             conn.execute("SELECT 1").fetchone()
-        db_ok = True
+        checks["db"] = True
     except Exception:
         logger.error("health_check_db_failed", exc_info=True)
-        db_ok = False
 
-    if not db_ok:
+    try:
+        from services.research.vector_store import _get_client
+        client = _get_client()
+        if client is not None:
+            client.heartbeat()
+            checks["chromadb"] = True
+    except Exception:
+        pass
+
+    checks["llm"] = bool(ANTHROPIC_API_KEY or OPENAI_API_KEY)
+
+    if not checks["db"]:
         return JSONResponse(
-            {"status": "error", "error": "Database unavailable"},
+            {"status": "error", "error": "Database unavailable", "checks": checks},
             status_code=503,
         )
 
-    return success({"status": "ok", "db": "ok"})
+    overall = "ok" if all(checks.values()) else "degraded"
+    return success({"status": overall, "checks": checks})
 
 
 # ── Dev server ────────────────────────────────────────────────────────────────

@@ -28,6 +28,10 @@ DB_PATH: Path     = BASE_DIR / "database.sqlite"
 UPLOAD_DIR: Path  = BASE_DIR / "uploads"
 OUTPUTS_DIR: Path = BASE_DIR / "outputs"
 
+# ── LLM API keys ─────────────────────────────────────────────────────────────
+ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
+OPENAI_API_KEY: str    = os.getenv("OPENAI_API_KEY", "")
+
 # ── LLM models ────────────────────────────────────────────────────────────────
 OPENAI_MODEL: str  = os.getenv("OPENAI_MODEL",  "gpt-4.1")
 CLAUDE_MODEL: str  = os.getenv("CLAUDE_MODEL",  "claude-sonnet-4-6")
@@ -39,6 +43,9 @@ CLASSIFY_MODEL: str = os.getenv("CLASSIFY_MODEL", "claude-haiku-4-5-20251001")
 # Anthropic prompt caching — marks large static prompt templates with
 # cache_control so repeated calls reuse cached tokens at 10% of normal cost.
 PROMPT_CACHE_ENABLED: bool = os.getenv("PROMPT_CACHE_ENABLED", "true").lower() != "false"
+
+# ── Embeddings ───────────────────────────────────────────────────────────────
+EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
 
 # ── Deep research ────────────────────────────────────────────────────────────
 TAVILY_API_KEY:         str   = os.getenv("TAVILY_API_KEY", "")
@@ -109,3 +116,12 @@ INSTANT_MAX_QUERIES:    int  = int(os.getenv("INSTANT_MAX_QUERIES",    "3"))
 DEEP_MAX_QUERIES:       int  = int(os.getenv("DEEP_MAX_QUERIES",       "5"))
 FOLLOWUP_TOP_K_SOURCES: int  = int(os.getenv("FOLLOWUP_TOP_K_SOURCES", "8"))
 CHROMADB_PATH:          Path = BASE_DIR / os.getenv("CHROMADB_DIR", "chromadb")
+
+# ── Generation constants ──────────────────────────────────────────────────────
+HEARTBEAT_INTERVAL_SECS:      int = int(os.getenv("HEARTBEAT_INTERVAL_SECS", "20"))
+CONVERSATION_TITLE_MAX_CHARS: int = int(os.getenv("CONVERSATION_TITLE_MAX_CHARS", "80"))
+LLM_DEFAULT_MAX_TOKENS:       int = int(os.getenv("LLM_DEFAULT_MAX_TOKENS", "4096"))
+MAX_FRAMES_JSON_BYTES:        int = int(os.getenv("MAX_FRAMES_JSON_BYTES", "10000000"))
+SOURCES_SNIPPET_MAX_CHARS:    int = int(os.getenv("SOURCES_SNIPPET_MAX_CHARS", "2500"))
+SOURCES_TOP_K:                int = int(os.getenv("SOURCES_TOP_K", "8"))
+SCENE_PLANNER_MAX_TOKENS:     int = int(os.getenv("SCENE_PLANNER_MAX_TOKENS", "8192"))

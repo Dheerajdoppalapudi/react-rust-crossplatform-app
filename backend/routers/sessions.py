@@ -16,10 +16,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from core.config import OUTPUTS_DIR
 from core.database import get_db
 from core.db_models import User
 from core.responses import success
+from core.utils import safe_resolve, read_json_file
 from dependencies.auth import get_current_user, resolve_media_user
 from schemas.sessions import SessionSummary, SessionOutputResponse
 
@@ -28,26 +28,6 @@ _bearer = HTTPBearer(auto_error=False)
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-_OUTPUTS_DIR_RESOLVED = Path(OUTPUTS_DIR).resolve()
-
-
-def _safe_path(raw_path: str, label: str = "file") -> Path:
-    """
-    Resolve raw_path and assert it is inside OUTPUTS_DIR.
-
-    CRIT-3: Prevents path traversal attacks where a crafted DB entry could
-    point to arbitrary filesystem locations (e.g. /etc/passwd, ../secrets).
-    Raises HTTP 403 if the resolved path escapes the outputs directory.
-    """
-    resolved = Path(raw_path).resolve()
-    if not str(resolved).startswith(str(_OUTPUTS_DIR_RESOLVED)):
-        logger.warning(
-            "path_traversal_blocked  label=%s  raw=%r  resolved=%s",
-            label, raw_path, resolved,
-        )
-        raise HTTPException(status_code=403, detail="Access denied")
-    return resolved
 
 
 @router.get("/api/sessions")
@@ -77,7 +57,7 @@ def get_session_output(session_id: str, current_user: User = Depends(get_current
         raise HTTPException(status_code=404, detail="Output not available")
 
     # CRIT-3: validate before opening
-    safe = _safe_path(row["ui_output_file"], "ui_output_file")
+    safe = safe_resolve(row["ui_output_file"], label="ui_output_file")
     if not safe.exists():
         raise HTTPException(status_code=404, detail="Output file missing")
 
@@ -98,7 +78,7 @@ def get_session_log(session_id: str, current_user: User = Depends(get_current_us
         raise HTTPException(status_code=404, detail="Session not found")
 
     # CRIT-3: validate the directory, then build a child path
-    safe_dir  = _safe_path(row["output_dir"], "output_dir")
+    safe_dir  = safe_resolve(row["output_dir"], label="output_dir")
     log_path  = safe_dir / "activity_log.json"
     if not log_path.exists():
         raise HTTPException(status_code=404, detail="Log not available")
@@ -122,19 +102,19 @@ def get_session_frames_meta(session_id: str, current_user: User = Depends(get_cu
     if not row or not row["output_dir"]:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    safe_dir = _safe_path(row["output_dir"], "output_dir")
+    safe_dir = safe_resolve(row["output_dir"], label="output_dir")
 
     if row["render_path"] == "interactive":
         scene_path = safe_dir / "scene_ir.json"
         if not scene_path.exists():
             raise HTTPException(status_code=404, detail="scene_ir.json not found")
-        return success(json.loads(scene_path.read_text()))
+        return success(read_json_file(scene_path))
 
     frames_path = safe_dir / "frames.json"
     if not frames_path.exists():
         raise HTTPException(status_code=404, detail="frames.json not found")
 
-    return success(json.loads(frames_path.read_text()))
+    return success(read_json_file(frames_path))
 
 
 @router.get("/api/sessions/{session_id}/frame/{frame_index}")
@@ -163,12 +143,12 @@ def get_session_frame(
         raise HTTPException(status_code=404, detail="Session not found")
 
     # CRIT-3: validate the session output directory first
-    safe_dir    = _safe_path(row["output_dir"], "output_dir")
+    safe_dir    = safe_resolve(row["output_dir"], label="output_dir")
     frames_path = safe_dir / "frames.json"
     if not frames_path.exists():
         raise HTTPException(status_code=404, detail="frames.json not found")
 
-    images = json.loads(frames_path.read_text()).get("images", [])
+    images = read_json_file(frames_path).get("images", [])
 
     if frame_index >= len(images):
         raise HTTPException(status_code=404, detail="Frame index out of range")
@@ -179,7 +159,7 @@ def get_session_frame(
 
     # CRIT-3: validate the individual frame path too — it may be an absolute path
     # written by the generator; it must still reside inside OUTPUTS_DIR.
-    safe_image = _safe_path(raw_image_path, "frame_image")
+    safe_image = safe_resolve(raw_image_path, label="frame_image")
     if not safe_image.exists() or safe_image.suffix.lower() != ".png":
         raise HTTPException(
             status_code=404,

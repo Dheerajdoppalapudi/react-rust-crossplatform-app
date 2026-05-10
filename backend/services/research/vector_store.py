@@ -12,14 +12,17 @@ without vector retrieval.
 
 import hashlib
 import logging
+import threading
 from typing import Optional
 
-from core.config import CHROMADB_PATH
+from core.config import CHROMADB_PATH, EMBEDDING_MODEL
 
 logger = logging.getLogger(__name__)
 
-_client       = None
+_client        = None
 _openai_client = None
+_client_lock   = threading.Lock()
+_openai_lock   = threading.Lock()
 
 
 # ── Lazy initialisation ───────────────────────────────────────────────────────
@@ -28,27 +31,31 @@ def _get_client():
     global _client
     if _client is not None:
         return _client
-    try:
-        import chromadb
-        CHROMADB_PATH.mkdir(parents=True, exist_ok=True)
-        _client = chromadb.PersistentClient(path=str(CHROMADB_PATH))
-        return _client
-    except Exception as exc:
-        logger.warning("ChromaDB unavailable: %s", exc)
-        return None
+    with _client_lock:
+        if _client is not None:
+            return _client
+        try:
+            import chromadb
+            CHROMADB_PATH.mkdir(parents=True, exist_ok=True)
+            _client = chromadb.PersistentClient(path=str(CHROMADB_PATH))
+        except Exception as exc:
+            logger.warning("ChromaDB unavailable: %s", exc)
+    return _client
 
 
 def _get_openai():
     global _openai_client
     if _openai_client is not None:
         return _openai_client
-    try:
-        from openai import OpenAI
-        _openai_client = OpenAI()
-        return _openai_client
-    except Exception as exc:
-        logger.warning("OpenAI client unavailable for embeddings: %s", exc)
-        return None
+    with _openai_lock:
+        if _openai_client is not None:
+            return _openai_client
+        try:
+            from openai import OpenAI
+            _openai_client = OpenAI()
+        except Exception as exc:
+            logger.warning("OpenAI client unavailable for embeddings: %s", exc)
+    return _openai_client
 
 
 def _embed(texts: list[str]) -> Optional[list[list[float]]]:
@@ -58,7 +65,7 @@ def _embed(texts: list[str]) -> Optional[list[list[float]]]:
         return None
     try:
         resp = oai.embeddings.create(
-            model="text-embedding-3-small",
+            model=EMBEDDING_MODEL,
             input=texts,
         )
         return [item.embedding for item in resp.data]
@@ -68,7 +75,7 @@ def _embed(texts: list[str]) -> Optional[list[list[float]]]:
 
 
 def _collection_name(conversation_id: str) -> str:
-    return f"conv_{conversation_id[:40]}"
+    return f"conv_{conversation_id}"
 
 
 def _source_id(url: str) -> str:

@@ -38,6 +38,29 @@ _MAX_RETRIES = 3
 # "Please try again in 4.934s."
 _WAIT_RE = re.compile(r'try again in ([\d.]+)s', re.IGNORECASE)
 
+# ---------------------------------------------------------------------------
+# Module-level client singletons — reuses HTTP connection pool across requests.
+# Avoids 1 connection-setup per LLM call at high concurrency.
+# ---------------------------------------------------------------------------
+_openai_client = None
+_anthropic_client = None
+
+
+def _get_openai_client():
+    global _openai_client
+    if _openai_client is None:
+        from openai import OpenAI
+        _openai_client = OpenAI()
+    return _openai_client
+
+
+def _get_anthropic_client():
+    global _anthropic_client
+    if _anthropic_client is None:
+        import anthropic
+        _anthropic_client = anthropic.Anthropic()
+    return _anthropic_client
+
 
 # ---------------------------------------------------------------------------
 # Base interface
@@ -76,8 +99,8 @@ class OpenAIProvider(LLMProvider):
         self.model = model or OPENAI_MODEL
 
     def complete(self, messages: List[Dict[str, str]], **kwargs) -> tuple[Optional[str], dict]:
-        from openai import OpenAI, RateLimitError
-        client = OpenAI()  # reads OPENAI_API_KEY from env automatically
+        from openai import RateLimitError
+        client = _get_openai_client()
 
         # These are Claude-only concepts — discard them silently for OpenAI
         kwargs.pop("cache_prefix", None)
@@ -142,7 +165,6 @@ class ClaudeProvider(LLMProvider):
         self.model = model or CLAUDE_MODEL
 
     def complete(self, messages: List[Dict[str, str]], **kwargs) -> tuple[Optional[str], dict]:
-        import anthropic
         from core.config import PROMPT_CACHE_ENABLED
 
         cache_prefix: str = kwargs.pop("cache_prefix", "")
@@ -157,7 +179,7 @@ class ClaudeProvider(LLMProvider):
             len(cache_prefix),
         )
 
-        client = anthropic.Anthropic()
+        client = _get_anthropic_client()
 
         # Separate system prompt from user/assistant messages
         system = next(
@@ -228,44 +250,49 @@ class ClaudeProvider(LLMProvider):
 
                 return response.content[0].text, usage_dict
 
-            except anthropic.RateLimitError as e:
-                if attempt == _MAX_RETRIES - 1:
-                    logger.error(
-                        "ClaudeProvider rate limit — all %d retries exhausted: %s",
-                        _MAX_RETRIES, e,
-                    )
-                    return None, {}
-                # Respect the retry-after header when present
-                try:
-                    wait = float(
-                        e.response.headers.get("retry-after", 5.0 * (attempt + 1))
-                    )
-                except Exception:
-                    wait = 5.0 * (attempt + 1)
-                logger.warning(
-                    "ClaudeProvider rate limit — waiting %.1fs then retry %d/%d",
-                    wait, attempt + 1, _MAX_RETRIES - 1,
-                )
-                time.sleep(wait)
-
-            except anthropic.APIStatusError as e:
-                if e.status_code == 529:  # Anthropic overloaded
+            except Exception as e:
+                import anthropic as _anthropic
+                if isinstance(e, _anthropic.RateLimitError):
                     if attempt == _MAX_RETRIES - 1:
                         logger.error(
-                            "ClaudeProvider overloaded — all %d retries exhausted",
-                            _MAX_RETRIES,
+                            "ClaudeProvider rate limit — all %d retries exhausted: %s",
+                            _MAX_RETRIES, e,
                         )
                         return None, {}
-                    wait = 10.0 * (attempt + 1)
+                    try:
+                        wait = float(
+                            e.response.headers.get("retry-after", 5.0 * (attempt + 1))
+                        )
+                    except Exception:
+                        wait = 5.0 * (attempt + 1)
                     logger.warning(
-                        "ClaudeProvider overloaded (529) — waiting %.1fs then retry %d/%d",
+                        "ClaudeProvider rate limit — waiting %.1fs then retry %d/%d",
                         wait, attempt + 1, _MAX_RETRIES - 1,
                     )
                     time.sleep(wait)
+                    continue
+
+                if isinstance(e, _anthropic.APIStatusError):
+                    if e.status_code == 529:
+                        if attempt == _MAX_RETRIES - 1:
+                            logger.error(
+                                "ClaudeProvider overloaded — all %d retries exhausted",
+                                _MAX_RETRIES,
+                            )
+                            return None, {}
+                        wait = 10.0 * (attempt + 1)
+                        logger.warning(
+                            "ClaudeProvider overloaded (529) — waiting %.1fs then retry %d/%d",
+                            wait, attempt + 1, _MAX_RETRIES - 1,
+                        )
+                        time.sleep(wait)
+                    else:
+                        logger.error(
+                            "ClaudeProvider API error  status=%d  error=%s", e.status_code, e
+                        )
+                        return None, {}
                 else:
-                    logger.error(
-                        "ClaudeProvider API error  status=%d  error=%s", e.status_code, e
-                    )
+                    logger.error("ClaudeProvider request failed: %s", e)
                     return None, {}
 
             except Exception as e:

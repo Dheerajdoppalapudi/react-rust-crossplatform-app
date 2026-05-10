@@ -42,18 +42,18 @@ from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import StreamingResponse
-from slowapi import Limiter
-from slowapi.util import get_remote_address
-
 from core.config import (
+    CONVERSATION_TITLE_MAX_CHARS,
     DEEP_SEARCH_SOURCES,
     DEEP_SOURCES_IN_ANSWER,
     FOLLOWUP_CONTEXT_TURNS,
     FOLLOWUP_TOP_K_SOURCES,
+    HEARTBEAT_INTERVAL_SECS,
     INSTANT_MAX_QUERIES,
     DEEP_MAX_QUERIES,
     UPLOAD_DIR,
 )
+from core.limiter import limiter as _limiter
 from core.database import (
     get_db,
     insert_conversation,
@@ -87,9 +87,8 @@ from dependencies.auth import get_current_user
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-_limiter = Limiter(key_func=get_remote_address)
 
-HEARTBEAT_INTERVAL = 20  # seconds
+HEARTBEAT_INTERVAL = HEARTBEAT_INTERVAL_SECS
 
 
 def _sse(data: dict) -> str:
@@ -100,8 +99,8 @@ def _write_activity_log(output_dir: str, lifecycle_log: list) -> None:
     try:
         with open(f"{output_dir}/activity_log.json", "w") as f:
             json.dump(lifecycle_log, f, indent=2)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("activity_log_write_failed  output_dir=%s  error=%s", output_dir, exc)
 
 
 @router.post("/api/generate")
@@ -124,6 +123,18 @@ async def generate(
     uploaded_file_ids:   Optional[str] = Form(None),
     current_user:        User          = Depends(get_current_user),
 ):
+    # ── Input validation ──────────────────────────────────────────────────────
+    from fastapi import HTTPException as _HTTPException
+    message = (message or "").strip()
+    if not message:
+        raise _HTTPException(status_code=422, detail="message cannot be empty")
+    if len(message) > 8000:
+        raise _HTTPException(status_code=422, detail="message too long (max 8000 chars)")
+    if research_mode not in ("instant", "deep_research"):
+        raise _HTTPException(status_code=422, detail=f"invalid research_mode: {research_mode!r}")
+    if render_mode is not None and render_mode not in ("manim", "svg"):
+        raise _HTTPException(status_code=422, detail=f"invalid render_mode: {render_mode!r}")
+
     session_id = uuid.uuid4().hex
     output_dir = session_output_dir(session_id)
     start_time = time.time()
@@ -131,22 +142,22 @@ async def generate(
     # ── Resolve / create conversation ─────────────────────────────────────────
     if not conversation_id:
         conversation_id = uuid.uuid4().hex
-        insert_conversation(conversation_id, message[:80], user_id=current_user.id)
-        turn_index = 1
+        insert_conversation(conversation_id, message[:CONVERSATION_TITLE_MAX_CHARS], user_id=current_user.id)
+        # First turn — always 1, no need for an atomic lookup
+        turn_index = insert_session(
+            session_id, message, conversation_id, turn_index=1,
+            parent_session_id=parent_session_id,
+            parent_frame_index=parent_frame_index,
+            user_id=current_user.id,
+        )
     else:
-        with get_db() as conn:
-            row = conn.execute(
-                "SELECT COUNT(*) AS cnt FROM sessions WHERE conversation_id = ? AND user_id = ?",
-                (conversation_id, current_user.id),
-            ).fetchone()
-            turn_index = (row["cnt"] or 0) + 1
-
-    insert_session(
-        session_id, message, conversation_id, turn_index,
-        parent_session_id=parent_session_id,
-        parent_frame_index=parent_frame_index,
-        user_id=current_user.id,
-    )
+        # Atomic MAX()+1 inside insert_session eliminates the COUNT race condition
+        turn_index = insert_session(
+            session_id, message, conversation_id,
+            parent_session_id=parent_session_id,
+            parent_frame_index=parent_frame_index,
+            user_id=current_user.id,
+        )
     touch_conversation(conversation_id)
 
     # ── LLM provider ─────────────────────────────────────────────────────────
@@ -525,7 +536,14 @@ async def _search_phase(
         yield search_evt
         t_search = time.time()
 
-        batches = await asyncio.gather(*[tavily.search(q, max_results=5) for q in queries_used])
+        # Semaphore caps concurrent Tavily calls to prevent 429 storms at scale
+        _tavily_sem = asyncio.Semaphore(3)
+
+        async def _bounded_search(q: str) -> list:
+            async with _tavily_sem:
+                return await tavily.search(q, max_results=5)
+
+        batches = await asyncio.gather(*[_bounded_search(q) for q in queries_used])
 
         round_results: list[SearchResult] = []
         for batch in batches:
@@ -626,8 +644,8 @@ def _save_sources_raw(sources, output_dir: str) -> None:
         ]
         with open(f"{output_dir}/sources_raw.json", "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("sources_raw_write_failed  output_dir=%s  error=%s", output_dir, exc)
 
 
 def _load_prior_synthesis(conversation_id: str, limit: int, user_id: str) -> str:
@@ -645,14 +663,14 @@ def _load_prior_synthesis(conversation_id: str, limit: int, user_id: str) -> str
             ).fetchall()
         texts = [r["synthesis_text"] for r in reversed(rows) if r["synthesis_text"]]
         return "\n\n---\n\n".join(texts) if texts else ""
-    except Exception:
+    except Exception as exc:
+        logger.warning("load_prior_synthesis_failed  conv=%s  error=%s", conversation_id, exc)
         return ""
 
 
 def _resolve_file_ids(uploaded_file_ids: Optional[str], user_id: str) -> list[str]:
     if not uploaded_file_ids:
         return []
-    from pathlib import Path
     paths = []
     for fid in uploaded_file_ids.split(","):
         fid = fid.strip()
@@ -666,5 +684,5 @@ def _resolve_file_ids(uploaded_file_ids: Optional[str], user_id: str) -> list[st
 
 
 def _strip_urls(text: str) -> str:
-    import re
-    return re.sub(r'https?://\S+', '', text).strip()
+    import re as _re
+    return _re.sub(r'https?://\S+', '', text).strip()

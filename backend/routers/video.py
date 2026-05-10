@@ -17,17 +17,16 @@ import asyncio
 import json
 import logging
 import time
-from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from core.config import OUTPUTS_DIR
 from core.database import get_db, update_session
 from core.db_models import User
 from core.responses import success
+from core.utils import safe_resolve
 from dependencies.auth import get_current_user, create_media_token, resolve_media_user
 from services.video_generation.frame_exporter import export_frames
 from services.video_generation.tts_service import parse_narration, generate_audio_parallel
@@ -37,11 +36,11 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-_OUTPUTS_DIR_RESOLVED = Path(OUTPUTS_DIR).resolve()
-
-# Sessions currently being assembled — prevents duplicate ffmpeg runs if the
-# user clicks "Generate video" twice before the first assembly completes.
-_assembly_in_progress: set[str] = set()
+# Per-session asyncio locks — prevents duplicate ffmpeg runs if the user clicks
+# "Generate video" twice before the first assembly completes. asyncio.Lock is
+# coroutine-safe within a single worker process. For multi-process deployments,
+# replace with a Redis-backed distributed lock.
+_session_locks: dict[str, asyncio.Lock] = {}
 
 # Used by media download endpoints that accept ?token= without Authorization header.
 _bearer = HTTPBearer(auto_error=False)
@@ -56,18 +55,6 @@ _SSE_HEADERS = {
 def _sse(payload: dict) -> str:
     """Format one Server-Sent Event."""
     return f"data: {json.dumps(payload)}\n\n"
-
-
-def _safe_video_path(raw_path: str) -> Path:
-    """
-    CRIT-3: Resolve the path and assert it is inside OUTPUTS_DIR.
-    Raises HTTP 403 if the path escapes the outputs directory.
-    """
-    resolved = Path(raw_path).resolve()
-    if not str(resolved).startswith(str(_OUTPUTS_DIR_RESOLVED)):
-        logger.warning("path_traversal_blocked  raw=%r  resolved=%s", raw_path, resolved)
-        raise HTTPException(status_code=403, detail="Access denied")
-    return resolved
 
 
 # ── Media token endpoint (CRIT-2) ─────────────────────────────────────────────
@@ -140,7 +127,7 @@ async def generate_video(
         raise HTTPException(status_code=404, detail="Session output directory missing")
 
     # CRIT-3: validate the directory is inside OUTPUTS_DIR before using it
-    safe_output_dir = _safe_video_path(output_dir)
+    safe_output_dir = safe_resolve(output_dir)
     if not safe_output_dir.is_dir():
         raise HTTPException(status_code=404, detail="Session output directory missing")
 
@@ -171,7 +158,7 @@ async def generate_video(
 
     # Idempotency: video already exists — emit a single "done" event
     if row["video_path"]:
-        existing = _safe_video_path(row["video_path"])
+        existing = safe_resolve(row["video_path"])
         if existing.exists():
             logger.info("video_cached  session=%s", session_id)
 
@@ -288,7 +275,8 @@ async def generate_video(
                 "message": "Assembling video", "elapsed_s": elapsed(),
             })
 
-            if session_id in _assembly_in_progress:
+            session_lock = _session_locks.setdefault(session_id, asyncio.Lock())
+            if session_lock.locked():
                 logger.warning("assembly_duplicate_blocked  session=%s", session_id)
                 yield _sse({
                     "type":    "error",
@@ -297,9 +285,8 @@ async def generate_video(
                 })
                 return
 
-            _assembly_in_progress.add(session_id)
             t3 = time.time()
-            try:
+            async with session_lock:
                 # HIGH-2: blocking subprocess (ffmpeg) — run in thread pool
                 assemble_task = asyncio.create_task(
                     asyncio.to_thread(
@@ -316,8 +303,6 @@ async def generate_video(
                         yield _sse({"type": "heartbeat", "elapsed_s": elapsed()})
 
                 await assemble_task
-            finally:
-                _assembly_in_progress.discard(session_id)
 
             d3 = round(time.time() - t3, 1)
             logger.info(
@@ -405,7 +390,7 @@ def get_session_video(
         raise HTTPException(status_code=404, detail="Video not yet generated for this session")
 
     # CRIT-3: validate path before serving
-    safe_video = _safe_video_path(row["video_path"])
+    safe_video = safe_resolve(row["video_path"])
     if not safe_video.exists():
         raise HTTPException(status_code=404, detail="Video file missing from disk")
 

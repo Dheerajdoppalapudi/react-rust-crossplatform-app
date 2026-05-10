@@ -12,7 +12,6 @@ import logging
 import os
 import subprocess
 import tempfile
-from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -20,6 +19,7 @@ from fastapi.responses import FileResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from core.config import OUTPUTS_DIR
+from core.utils import safe_resolve
 from pydantic import BaseModel
 
 from core.database import (
@@ -43,22 +43,8 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-_OUTPUTS_DIR_RESOLVED = Path(OUTPUTS_DIR).resolve()
-
 # Used by media endpoints that accept ?token= without Authorization header.
 _bearer = HTTPBearer(auto_error=False)
-
-
-def _safe_video_path(raw_path: str) -> Path:
-    """
-    CRIT-3: Validate that a path from the database is inside OUTPUTS_DIR.
-    Raises HTTP 403 if the path escapes the outputs directory.
-    """
-    resolved = Path(raw_path).resolve()
-    if not str(resolved).startswith(str(_OUTPUTS_DIR_RESOLVED)):
-        logger.warning("path_traversal_blocked  raw=%r  resolved=%s", raw_path, resolved)
-        raise HTTPException(status_code=403, detail="Access denied")
-    return resolved
 
 
 @router.post("/api/conversations/{conversation_id}/media-token")
@@ -202,6 +188,7 @@ def merge_conversation_videos(conversation_id: str, current_user: User = Depends
              "-i", concat_file, "-c", "copy", output_path],
             check=True,
             capture_output=True,
+            timeout=600,
         )
     except FileNotFoundError:
         raise HTTPException(
@@ -269,7 +256,7 @@ def get_merged_video(
         raise HTTPException(status_code=404, detail="Merged video not found")
 
     # CRIT-3: Validate path before serving.
-    safe_path = _safe_video_path(raw_path)
+    safe_path = safe_resolve(raw_path, label="merged_video")
     if not safe_path.exists():
         raise HTTPException(status_code=404, detail="Merged video not found")
 

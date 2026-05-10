@@ -30,6 +30,7 @@ import os
 from dataclasses import dataclass, field
 from typing import AsyncGenerator
 
+from core.config import SCENE_PLANNER_MAX_TOKENS, SOURCES_SNIPPET_MAX_CHARS
 from services.frame_generation.planner import _extract_json, request_llm_service
 from services.interactive.scene_ir import SceneIR
 from services.llm_service import LLMService, OpenAIProvider, default_llm_service
@@ -105,7 +106,7 @@ def _build_sources_block(sources: list[dict]) -> str:
     for i, s in enumerate(sources, 1):
         # snippet is Tavily's query-relevant extract — always prefer it over raw content.
         # content[:N] almost always hits navigation boilerplate before real article text.
-        content = (s.get("snippet") or s.get("content") or "")[:2500]
+        content = (s.get("snippet") or s.get("content") or "")[:SOURCES_SNIPPET_MAX_CHARS]
         lines.append(f"[{i}] **{s.get('title', '')}** ({s.get('domain', '')})")
         lines.append(f"URL: {s.get('url', '')}")
         lines.append(content)
@@ -231,7 +232,7 @@ async def _plan_scene(
 
     svc = svc or default_llm_service
     raw, _ = await asyncio.to_thread(
-        svc.make_system_user_request, system_prompt, user_msg, max_tokens=8192
+        svc.make_system_user_request, system_prompt, user_msg, max_tokens=SCENE_PLANNER_MAX_TOKENS
     )
     if raw is None:
         raise RuntimeError("Scene planner LLM returned None")

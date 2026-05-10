@@ -78,12 +78,13 @@ async def _stream_anthropic(llm_service: LLMService, user_msg: str) -> AsyncGene
     the async generator drains the queue so tokens reach the caller as they arrive.
     """
     provider = llm_service.provider
-    if not hasattr(provider, "_client") or provider.__class__.__name__ != "ClaudeProvider":
+    if provider.__class__.__name__ != "ClaudeProvider":
         raise NotImplementedError("streaming only implemented for ClaudeProvider")
 
     import anthropic
+    from services.llm_service import _get_anthropic_client
 
-    client: anthropic.Anthropic = provider._client
+    client: anthropic.Anthropic = _get_anthropic_client()
     model = getattr(provider, "model", "claude-haiku-4-5-20251001")
     loop  = asyncio.get_event_loop()
     queue: asyncio.Queue[Optional[str]] = asyncio.Queue()

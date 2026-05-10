@@ -37,7 +37,10 @@
       "Bash(awk '/^async def|^def/{func=$0} /build_conversation_context/{print func; print NR\":\"$0}' \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/routers/generate.py\")",
       "Bash(grep -rn \"except.*:\\\\s*$\\\\|except.*:\\\\s*pass\" \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/services\" --include=\"*.py\")",
       "Bash(grep -rn \"pass$\" \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend\" --include=\"*.py\" ! -path \"*/env/*\" ! -path \"*/__pycache__/*\")",
-      "Bash(grep -n \"except.*:$\" \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/routers/generate.py\")"
+      "Bash(grep -n \"except.*:$\" \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/routers/generate.py\")",
+      "Bash(rm \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/services/research/query_planner.py\")",
+      "Bash(mkdir -p \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/tests\")",
+      "Bash(touch \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/tests/__init__.py\")"
     ],
     "additionalDirectories": [
       "/tmp",
@@ -48,7 +51,8 @@
       "/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/client/src/components",
       "/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/routers",
       "/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/services",
-      "/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend"
+      "/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend",
+      "/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/services/research"
     ]
   }
 }

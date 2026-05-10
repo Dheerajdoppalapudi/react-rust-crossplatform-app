@@ -38,7 +38,7 @@ token_usage: ContextVar[dict | None] = ContextVar("token_usage", default=None)
 # default_llm_service — allows the UI to choose Claude vs OpenAI per request.
 request_llm_service: ContextVar[LLMService | None] = ContextVar("request_llm_service", default=None)
 
-# Fixed Haiku service used ONLY for classify_intent — cheap/fast, always Claude.
+# Fixed Haiku service for plan_and_classify — cheap/fast, always Claude.
 # Bypasses the per-request service so the user's model choice doesn't affect it.
 _classify_service = LLMService(provider=ClaudeProvider(model=CLASSIFY_MODEL))
 
@@ -187,7 +187,7 @@ def call_llm(
         reducing cost by ~90% on the static tokens for repeated calls.
 
     override_service: use this LLMService instead of the per-request context
-        var. Used by classify_intent() which always runs on Haiku.
+        var. Used by plan_and_classify() which always runs on Haiku.
 
     json_mode: if True, tells OpenAI to return guaranteed-valid JSON
         (response_format=json_object). No-op for Claude.
@@ -279,7 +279,7 @@ def _extract_json(text: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Unified first call — plan_and_classify (replaces classify_intent for new flow)
+# Unified first call — plan_and_classify
 # ---------------------------------------------------------------------------
 
 # Mode-specific output schema injected into planning_classify.md via {{MODE_RULES}}.
@@ -350,7 +350,7 @@ async def plan_and_classify(
     prior_synthesis:      str = "",
 ) -> dict:
     """
-    Unified first Haiku call — replaces classify_intent() + query_planner.decompose().
+    Unified first Haiku call — single intent classification + search planning call.
 
     Returns a dict with all fields needed by the generation pipeline:
       Interactive: domain, enriched_prompt, suggested_followups, needs_search?, search_queries?, sub_questions?
@@ -401,42 +401,6 @@ async def plan_and_classify(
     return result
 
 
-# ---------------------------------------------------------------------------
-# Stage 1A — Vocabulary plan (no geometry)
-# ---------------------------------------------------------------------------
-
-async def classify_intent(
-    user_prompt: str, conversation_context: str = ""
-) -> tuple[str, int, list, list, str]:
-    """
-    Call 1 — classification + notes.
-    Returns (intent_type, frame_count, notes, suggested_followups, domain).
-    Always uses Haiku (_classify_service) regardless of the per-request model.
-    """
-    _prompts_dir = os.path.join(os.path.dirname(__file__), "prompts")
-    with open(os.path.join(_prompts_dir, "planning_classify.md")) as f:
-        template = f.read()
-
-    context_block = f"Conversation context:\n{conversation_context}\n\n" if conversation_context else ""
-    prompt = (
-        template
-        .replace("{{USER_PROMPT}}", user_prompt)
-        .replace("{{CONVERSATION_CONTEXT}}", context_block)
-    )
-
-    raw = await asyncio.to_thread(
-        call_llm, prompt, 1200,
-        prompt_name="planning_classify.md",
-        override_service=_classify_service,
-    )
-    data = _extract_json(raw)
-    intent_type = data.get("intent_type", "process")
-    frame_count = max(2, min(8, int(data.get("frame_count", 3))))
-    notes = data.get("notes", [])
-    suggested_followups = data.get("suggested_followups", [])
-    domain = data.get("domain", "general")
-    return intent_type, frame_count, notes, suggested_followups, domain
-
 
 async def create_vocab_plan(
     user_prompt: str,
@@ -447,7 +411,7 @@ async def create_vocab_plan(
     """
     Call 2 — intent-specific planning.
     Routes to planning_math.md (math) or planning_svg.md (all non-math intents).
-    intent_type and frame_count come from classify_intent() (Call 1).
+    intent_type and frame_count come from plan_and_classify().
     """
     _prompts_dir = os.path.join(os.path.dirname(__file__), "prompts")
     context_block = f"Conversation context:\n{conversation_context}\n\n" if conversation_context else ""

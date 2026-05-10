@@ -45,18 +45,21 @@ class TavilyProvider:
     def _available(self) -> bool:
         return self._client is not None
 
-    async def search(self, query: str, max_results: int = 5) -> list[SearchResult]:
+    async def search(self, query: str, max_results: int = 5, timeout: float = 20.0) -> list[SearchResult]:
         if not self._available():
             logger.warning("Tavily not configured — returning empty search results")
             return []
 
         try:
-            response = await asyncio.to_thread(
-                self._client.search,
-                query=query,
-                max_results=max_results,
-                include_raw_content=True,
-                search_depth="advanced",
+            response = await asyncio.wait_for(
+                asyncio.to_thread(
+                    self._client.search,
+                    query=query,
+                    max_results=max_results,
+                    include_raw_content=True,
+                    search_depth="advanced",
+                ),
+                timeout=timeout,
             )
             results = []
             for r in response.get("results", []):
@@ -71,22 +74,28 @@ class TavilyProvider:
                     published_date=r.get("published_date"),
                 ))
             return results
+        except asyncio.TimeoutError:
+            logger.warning("Tavily search timed out after %.1fs  query=%r", timeout, query[:80])
+            return []
         except Exception as e:
             logger.error("Tavily search failed for query %r: %s", query[:80], e)
             return []
 
-    async def extract(self, url: str) -> str:
+    async def extract(self, url: str, timeout: float = 20.0) -> str:
         """Fetch and extract the main content of a URL via Tavily /extract."""
         if not self._available():
             return ""
         try:
-            response = await asyncio.to_thread(
-                self._client.extract,
-                urls=[url],
+            response = await asyncio.wait_for(
+                asyncio.to_thread(self._client.extract, urls=[url]),
+                timeout=timeout,
             )
             results = response.get("results", [])
             if results:
                 return results[0].get("raw_content", "")
+            return ""
+        except asyncio.TimeoutError:
+            logger.warning("Tavily extract timed out after %.1fs  url=%s", timeout, url)
             return ""
         except Exception as e:
             logger.error("Tavily extract failed for %s: %s", url, e)

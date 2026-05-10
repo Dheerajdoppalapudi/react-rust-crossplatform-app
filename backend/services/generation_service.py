@@ -9,6 +9,7 @@ This module owns:
   - Utility: count_llm_calls()
 """
 
+import asyncio
 import json
 import logging
 import os
@@ -393,8 +394,11 @@ async def run_video_pipeline_from_intent(
         interleaved_lines.append("")
 
     os.makedirs(output_dir, exist_ok=True)
-    with open(os.path.join(output_dir, "narration.txt"), "w") as f:
-        f.write("\n".join(interleaved_lines).strip() + "\n")
+    _narration_content = "\n".join(interleaved_lines).strip() + "\n"
+    await asyncio.to_thread(
+        Path(os.path.join(output_dir, "narration.txt")).write_text,
+        _narration_content, "utf-8",
+    )
 
     result_payload["ui_output_file"] = ui_output_file
     yield {"type": "result", "payload": result_payload}
@@ -427,8 +431,7 @@ async def _run_frame_generation(
             for i, code in enumerate(frame_codes)
         )
         ui_output_file = os.path.join(output_dir, "final_output.py")
-        with open(ui_output_file, "w") as f:
-            f.write(py_content)
+        await asyncio.to_thread(Path(ui_output_file).write_text, py_content, "utf-8")
 
         all_images, all_captions, all_narrations = _interleave_slides(
             png_paths, captions, frame_narrations, plan.slide_frames, output_dir, accent
@@ -437,9 +440,14 @@ async def _run_frame_generation(
             all_images, all_captions, all_narrations, notes, accent, output_dir
         )
 
-        with open(os.path.join(output_dir, "frames.json"), "w") as f:
-            json.dump({"render_path": "manim", "images": all_images, "captions": all_captions,
-                       "suggested_followups": suggested_followups, "notes": notes}, f, indent=2)
+        _manim_frames_data = json.dumps(
+            {"render_path": "manim", "images": all_images, "captions": all_captions,
+             "suggested_followups": suggested_followups, "notes": notes}, indent=2
+        )
+        await asyncio.to_thread(
+            Path(os.path.join(output_dir, "frames.json")).write_text,
+            _manim_frames_data, "utf-8",
+        )
 
         return {
             "session_id":          session_id,
@@ -476,11 +484,17 @@ async def _run_frame_generation(
     )
 
     ui_output_file = os.path.join(output_dir, "final_output.json")
-    with open(os.path.join(output_dir, "frames.json"), "w") as f:
-        json.dump({"render_path": "svg", "images": all_images, "captions": all_captions,
-                   "suggested_followups": suggested_followups, "notes": notes}, f, indent=2)
-    with open(ui_output_file, "w") as f:
-        json.dump({"render_path": "svg", "images": all_images, "captions": all_captions}, f, indent=2)
+    _svg_frames_data = json.dumps(
+        {"render_path": "svg", "images": all_images, "captions": all_captions,
+         "suggested_followups": suggested_followups, "notes": notes}, indent=2
+    )
+    _svg_ui_data = json.dumps(
+        {"render_path": "svg", "images": all_images, "captions": all_captions}, indent=2
+    )
+    await asyncio.to_thread(
+        Path(os.path.join(output_dir, "frames.json")).write_text, _svg_frames_data, "utf-8"
+    )
+    await asyncio.to_thread(Path(ui_output_file).write_text, _svg_ui_data, "utf-8")
 
     return {
         "session_id":          session_id,

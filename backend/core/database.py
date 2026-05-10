@@ -213,6 +213,25 @@ def init_db() -> None:
             "CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id "
             "ON refresh_tokens(user_id)"
         )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_sessions_status "
+            "ON sessions(status)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_sessions_created_at "
+            "ON sessions(created_at DESC)"
+        )
+        # Partial index for soft-deleted conversations (WHERE clause requires SQLite ≥ 3.9)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_conversations_deleted "
+            "ON conversations(deleted_at) WHERE deleted_at IS NOT NULL"
+        )
+        # Unique constraint to prevent duplicate turn_index from concurrent inserts
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_conv_turn_user "
+            "ON sessions(conversation_id, turn_index, user_id) "
+            "WHERE conversation_id IS NOT NULL"
+        )
 
         conn.commit()
     logger.info("database_initialised  path=%s", DB_PATH)
@@ -333,21 +352,49 @@ def insert_session(
     session_id:         str,
     prompt:             str,
     conversation_id:    Optional[str] = None,
-    turn_index:         int           = 1,
+    turn_index:         Optional[int] = None,
     parent_session_id:  Optional[str] = None,
     parent_frame_index: Optional[int] = None,
     user_id:            Optional[str] = None,
-) -> None:
+) -> int:
+    """
+    Insert a new session row and return the assigned turn_index.
+
+    turn_index is computed atomically via a MAX()+1 subquery so concurrent
+    inserts for the same conversation cannot produce duplicates. If turn_index
+    is provided explicitly it is used as-is (for new conversations where the
+    caller already knows it must be 1).
+    """
     with get_db() as conn:
-        conn.execute(
-            "INSERT INTO sessions "
-            "(id, prompt, created_at, status, conversation_id, turn_index, "
-            "parent_session_id, parent_frame_index, user_id) "
-            "VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?)",
-            (session_id, prompt, now_iso(), conversation_id, turn_index,
-             parent_session_id, parent_frame_index, user_id),
-        )
+        if turn_index is not None:
+            conn.execute(
+                "INSERT INTO sessions "
+                "(id, prompt, created_at, status, conversation_id, turn_index, "
+                "parent_session_id, parent_frame_index, user_id) "
+                "VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?)",
+                (session_id, prompt, now_iso(), conversation_id, turn_index,
+                 parent_session_id, parent_frame_index, user_id),
+            )
+        else:
+            # Atomic increment — avoids the COUNT()+1 race condition
+            conn.execute(
+                "INSERT INTO sessions "
+                "(id, prompt, created_at, status, conversation_id, turn_index, "
+                "parent_session_id, parent_frame_index, user_id) "
+                "VALUES (?, ?, ?, 'pending', ?, "
+                "COALESCE((SELECT MAX(turn_index) FROM sessions "
+                "          WHERE conversation_id=? AND user_id=?), 0) + 1, "
+                "?, ?, ?)",
+                (session_id, prompt, now_iso(), conversation_id,
+                 conversation_id, user_id,
+                 parent_session_id, parent_frame_index, user_id),
+            )
+            row = conn.execute(
+                "SELECT turn_index FROM sessions WHERE id = ?", (session_id,)
+            ).fetchone()
+            turn_index = row["turn_index"] if row else 1
         conn.commit()
+    return turn_index or 1
 
 
 def update_session(session_id: str, **fields) -> None:
