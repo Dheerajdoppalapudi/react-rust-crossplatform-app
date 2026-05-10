@@ -27,7 +27,17 @@
       "Bash(rm \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/client/src/pages/Product.jsx\")",
       "Bash(rm \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/client/src/components/product/ChatWindow.jsx\" \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/client/src/components/product/ChatMessage.jsx\" \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/client/src/components/product/ChatInput.jsx\" \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/client/src/components/product/ChatEmptyState.jsx\")",
       "Bash(rmdir \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/client/src/components/product/\")",
-      "Bash(python -c ' *)"
+      "Bash(python -c ' *)",
+      "Bash(echo \"chromadb>=0.5.0\" >> \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/requirements.txt\")",
+      "Bash(mkdir -p \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/client/src/utils\")",
+      "Bash(node -e \"const m = require\\('./node_modules/html2pdf.js/dist/html2pdf.bundle.js'\\); console.log\\(typeof m\\)\")",
+      "Bash(npm uninstall *)",
+      "Bash(grep -n \"def _extract_json\\\\|def _strip_trailing\" \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/services/frame_generation/planner.py\" /Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/services/research/query_planner.py 2>/dev/null)",
+      "Read(//Users/dheerajdoppalapudi/Desktop/**)",
+      "Bash(awk '/^async def|^def/{func=$0} /build_conversation_context/{print func; print NR\":\"$0}' \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/routers/generate.py\")",
+      "Bash(grep -rn \"except.*:\\\\s*$\\\\|except.*:\\\\s*pass\" \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/services\" --include=\"*.py\")",
+      "Bash(grep -rn \"pass$\" \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend\" --include=\"*.py\" ! -path \"*/env/*\" ! -path \"*/__pycache__/*\")",
+      "Bash(grep -n \"except.*:$\" \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/routers/generate.py\")"
     ],
     "additionalDirectories": [
       "/tmp",
@@ -37,7 +47,8 @@
       "/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/client/src/test",
       "/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/client/src/components",
       "/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/routers",
-      "/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/services"
+      "/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/services",
+      "/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend"
     ]
   }
 }

@@ -247,7 +247,7 @@ function StageRow({ stage, sources, isLast, compact, isDark }) {
   const lineColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)'
 
   const queries      = stage.queries ?? []
-  const stageSources = (stage.id === 'searching' || stage.id === 'reading') ? sources : []
+  const stageSources = stage.id === 'reading' ? sources : []
   const hasSubItems  = queries.length > 0 || stageSources.length > 0
 
   const [expanded, setExpanded] = useState(stage.status !== 'done')

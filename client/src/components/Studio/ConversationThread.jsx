@@ -100,9 +100,10 @@ const TurnView = memo(function TurnView({ turn, onPauseAsk, onRetryTurn, onRetry
         )}
 
         {turn.render_path === 'interactive' ? (
-          (turn.title || (turn.blocks ?? []).length > 0 || turn.synthesisText || turn.sources?.length > 0) ? (
+          (turn.title || (turn.blocks ?? []).length > 0 || turn.synthesisText || (!turn.isLoading && turn.sources?.length > 0)) ? (
             (turn.synthesisText || turn.sources?.length > 0) ? (
               <ResearchResult
+                prompt={turn.prompt ?? ''}
                 synthesisText={turn.synthesisText ?? ''}
                 synthesisComplete={turn.synthesisComplete ?? false}
                 sources={turn.sources ?? []}

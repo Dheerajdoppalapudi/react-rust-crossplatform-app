@@ -1,9 +1,8 @@
-import { useState, Children } from 'react'
-import { Box, Typography, Collapse, IconButton, Tooltip, useTheme } from '@mui/material'
-import ExpandMoreIcon  from '@mui/icons-material/ExpandMore'
-import OpenInNewIcon   from '@mui/icons-material/OpenInNew'
+import { useState, useRef, Children } from 'react'
+import { Box, Typography, Collapse, Tooltip, useTheme } from '@mui/material'
 import ReactMarkdown   from 'react-markdown'
 import BlockRenderer   from '../Interactive/BlockRenderer'
+import ResponseToolbar from './ResponseToolbar'
 
 // ── Citation chip ─────────────────────────────────────────────────────────────
 
@@ -39,7 +38,6 @@ function CitationChip({ num, source }) {
 }
 
 // ── Inline citation injection ─────────────────────────────────────────────────
-// Recursively processes React children, splitting text nodes on [N] patterns.
 
 function injectCitations(children, sources) {
   return Children.map(children, (child) => {
@@ -55,7 +53,6 @@ function injectCitations(children, sources) {
         return part || null
       })
     }
-    // Non-string React element — recurse into its props.children if present
     if (child?.props?.children) {
       return { ...child, props: { ...child.props, children: injectCitations(child.props.children, sources) } }
     }
@@ -160,127 +157,79 @@ function CitedMarkdown({ text, sources }) {
   )
 }
 
-// ── Source card ───────────────────────────────────────────────────────────────
+// ── Sources panel (controlled) ────────────────────────────────────────────────
 
-function SourceCard({ source, index }) {
+function SourcesPanel({ sources, open }) {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
-
-  const domain   = source.domain || ''
-  const faviconUrl = domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=16` : null
-
-  return (
-    <Box sx={{
-      display: 'flex', flexDirection: 'column', gap: 0.5,
-      px: 1.5, py: 1.25,
-      borderRadius: '10px',
-      border: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.07)'}`,
-      backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.015)',
-      '&:hover': {
-        borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.13)',
-      },
-      transition: 'border-color 0.15s',
-    }}>
-      {/* Domain row */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-        <Box sx={{
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          width: 16, height: 16, borderRadius: '3px', flexShrink: 0,
-          backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
-          overflow: 'hidden',
-        }}>
-          {faviconUrl ? (
-            <img src={faviconUrl} alt="" width={12} height={12} style={{ objectFit: 'contain' }} />
-          ) : (
-            <Typography sx={{ fontSize: 8, color: theme.palette.text.secondary }}>?</Typography>
-          )}
-        </Box>
-        <Typography sx={{ fontSize: 10.5, color: theme.palette.text.secondary, fontWeight: 500 }}>
-          [{index}] {domain}
-        </Typography>
-      </Box>
-
-      {/* Title */}
-      <Box component="a" href={source.url} target="_blank" rel="noopener noreferrer" sx={{
-        fontSize: 12.5, fontWeight: 600, lineHeight: 1.4,
-        color: isDark ? '#7b9fff' : '#1847d6',
-        textDecoration: 'none',
-        display: 'flex', alignItems: 'flex-start', gap: 0.5,
-        '&:hover span': { textDecoration: 'underline' },
-      }}>
-        <Box component="span" sx={{ flex: 1 }}>{source.title}</Box>
-        <OpenInNewIcon sx={{ fontSize: 11, flexShrink: 0, mt: 0.2, opacity: 0.6 }} />
-      </Box>
-
-      {/* Snippet */}
-      {source.snippet && (
-        <Typography sx={{
-          fontSize: 11.5, color: theme.palette.text.secondary,
-          lineHeight: 1.55, display: '-webkit-box',
-          WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-        }}>
-          {source.snippet}
-        </Typography>
-      )}
-    </Box>
-  )
-}
-
-// ── Sources panel ─────────────────────────────────────────────────────────────
-
-function SourcesPanel({ sources }) {
-  const theme  = useTheme()
-  const [open, setOpen] = useState(true)
 
   if (!sources?.length) return null
 
   return (
-    <Box sx={{ mt: 2 }}>
-      <Box
-        component="button"
-        type="button"
-        onClick={() => setOpen(o => !o)}
-        sx={{
-          display: 'flex', alignItems: 'center', gap: 0.75,
-          background: 'none', border: 'none', cursor: 'pointer', p: 0,
-          color: theme.palette.text.secondary,
-          '&:hover': { color: theme.palette.text.primary },
-          transition: 'color 0.15s',
-        }}
-      >
-        <Typography sx={{ fontSize: 12, fontWeight: 600, letterSpacing: 0.5, textTransform: 'uppercase' }}>
-          Sources ({sources.length})
-        </Typography>
-        <ExpandMoreIcon sx={{
-          fontSize: 16,
-          transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
-          transition: 'transform 0.2s',
-        }} />
-      </Box>
+    <Collapse in={open}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', mt: 1.25 }}>
+        {sources.map((s, i) => {
+          const domain     = s.domain || ''
+          const faviconUrl = domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=16` : null
+          return (
+            <Box
+              key={s.url ?? i}
+              component="a"
+              href={s.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              sx={{
+                display: 'flex', alignItems: 'center', gap: 1,
+                py: 0.6, px: 0.5, borderRadius: '6px',
+                textDecoration: 'none',
+                '&:hover': { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' },
+                transition: 'background-color 0.15s',
+                minWidth: 0,
+              }}
+            >
+              {/* Citation number */}
+              <Typography sx={{
+                fontSize: 10, fontWeight: 700, flexShrink: 0,
+                color: isDark ? 'rgba(75,114,255,0.7)' : 'rgba(24,71,214,0.6)',
+                minWidth: 18,
+              }}>
+                [{i + 1}]
+              </Typography>
 
-      <Collapse in={open}>
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1, mt: 1.25 }}>
-          {sources.map((s, i) => (
-            <SourceCard key={s.url ?? i} source={s} index={i + 1} />
-          ))}
-        </Box>
-      </Collapse>
-    </Box>
+              {/* Favicon */}
+              <Box sx={{ width: 14, height: 14, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {faviconUrl ? (
+                  <img src={faviconUrl} alt="" width={14} height={14} style={{ objectFit: 'contain', borderRadius: 2 }} />
+                ) : (
+                  <Box sx={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)' }} />
+                )}
+              </Box>
+
+              {/* Title */}
+              <Typography sx={{
+                flex: 1, minWidth: 0, fontSize: 12.5, lineHeight: 1.4,
+                color: isDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.72)',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>
+                {s.title}
+              </Typography>
+
+              {/* Domain */}
+              <Typography sx={{ fontSize: 10.5, flexShrink: 0, color: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.25)' }}>
+                {domain}
+              </Typography>
+            </Box>
+          )
+        })}
+      </Box>
+    </Collapse>
   )
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-/**
- * Renders the result of a deep research generation:
- *  1. Cited synthesis text (streaming or final)
- *  2. Interactive visual blocks (if any)
- *  3. Collapsible sources panel
- *
- * Used in ConversationThread when turn.synthesisText || turn.sources?.length > 0
- * in combination with an interactive render path.
- */
 export default function ResearchResult({
+  prompt            = '',
   synthesisText     = '',
   synthesisComplete = false,
   sources           = [],
@@ -289,14 +238,21 @@ export default function ResearchResult({
   learningObjective = null,
   isLoading         = false,
 }) {
-  const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
+  const theme      = useTheme()
+  const isDark     = theme.palette.mode === 'dark'
+  const [sourcesOpen, setSourcesOpen] = useState(true)
+  // Ref on the content wrapper — passed to toolbar so html2canvas knows what to capture
+  const contentRef = useRef(null)
 
-  const hasBlocks = blocks.length > 0
+  const hasBlocks  = blocks.length > 0
   const hasSources = sources.length > 0
 
+  // Show toolbar whenever there is any content (text or sources), but not during
+  // pure initial loading where nothing has arrived yet.
+  const showToolbar = !!synthesisText || (sources.length > 0 && !isLoading)
+
   return (
-    <Box>
+    <Box ref={contentRef}>
       {/* Synthesis text */}
       {synthesisText && (
         <Box sx={{
@@ -329,8 +285,21 @@ export default function ResearchResult({
         />
       )}
 
-      {/* Sources */}
-      {hasSources && <SourcesPanel sources={sources} />}
+      {/* Toolbar: copy, download (PDF/Markdown), sources badge */}
+      {showToolbar && (
+        <ResponseToolbar
+          prompt={prompt}
+          synthesisText={synthesisText}
+          sources={sources}
+          contentRef={contentRef}
+          sourcesOpen={sourcesOpen}
+          onToggleSources={() => setSourcesOpen(o => !o)}
+          disabled={isLoading && !synthesisComplete}
+        />
+      )}
+
+      {/* Collapsible sources list — controlled by toolbar badge */}
+      {hasSources && <SourcesPanel sources={sources} open={sourcesOpen} />}
     </Box>
   )
 }

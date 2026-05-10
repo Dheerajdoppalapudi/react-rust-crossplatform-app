@@ -37,6 +37,8 @@
     "dagre": "^0.8.5",
     "dompurify": "^3.4.2",
     "framer-motion": "^12.38.0",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^4.2.1",
     "katex": "^0.16.45",
     "leaflet": "^1.9.4",
     "mermaid": "^11.14.0",

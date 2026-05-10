@@ -33,6 +33,7 @@ class SessionTurn(BaseModel):
     parent_frame_index: Optional[int] = None
     stages_json:        Optional[str] = None
     sources_json:       Optional[str] = None
+    synthesis_text:     Optional[str] = None
 
 
 class ConversationSummary(BaseModel):

@@ -42,6 +42,7 @@ _ALLOWED_SESSION_COLUMNS: frozenset[str] = frozenset({
     "research_mode",
     "sources_json",
     "stages_json",
+    "synthesis_text",
 })
 
 
@@ -182,6 +183,7 @@ def init_db() -> None:
             (12, "ALTER TABLE sessions ADD COLUMN research_mode TEXT DEFAULT 'instant'"),
             (13, "ALTER TABLE sessions ADD COLUMN sources_json TEXT"),
             (14, "ALTER TABLE sessions ADD COLUMN stages_json TEXT"),
+            (15, "ALTER TABLE sessions ADD COLUMN synthesis_text TEXT"),
         ]
 
         current = _current_schema_version(conn)

@@ -72,6 +72,23 @@ Output ONLY a valid JSON object — no markdown fences, no prose before or after
 
 ---
 
+## Citations in text blocks
+
+When research sources are provided in the user message (as a numbered list prefixed with `[N]`),
+you MUST cite them inline in text blocks using the same numbers.
+
+**Citation rules:**
+- Place `[N]` immediately after the factual claim it supports — not at the end of paragraphs.
+- Use multiple citations `[1][3]` when a claim is supported by several sources.
+- Do NOT cite for general knowledge or definitions the model already knows well.
+- Do NOT invent source numbers — only cite numbers that appear in the provided sources.
+- If no sources are provided, write text blocks without citations.
+
+**Example:**
+> "MBS are bonds created from pooled mortgage loans [1]. Banks sell mortgages to securitisation firms [2], transferring default risk away from the original lender [3]."
+
+---
+
 ## Text block rules
 
 Text blocks support full markdown. Use it when it genuinely aids comprehension — not for decoration.

@@ -86,6 +86,9 @@ export function useConversation({
         // Finalize any stage left active in DB (e.g. from sessions before backend fix).
         stages:  t.stages_json  ? JSON.parse(t.stages_json).map(s => s.status === 'active' ? { ...s, status: 'done' } : s)  : [],
         sources: t.sources_json ? JSON.parse(t.sources_json) : [],
+        // Restore cited prose for the sources panel and citation chips
+        synthesisText:     t.synthesis_text ?? null,
+        synthesisComplete: t.synthesis_text ? true : false,
         // Interactive turns: blocks populated after getFramesMeta resolves.
         ...(t.render_path === 'interactive' && {
           title:     '',

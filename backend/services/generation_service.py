@@ -1,14 +1,12 @@
 """
-Generation pipeline — all frame-generation business logic.
+Generation service — frame-rendering helpers and the video pipeline entry point.
 
-The route handler in routers/generate.py is responsible for:
-  - DB setup (session/conversation creation)
-  - Context var lifecycle (request_log, token_usage, request_llm_service)
-  - Calling run_generation_pipeline_stream() / run_text_pipeline_stream()
-  - Persisting results to DB
-
-This module owns the async generator pipelines. Each yields SSE-compatible
-dicts; the route handler serialises them to text/event-stream format.
+Orchestration (intent classification, search, routing) now lives in routers/generate.py.
+This module owns:
+  - Conversation context builders (build_conversation_context, build_interactive_context)
+  - Frame rendering helpers (_interleave_slides, _append_summary_slide, _run_frame_generation)
+  - run_video_pipeline_from_intent() — video pipeline entry point for pre-computed intent
+  - Utility: count_llm_calls()
 """
 
 import json
@@ -27,7 +25,6 @@ from core.database import get_db
 from services.frame_generation.planner import (
     GenerationPlan,
     _vocab_plan_to_generation_plan,
-    classify_intent,
     create_vocab_plan,
     _log,
 )
@@ -36,8 +33,6 @@ from services.frame_generation.svg.svg_generator import generate_svg_frames, svg
 from services.frame_generation.slide_generator import generate_slide, generate_summary_slide
 
 logger = logging.getLogger(__name__)
-
-# ── Prompt templates — loaded once at import time ─────────────────────────────
 
 _PROMPTS_DIR = Path(__file__).parent / "frame_generation" / "prompts"
 
@@ -294,7 +289,7 @@ def build_interactive_context(
 
             for block in scene.get("blocks", []):
                 if block.get("type") == "text" and block.get("content"):
-                    lines.append(f"  Explanation: {block['content']}")
+                    lines.append(f"  Explanation: {block['content'][:300]}")
                 elif block.get("type") == "entity":
                     entity_type = block.get("entity_type", "")
                     props = block.get("props", {})
@@ -306,16 +301,8 @@ def build_interactive_context(
                         lines.append(f"  Widget: formula — {props.get('latex', props.get('caption', ''))}")
                     elif entity_type == "chart":
                         lines.append(f"  Widget: {props.get('type', 'chart')} chart — {props.get('title', props.get('caption', ''))}")
-                    elif entity_type == "graph_canvas":
-                        lines.append(f"  Widget: graph ({len(props.get('nodes', []))} nodes, {len(props.get('edges', []))} edges) — {props.get('caption', '')}")
                     elif entity_type == "timeline":
-                        lines.append(f"  Widget: timeline ({len(props.get('events', []))} events) — {props.get('caption', '')}")
-                    elif entity_type == "map_viewer":
-                        lines.append(f"  Widget: map — {props.get('caption', '')}")
-                    elif entity_type == "molecule_viewer":
-                        lines.append(f"  Widget: molecule ({props.get('format', '')}: {props.get('data', '')[:40]})")
-                    elif entity_type == "freeform_html":
-                        lines.append(f"  Widget: interactive simulation — {props.get('spec', '')[:80]}")
+                        lines.append(f"  Widget: timeline ({len(props.get('events', []))} events)")
                     else:
                         lines.append(f"  Widget: {entity_type}")
 
@@ -328,134 +315,76 @@ def build_interactive_context(
     return "\n".join(lines)
 
 
-# ── Intent routing ────────────────────────────────────────────────────────────
+# ── Video pipeline ────────────────────────────────────────────────────────────
 
-_FORCED_INTENT: dict[str, str] = {
-    "manim": "math",
-    "svg":   "illustration",
-}
-
-
-# ── Text pipeline (interactive mode — video off) ──────────────────────────────
-
-async def run_text_pipeline_stream(
-    message:              str,
+async def run_video_pipeline_from_intent(
+    intent:               dict,
+    synthesis_text:       str,
     session_id:           str,
     output_dir:           str,
     conversation_context: str,
-) -> AsyncGenerator[dict, None]:
-    """
-    Async generator for interactive (non-video) mode.
-
-    Yields stage events, then meta/block events from run_interactive_pipeline,
-    then a final 'result' event with the payload for the router to persist.
-    """
-    from services.interactive.interactive_service import run_interactive_pipeline
-
-    yield {"type": "stage", "stage": "designing", "label": "Designing the lesson…"}
-    _t_designing = time.time()
-
-    result_payload = {
-        "session_id":  session_id,
-        "render_path": "interactive",
-        "frame_count": 0,
-        "intent_type": "general",
-        "captions":    [],
-        "images":      [],
-        "notes":       "",
-        "suggested_followups": [],
-    }
-
-    async for event in run_interactive_pipeline(
-        message=message,
-        session_id=session_id,
-        output_dir=output_dir,
-        conversation_context=conversation_context,
-    ):
-        if event["type"] == "meta":
-            result_payload["suggested_followups"] = event.get("follow_ups", [])
-        elif event["type"] == "done":
-            # Don't re-emit done — router emits the unified done
-            continue
-        yield event
-
-    yield {"type": "stage_done", "stage": "designing", "duration_s": round(time.time() - _t_designing, 2)}
-    yield {"type": "result", "payload": result_payload}
-
-
-# ── Video pipeline (frame generation) ────────────────────────────────────────
-
-async def run_generation_pipeline_stream(
-    message:              str,
-    session_id:           str,
-    output_dir:           str,
-    conversation_context: str,
-    notes_enabled:        bool,
+    notes_enabled:        bool = False,
     forced_render_mode:   Optional[str] = None,
 ) -> AsyncGenerator[dict, None]:
     """
-    Async generator for video (frame generation) mode.
+    Video pipeline entry point for pre-computed intent from plan_and_classify().
 
-    Yields stage events as each phase completes, then individual frame events
-    as frames are generated, then a final 'result' event with the full payload.
+    Accepts the intent dict and optional synthesis_text (from the synthesiser for
+    deep research). Skips the intent classification step (already done).
     """
     t0 = time.time()
 
-    # ── Stage 1: Planning ─────────────────────────────────────────────────────
-    yield {"type": "stage", "stage": "planning", "label": "Planning visual content…"}
-    _log({"event": "stage_start", "stage": "planning"})
+    intent_type = intent.get("intent_type", "process")
+    frame_count = intent.get("frame_count", 3)
+    notes_list  = intent.get("notes", [])
+    suggested_followups = intent.get("suggested_followups", [])
 
-    intent_type, frame_count, notes_list, followups, _domain = await classify_intent(
-        message, conversation_context
-    )
-    notes = "\n".join(notes_list) if notes_list else ""
-    suggested_followups = followups or []
-
+    # render_mode override (e.g. user forced "manim" or "svg" from the UI)
+    _FORCED_INTENT = {"manim": "math", "svg": "illustration"}
     if forced_render_mode and forced_render_mode in _FORCED_INTENT:
         intent_type = _FORCED_INTENT[forced_render_mode]
         frame_count = 4
 
-    vocab_plan = await create_vocab_plan(message, conversation_context, intent_type, frame_count)
+    notes = "\n".join(notes_list) if isinstance(notes_list, list) else (notes_list or "")
+
+    # Use synthesis_text (grounded in sources) if available, else enriched_prompt
+    effective_message = synthesis_text or intent.get("enriched_prompt", "")
+
+    yield {"type": "stage", "stage": "planning", "label": "Planning visual content…"}
+    _log({"event": "stage_start", "stage": "planning"})
+
+    vocab_plan = await create_vocab_plan(effective_message, conversation_context, intent_type, frame_count)
     plan = _vocab_plan_to_generation_plan(vocab_plan)
 
     _log({"event": "stage_complete", "stage": "planning",
           "intent_type": plan.intent_type, "frame_count": plan.frame_count})
 
     yield {
-        "type": "stage_done",
-        "stage": "planning",
+        "type":       "stage_done",
+        "stage":      "planning",
         "duration_s": round(time.time() - t0, 2),
     }
 
     captions         = [frame.caption for frame in plan.frames]
     frame_narrations = [frame.narration for frame in plan.frames]
 
-    narration_lines: list[str] = []
-    for i, frame in enumerate(plan.frames):
-        narration_lines.append(f"Frame {i + 1}: {frame.caption}")
-        narration_lines.append(frame.narration)
-        narration_lines.append("")
-
-    # ── Stage 2: Frame generation ─────────────────────────────────────────────
     yield {"type": "stage", "stage": "generating_frames", "label": "Generating frames…"}
     t1 = time.time()
 
-    result_payload, ui_output_file, all_narrations = await _run_frame_generation_with_events(
+    result_payload, ui_output_file, all_narrations = await _run_frame_generation(
         plan, session_id, output_dir, captions, frame_narrations,
         suggested_followups, notes,
     )
 
-    # Emit each frame as it's ready
     for i, (img, cap) in enumerate(zip(result_payload["images"], result_payload["captions"])):
         yield {"type": "frame", "index": i, "image": img, "caption": cap}
 
     yield {
-        "type": "stage_done",
-        "stage": "generating_frames",
+        "type":       "stage_done",
+        "stage":      "generating_frames",
         "duration_s": round(time.time() - t1, 2),
     }
 
-    # ── Save narration ────────────────────────────────────────────────────────
     final_captions = result_payload.get("captions", captions)
     interleaved_lines: list[str] = []
     for i, (cap, narr) in enumerate(zip(final_captions, all_narrations)):
@@ -471,7 +400,7 @@ async def run_generation_pipeline_stream(
     yield {"type": "result", "payload": result_payload}
 
 
-async def _run_frame_generation_with_events(
+async def _run_frame_generation(
     plan:                GenerationPlan,
     session_id:          str,
     output_dir:          str,
@@ -480,10 +409,6 @@ async def _run_frame_generation_with_events(
     suggested_followups: list[str],
     notes:               str,
 ) -> tuple[dict, Optional[str], list[str]]:
-    """
-    Runs the frame renderer (Manim or SVG) and returns
-    (result_payload, ui_output_file, all_narrations).
-    """
     accent = plan.shared_style.backgroundColor
 
     # ── Manim ─────────────────────────────────────────────────────────────────

@@ -159,6 +159,14 @@ export function useGeneration({
           if (isStale()) return
 
           switch (event.type) {
+            case 'init': {
+              // Cache the id — navigation stays at 'done' to avoid
+              // resetting bootstrap/turns state during active generation
+              if (isFirstTurn) {
+                resolvedConvId.current = event.conversation_id
+              }
+              break
+            }
             case 'stage': {
               if (isFirstTurn) {
                 firstTurnStagingRef.current.stages = _applyStage(firstTurnStagingRef.current.stages, event)
@@ -263,6 +271,7 @@ export function useGeneration({
               break
             }
             case 'done': {
+              // resolvedConvId was already set by the 'init' event for first-turn
               resolvedConvId.current = event.conversation_id ?? resolvedConvId.current
               donePayload.current    = event
               // For first-turn: the ref has the complete stages list (including stages added

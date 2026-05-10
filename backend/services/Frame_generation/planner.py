@@ -279,6 +279,129 @@ def _extract_json(text: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Unified first call — plan_and_classify (replaces classify_intent for new flow)
+# ---------------------------------------------------------------------------
+
+# Mode-specific output schema injected into planning_classify.md via {{MODE_RULES}}.
+_MODE_RULES: dict[tuple[str, bool], str] = {
+    ("instant", False): """\
+## Output schema (JSON only — no prose, no markdown fences)
+{
+  "domain": "physics|cs|chemistry|biology|math|history|economics|general",
+  "enriched_prompt": "<2-4 sentence specific learning spec with mechanisms and numbers>",
+  "suggested_followups": ["<q1>", "<q2>", "<q3>"],
+  "needs_search": false
+}
+Set needs_search=true and add "search_queries":["q1","q2","q3"] when the question
+requires current statistics, recent events, or specific data the model cannot reliably
+produce from training data alone. Never add search_queries if needs_search is false.""",
+
+    ("deep_research", False): """\
+## Output schema (JSON only — no prose, no markdown fences)
+{
+  "domain": "physics|cs|chemistry|biology|math|history|economics|general",
+  "enriched_prompt": "<2-4 sentence specific learning spec with mechanisms and numbers>",
+  "suggested_followups": ["<q1>", "<q2>", "<q3>"],
+  "search_queries": ["<precise query 1>", "<q2>", "<q3>", "<q4>", "<q5>"],
+  "sub_questions": ["<deeper angle 1>", "<deeper angle 2>"]
+}
+Quality rules:
+- search_queries: write like a researcher — precise terminology, avoid vague "what is X" phrasing
+- If prior conversation context is given: target queries at NEW information not already covered
+- sub_questions: angles the main queries might miss; used only if round-1 finds < 5 results""",
+
+    ("instant", True): """\
+## Output schema (JSON only — no prose, no markdown fences)
+{
+  "domain": "physics|cs|chemistry|biology|math|history|economics|general",
+  "intent_type": "math|process|architecture|timeline|concept_analogy|comparison|illustration",
+  "frame_count": <integer 2-6>,
+  "notes": ["<key fact 1>", "<fact 2>", "<fact 3>", "<fact 4>", "<fact 5>"],
+  "enriched_prompt": "<2-4 sentence learning spec>",
+  "suggested_followups": ["<q1>", "<q2>", "<q3>"],
+  "needs_search": false
+}
+Frame count: math(2-5), process/timeline(3-5), others(2-4). Fewer is better — never pad.
+Biology / natural science → always illustration intent_type.
+Set needs_search=true and add "search_queries":["q1","q2","q3"] for current data needs.""",
+
+    ("deep_research", True): """\
+## Output schema (JSON only — no prose, no markdown fences)
+{
+  "domain": "physics|cs|chemistry|biology|math|history|economics|general",
+  "intent_type": "math|process|architecture|timeline|concept_analogy|comparison|illustration",
+  "frame_count": <integer 2-6>,
+  "notes": ["<key fact 1>", "<fact 2>", "<fact 3>", "<fact 4>", "<fact 5>"],
+  "enriched_prompt": "<2-4 sentence learning spec>",
+  "suggested_followups": ["<q1>", "<q2>", "<q3>"],
+  "search_queries": ["<precise query 1>", "<q2>", "<q3>", "<q4>", "<q5>"],
+  "sub_questions": ["<deeper angle 1>", "<deeper angle 2>"]
+}
+Frame count: math(2-5), process/timeline(3-5), others(2-4). Biology → illustration.
+search_queries: precise terminology, write like a researcher.""",
+}
+
+
+async def plan_and_classify(
+    message:              str,
+    research_mode:        str,
+    video_enabled:        bool,
+    conversation_context: str = "",
+    prior_synthesis:      str = "",
+) -> dict:
+    """
+    Unified first Haiku call — replaces classify_intent() + query_planner.decompose().
+
+    Returns a dict with all fields needed by the generation pipeline:
+      Interactive: domain, enriched_prompt, suggested_followups, needs_search?, search_queries?, sub_questions?
+      Video:       + intent_type, frame_count, notes
+    Always uses Haiku (_classify_service) regardless of the per-request model.
+    """
+    _prompts_dir = os.path.join(os.path.dirname(__file__), "prompts")
+    with open(os.path.join(_prompts_dir, "planning_classify.md")) as f:
+        template = f.read()
+
+    mode_key = (research_mode, video_enabled)
+    mode_rules = _MODE_RULES.get(mode_key, _MODE_RULES[("instant", video_enabled)])
+
+    context_parts: list[str] = []
+    if prior_synthesis:
+        context_parts.append(f"Prior answer context:\n{prior_synthesis}")
+    if conversation_context:
+        context_parts.append(f"Conversation history:\n{conversation_context}")
+    context_block = ("\n\n".join(context_parts) + "\n\n") if context_parts else ""
+
+    prompt = (
+        template
+        .replace("{{MODE_RULES}}", mode_rules)
+        .replace("{{USER_PROMPT}}", message)
+        .replace("{{CONVERSATION_CONTEXT}}", context_block)
+    )
+
+    raw = await asyncio.to_thread(
+        call_llm, prompt, 1500,
+        prompt_name="plan_and_classify",
+        override_service=_classify_service,
+    )
+    data = _extract_json(raw)
+
+    # Normalise and validate fields
+    result: dict = {
+        "domain":              data.get("domain", "general"),
+        "enriched_prompt":     data.get("enriched_prompt", message),
+        "suggested_followups": data.get("suggested_followups", []),
+        "needs_search":        bool(data.get("needs_search", False)),
+        "search_queries":      data.get("search_queries", []),
+        "sub_questions":       data.get("sub_questions", []),
+    }
+    if video_enabled:
+        result["intent_type"] = data.get("intent_type", "process")
+        result["frame_count"]  = max(2, min(8, int(data.get("frame_count", 3))))
+        result["notes"]        = data.get("notes", [])
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Stage 1A — Vocabulary plan (no geometry)
 # ---------------------------------------------------------------------------
 

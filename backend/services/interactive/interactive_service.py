@@ -3,16 +3,16 @@ Interactive Mode pipeline — produces a Scene IR via SSE events.
 
 SSE event sequence:
   { type: "meta",  title, follow_ups }          ← emitted right after scene planning
-  { type: "block", block: { id, type, ... } }   ← one per block in order; freeform_html
-                                                    and p5_sketch blocks are delayed until
-                                                    codegen finishes
+  { type: "block", block: { id, type, ... } }   ← one per block in order
   { type: "done",  session_id }
 
 Pipeline stages:
-  1. classify_intent    → domain
-  2. _select_entities   → 2–5 entity names best suited to the question
-  3. _plan_scene        → SceneIR (uses full schemas only for selected entities)
-  4. codegen (if needed) for freeform_html / p5_sketch blocks
+  1. _select_entities   → 2–5 entity names best suited to the question
+  2. _plan_scene        → SceneIR (uses full schemas for selected entities + injects sources)
+  3. codegen (if needed) for freeform_html / p5_sketch blocks
+
+Entity selector always receives the SHORT original question — not synthesis_text or enriched_prompt.
+Scene planner receives enriched_prompt + raw research sources injected for [N] citation.
 
 Adding a new entity type:
   1. Add its component to the frontend registry (registry.js)
@@ -30,7 +30,7 @@ import os
 from dataclasses import dataclass, field
 from typing import AsyncGenerator
 
-from services.frame_generation.planner import classify_intent, _extract_json, request_llm_service
+from services.frame_generation.planner import _extract_json, request_llm_service
 from services.interactive.scene_ir import SceneIR
 from services.llm_service import LLMService, OpenAIProvider, default_llm_service
 
@@ -47,7 +47,6 @@ class SelectionResult:
 
 
 def _get_llm_service(model: str) -> LLMService:
-    """Return an LLMService instance for the given model name."""
     if model == "gpt-4.1":
         return LLMService(provider=OpenAIProvider(model="gpt-4.1"))
     return default_llm_service
@@ -71,7 +70,6 @@ def _load_domain_file(domain: str) -> str:
 
 
 def _load_entity_schema(entity_name: str) -> str:
-    """Load the full schema for a single entity from catalog/<entity_name>.md."""
     path = os.path.join(_CATALOG_DIR, f"{entity_name}.md")
     if os.path.exists(path):
         with open(path, encoding="utf-8") as f:
@@ -84,8 +82,7 @@ def _build_catalog(selected_entities: list[str]) -> str:
     Build the catalog section for the planner prompt.
 
     Full schemas are loaded only for selected_entities.
-    The slim_index is always appended so the planner knows all entity types exist
-    and can use any of them (with lower fidelity) even if not in the selected set.
+    slim_index is appended so the planner knows all types exist.
     """
     header = (
         "## Component Catalog\n\n"
@@ -93,22 +90,30 @@ def _build_catalog(selected_entities: list[str]) -> str:
         '```json\n{ "id": "<b1>", "type": "entity", "entity_type": "<name>", "props": {} }\n```\n\n'
         '`"type"` is ALWAYS the literal `"entity"`. `"entity_type"` holds the component name.\n'
     )
-
     schemas = [_load_entity_schema(e) for e in selected_entities]
-    schemas = [s for s in schemas if s]  # drop any that weren't found
-
+    schemas = [s for s in schemas if s]
     slim_fallback = _load_prompt("slim_index.md")
-
     parts = [header] + schemas + [slim_fallback]
     return "\n\n---\n\n".join(parts)
 
 
+def _build_sources_block(sources: list[dict]) -> str:
+    """Format research sources for injection into the scene planner user prompt."""
+    if not sources:
+        return ""
+    lines = ["## Research Sources\n\nUse [N] inline citations in text blocks for factual claims.\n"]
+    for i, s in enumerate(sources, 1):
+        # snippet is Tavily's query-relevant extract — always prefer it over raw content.
+        # content[:N] almost always hits navigation boilerplate before real article text.
+        content = (s.get("snippet") or s.get("content") or "")[:2500]
+        lines.append(f"[{i}] **{s.get('title', '')}** ({s.get('domain', '')})")
+        lines.append(f"URL: {s.get('url', '')}")
+        lines.append(content)
+        lines.append("")
+    return "\n".join(lines)
+
+
 def _wrap_in_sandbox(raw_html: str) -> str:
-    """
-    Security boundary: sandbox="allow-scripts" without allow-same-origin gives
-    the iframe a null origin, blocking localStorage/cookies/document.cookie.
-    No regex sanitizer — the sandbox IS the sanitizer.
-    """
     escaped = html.escape(raw_html, quote=True)
     return (
         '<iframe sandbox="allow-scripts" '
@@ -124,7 +129,6 @@ async def _run_codegen_with_prompt(
     user_prompt: str,
     svc: LLMService = None,
 ) -> str:
-    """Call the codegen LLM using the given prompt template file."""
     template = _load_prompt(prompt_file)
     prompt = (
         template
@@ -146,78 +150,74 @@ async def _run_codegen_with_prompt(
 
 
 async def _run_codegen(spec: str, user_prompt: str, svc: LLMService = None) -> str:
-    """Produce freeform Canvas HTML (raw JS, no framework)."""
     return await _run_codegen_with_prompt("canvas_codegen.md", spec, user_prompt, svc=svc)
 
 
 async def _run_p5_codegen(spec: str, user_prompt: str, svc: LLMService = None) -> str:
-    """Produce a Canvas 2D looping animation sketch."""
     return await _run_codegen_with_prompt("canvas_codegen_p5.md", spec, user_prompt, svc=svc)
 
 
 async def _select_entities(
-    message: str,
+    original_message: str,
     domain: str,
     conversation_context: str,
 ) -> SelectionResult:
     """
-    Sonnet 4.6 call that enriches the user's question, selects 2–5 entities,
-    and recommends a model for downstream calls.
+    Sonnet 4.6 call — enriches the question, selects 2–5 entities, recommends a model.
 
-    Falls back to raw message + empty entities + Sonnet on any error.
+    Always receives the SHORT original question, not synthesis_text or enriched_prompt,
+    so entity selection stays focused on what the user actually asked.
     """
     slim_index = _load_prompt("slim_index.md")
     selector_template = _load_prompt("entity_selector.md")
     selector_prompt = selector_template.replace("{{SLIM_INDEX}}", slim_index)
 
     context_block = f"Conversation context:\n{conversation_context}\n\n" if conversation_context else ""
-    user_msg = f"{context_block}Domain: {domain}\n\nQuestion: {message}"
+    user_msg = f"{context_block}Domain: {domain}\n\nQuestion: {original_message}"
 
-    # Entity selector always runs on Sonnet 4.6 regardless of per-request override
     try:
         raw, _ = await asyncio.to_thread(
             default_llm_service.make_system_user_request,
             selector_prompt, user_msg, max_tokens=800
         )
         if raw is None:
-            return SelectionResult(enriched_prompt=message)
+            return SelectionResult(enriched_prompt=original_message)
 
         data = _extract_json(raw)
         entities: list[str] = data.get("entities", [])
-        enriched = data.get("enriched_prompt") or message
+        enriched = data.get("enriched_prompt") or original_message
         model = data.get("model", "claude-sonnet-4-6")
 
-        # Normalise model name — only two valid values
         if model not in ("gpt-4.1", "claude-sonnet-4-6"):
             model = "claude-sonnet-4-6"
 
-        # Enforce mandatory pairing: code_walkthrough always needs step_controls
         if "code_walkthrough" in entities and "step_controls" not in entities:
             entities.append("step_controls")
 
-        logger.info("entity_selector enriched=%r entities=%s model=%s", enriched[:80], entities, model)
+        logger.info("entity_selector  enriched=%r  entities=%s  model=%s",
+                    enriched[:80], entities, model)
         return SelectionResult(enriched_prompt=enriched, entities=entities, model=model)
 
     except Exception as exc:
         logger.warning("entity_selector failed (%s) — falling back", exc)
-        return SelectionResult(enriched_prompt=message)
+        return SelectionResult(enriched_prompt=original_message)
 
 
 async def _plan_scene(
-    message: str,
+    enriched_prompt: str,
     domain: str,
     conversation_context: str,
     selected_entities: list[str],
+    sources: list[dict],
     svc: LLMService = None,
 ) -> SceneIR:
-    """Call the planner LLM and parse the Scene IR."""
+    """Call the planner LLM and parse the Scene IR. Injects research sources for [N] citations."""
     base       = _load_prompt("base_planner.md")
     domain_ctx = _load_domain_file(domain)
 
     if selected_entities:
         catalog = _build_catalog(selected_entities)
     else:
-        # Fallback: load the full monolithic catalog if selector failed
         catalog = _load_prompt("component_catalog.md")
 
     system_prompt = "\n\n".join(filter(None, [base, domain_ctx, catalog]))
@@ -226,7 +226,8 @@ async def _plan_scene(
         f"Conversation context:\n{conversation_context}\n\n"
         if conversation_context else ""
     )
-    user_msg = f"{context_block}USER QUESTION: {message}"
+    sources_block = _build_sources_block(sources)
+    user_msg = f"{context_block}{sources_block}USER QUESTION: {enriched_prompt}"
 
     svc = svc or default_llm_service
     raw, _ = await asyncio.to_thread(
@@ -253,48 +254,52 @@ def _save_scene_ir(scene: SceneIR, output_dir: str) -> None:
 
 
 async def run_interactive_pipeline(
-    message: str,
-    session_id: str,
-    output_dir: str,
+    original_message:     str,
+    session_id:           str,
+    output_dir:           str,
     conversation_context: str,
+    domain:               str = "general",
+    sources:              list[dict] = None,
+    enriched_prompt:      str = "",
 ) -> AsyncGenerator[dict, None]:
     """
     Main SSE generator for interactive mode.
 
-    Yields dicts that the route handler serialises as SSE events.
+    original_message — the user's raw question (kept for logging/context)
+    enriched_prompt  — plan_and_classify's 2-4 sentence spec; fed to entity selector
+                       for better widget choices. Falls back to original_message if empty.
+    domain           — pre-computed by plan_and_classify (skip separate classify call)
+    sources          — research sources from Tavily; injected into scene planner for [N] citations
     """
-    # Stage 1: Classify → domain
-    try:
-        _, _, _, _, domain = await classify_intent(message, conversation_context)
-    except Exception:
-        domain = "general"
+    sources = sources or []
 
-    logger.info("interactive_pipeline session=%s domain=%s", session_id, domain)
+    logger.info("interactive_pipeline  session=%s  domain=%s  sources=%d",
+                session_id, domain, len(sources))
 
-    # Stage 2: Enrich prompt + select entities + recommend model (single Sonnet call)
-    selection = await _select_entities(message, domain, conversation_context)
+    # Stage 1: Enrich prompt + select entities + recommend model.
+    # Entity selector receives the enriched_prompt (richer spec) for better widget selection.
+    entity_input = enriched_prompt or original_message
+    selection = await _select_entities(entity_input, domain, conversation_context)
 
-    # If the user forced a specific model from the UI, honour it — otherwise use
-    # the model recommended by the entity selector (auto routing).
+    # Honour per-request model override; fall back to entity selector recommendation
     user_forced_svc = request_llm_service.get()
-    downstream_svc = user_forced_svc if user_forced_svc else _get_llm_service(selection.model)
+    downstream_svc  = user_forced_svc if user_forced_svc else _get_llm_service(selection.model)
 
-    # Stage 3: Plan scene IR using enriched prompt and recommended model
+    # Stage 2: Plan scene IR — enriched prompt + sources for grounded citations
     scene = await _plan_scene(
         selection.enriched_prompt, domain, conversation_context,
-        selection.entities, svc=downstream_svc,
+        selection.entities, sources, svc=downstream_svc,
     )
 
-    # Stage 4: Emit title + follow_ups immediately
+    # Stage 3: Emit title + follow_ups immediately
     yield {
-        "type": "meta",
-        "title": scene.title,
-        "follow_ups": scene.follow_ups,
+        "type":               "meta",
+        "title":              scene.title,
+        "follow_ups":         scene.follow_ups,
         "learning_objective": scene.learning_objective,
     }
 
-    # Stage 5: Emit blocks in order.
-    # Pre-built entities emit instantly; codegen entities wait for generation.
+    # Stage 4: Emit blocks — codegen entities wait for generation, others emit instantly
     for block in scene.blocks:
         if block.type == "entity" and block.entity_type in ("freeform_html", "p5_sketch"):
             spec = block.props.get("spec", "an interactive widget")
@@ -311,7 +316,7 @@ async def run_interactive_pipeline(
                 )
         yield {"type": "block", "block": block.dict()}
 
-    # Stage 6: Persist and finish
+    # Stage 5: Persist and finish
     try:
         _save_scene_ir(scene, output_dir)
     except Exception as exc:

@@ -114,7 +114,7 @@ def get_conversation(conversation_id: str, current_user: User = Depends(get_curr
         turns = conn.execute(
             "SELECT id, prompt, created_at, status, intent_type, render_path, "
             "frame_count, video_path, turn_index, parent_session_id, parent_frame_index, "
-            "stages_json, sources_json "
+            "stages_json, sources_json, synthesis_text "
             "FROM sessions WHERE conversation_id = ? ORDER BY turn_index ASC",
             (conversation_id,),
         ).fetchall()

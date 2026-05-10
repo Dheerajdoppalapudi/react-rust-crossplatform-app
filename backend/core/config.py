@@ -102,3 +102,10 @@ INTERACTIVE_DOMAINS: frozenset[str] = frozenset({"physics", "cs", "chemistry", "
 # How many prior interactive sessions to include in the follow-up context window.
 # Each session contributes its text blocks + entity summaries from scene_ir.json.
 INTERACTIVE_CONTEXT_TURNS: int = 3
+
+# ── Unified pipeline ──────────────────────────────────────────────────────────
+FOLLOWUP_CONTEXT_TURNS: int  = int(os.getenv("FOLLOWUP_CONTEXT_TURNS", "3"))
+INSTANT_MAX_QUERIES:    int  = int(os.getenv("INSTANT_MAX_QUERIES",    "3"))
+DEEP_MAX_QUERIES:       int  = int(os.getenv("DEEP_MAX_QUERIES",       "5"))
+FOLLOWUP_TOP_K_SOURCES: int  = int(os.getenv("FOLLOWUP_TOP_K_SOURCES", "8"))
+CHROMADB_PATH:          Path = BASE_DIR / os.getenv("CHROMADB_DIR", "chromadb")
