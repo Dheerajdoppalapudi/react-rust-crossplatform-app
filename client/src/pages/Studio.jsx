@@ -336,7 +336,7 @@ export default function Studio({
           bgcolor: isDark ? 'rgba(26,26,26,0.85)' : 'rgba(255,255,255,0.88)',
           backdropFilter: 'blur(12px)',
           border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)'}`,
-          borderRadius: '10px',
+          borderRadius: '12px',
           px: { xs: 0.5, sm: 0.75 }, py: 0.5,
           boxShadow: isDark ? '0 4px 16px rgba(0,0,0,0.4)' : '0 4px 16px rgba(0,0,0,0.08)',
         }}>

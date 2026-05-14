@@ -1,31 +1,9 @@
 import { Box, Typography, useTheme } from '@mui/material'
 import PromptBar      from './PromptBar'
 import SuggestionBoxes from './SuggestionBoxes'
+import { PALETTE } from '../../theme/tokens.js'
 
-export default function EmptyView({
-  onSuggestionClick,
-  // PromptBar props — forwarded directly
-  prompt,
-  onPromptChange,
-  onSubmit,
-  onStop,
-  onKeyDown,
-  inputRef,
-  isGenerating,
-  activeConversation,
-  onNewConversation,
-  pauseContext,
-  onClearPauseContext,
-  selectedModel,
-  onModelChange,
-  selectedRenderMode,
-  onRenderModeChange,
-  selectedMode,
-  onModeChange,
-  stagedFiles,
-  onAddFiles,
-  onRemoveFile,
-}) {
+export default function EmptyView({ onSuggestionClick, ...promptBarProps }) {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
 
@@ -43,20 +21,22 @@ export default function EmptyView({
 
       {/* Title */}
       <Box sx={{ textAlign: 'center', mb: 5 }}>
+        
+
         <Typography sx={{
-          fontSize:   { xs: 26, sm: 32 },
-          fontWeight: 600,
-          lineHeight: 1.2,
-          color:      theme.palette.text.primary,
-          letterSpacing: -0.5,
+          fontSize:      { xs: 26, sm: 32 },
+          fontWeight:    600,
+          lineHeight:    1.15,
+          color:         theme.palette.text.primary,
+          letterSpacing: '-0.02em',
         }}>
           What do you want to learn?
         </Typography>
         <Typography sx={{
-          mt:         1,
-          fontSize:   14,
-          color:      isDark ? 'rgba(255,255,255,0.38)' : 'rgba(0,0,0,0.38)',
-          lineHeight: 1.5,
+          mt:         1.5,
+          fontSize:   15,
+          color:      isDark ? PALETTE.stoneGray : PALETTE.oliveGray,
+          lineHeight: 1.6,
         }}>
           Type a topic and Zenith generates a visual lesson.
         </Typography>
@@ -64,29 +44,7 @@ export default function EmptyView({
 
       {/* Prompt bar — centered, embedded so its card aligns with suggestion grid */}
       <Box sx={{ width: '100%', maxWidth: 680, mb: 4 }}>
-        <PromptBar
-          embedded
-          prompt={prompt}
-          onPromptChange={onPromptChange}
-          onSubmit={onSubmit}
-          onStop={onStop}
-          onKeyDown={onKeyDown}
-          inputRef={inputRef}
-          isGenerating={isGenerating}
-          activeConversation={activeConversation}
-          onNewConversation={onNewConversation}
-          pauseContext={pauseContext}
-          onClearPauseContext={onClearPauseContext}
-          selectedModel={selectedModel}
-          onModelChange={onModelChange}
-          selectedRenderMode={selectedRenderMode}
-          onRenderModeChange={onRenderModeChange}
-          selectedMode={selectedMode}
-          onModeChange={onModeChange}
-          stagedFiles={stagedFiles}
-          onAddFiles={onAddFiles}
-          onRemoveFile={onRemoveFile}
-        />
+        <PromptBar embedded {...promptBarProps} />
       </Box>
 
       {/* Suggestions */}

@@ -27,6 +27,57 @@ function _finalizeAllStages(stages) {
   return stages.map(s => s.status === 'active' ? { ...s, status: 'done' } : s)
 }
 
+// ── Shared SSE event handler for follow-up turns ──────────────────────────────
+// handleLearnGenerate and handleRetryGeneration process the same six event types
+// with identical logic. handleGenerate has first-turn branching and extra events
+// (init, source, token, synthesis_done, frame) so it manages its own switch.
+
+function createFollowUpSSEHandler(id, { setTurns, toast, donePayloadRef }) {
+  return function (event) {
+    switch (event.type) {
+      case 'stage':
+        setTurns(prev => prev.map(t => t.tempId === id
+          ? { ...t, stages: _applyStage(t.stages ?? [], event) }
+          : t
+        ))
+        break
+      case 'stage_done':
+        setTurns(prev => prev.map(t => t.tempId === id
+          ? { ...t, stages: _applyStageDone(t.stages ?? [], event) }
+          : t
+        ))
+        break
+      case 'meta':
+        setTurns(prev => prev.map(t => t.tempId === id ? {
+          ...t, render_path: 'interactive', isLoading: true,
+          title: event.title ?? '', followUps: event.follow_ups ?? [],
+          learningObjective: event.learning_objective ?? null, blocks: [],
+        } : t))
+        break
+      case 'block':
+        setTurns(prev => prev.map(t => t.tempId === id
+          ? { ...t, blocks: [...(t.blocks ?? []), event.block] }
+          : t
+        ))
+        break
+      case 'done':
+        donePayloadRef.current = event
+        setTurns(prev => prev.map(t => t.tempId === id
+          ? { ...t, stages: _finalizeAllStages(t.stages ?? []) }
+          : t
+        ))
+        break
+      case 'error':
+        toast.error(event.message || 'Generation failed. Please try again.')
+        setTurns(prev => prev.map(t => t.tempId === id
+          ? { ...t, isLoading: false, videoPhase: 'error' }
+          : t
+        ))
+        break
+    }
+  }
+}
+
 // ── Hook ─────────────────────────────────────────────────────────────────────
 
 export function useGeneration({
@@ -450,8 +501,9 @@ export function useGeneration({
       stages: [], sources: [], synthesisText: '', synthesisComplete: false,
     }])
 
-    const renderModeId = selectedRenderMode?.id !== 'auto' ? selectedRenderMode?.id : null
-    const donePayload  = { current: null }
+    const renderModeId   = selectedRenderMode?.id !== 'auto' ? selectedRenderMode?.id : null
+    const donePayload    = { current: null }
+    const handleSSEEvent = createFollowUpSSEHandler(tempId, { setTurns, toast, donePayloadRef: donePayload })
 
     try {
       await api.generateStream(
@@ -469,47 +521,7 @@ export function useGeneration({
         },
         (event) => {
           if (isStale()) return
-          switch (event.type) {
-            case 'stage':
-              setTurns(prev => prev.map(t => t.tempId === tempId
-                ? { ...t, stages: _applyStage(t.stages ?? [], event) }
-                : t
-              ))
-              break
-            case 'stage_done':
-              setTurns(prev => prev.map(t => t.tempId === tempId
-                ? { ...t, stages: _applyStageDone(t.stages ?? [], event) }
-                : t
-              ))
-              break
-            case 'meta':
-              setTurns(prev => prev.map(t => t.tempId === tempId ? {
-                ...t, render_path: 'interactive', isLoading: true,
-                title: event.title ?? '', followUps: event.follow_ups ?? [],
-                learningObjective: event.learning_objective ?? null, blocks: [],
-              } : t))
-              break
-            case 'block':
-              setTurns(prev => prev.map(t => t.tempId === tempId
-                ? { ...t, blocks: [...(t.blocks ?? []), event.block] }
-                : t
-              ))
-              break
-            case 'done':
-              donePayload.current = event
-              setTurns(prev => prev.map(t => t.tempId === tempId
-                ? { ...t, stages: _finalizeAllStages(t.stages ?? []) }
-                : t
-              ))
-              break
-            case 'error':
-              toast.error(event.message || 'Generation failed. Please try again.')
-              setTurns(prev => prev.map(t => t.tempId === tempId
-                ? { ...t, isLoading: false, videoPhase: 'error' }
-                : t
-              ))
-              break
-          }
+          handleSSEEvent(event)
         },
         genController.signal,
       )
@@ -566,12 +578,20 @@ export function useGeneration({
       } : t
     ))
 
+    const thisGenId = ++generationIdRef.current
+    const isStale   = () => generationIdRef.current !== thisGenId
+
+    generationAbortRef.current?.abort()
+    const genController = new AbortController()
+    generationAbortRef.current = genController
+
     const pauseCtx = turn.parentSessionId
       ? { sessionId: turn.parentSessionId, frameIndex: turn.parentFrameIndex ?? undefined, caption: undefined }
       : null
 
-    const renderModeId = selectedRenderMode?.id !== 'auto' ? selectedRenderMode?.id : null
-    const donePayload  = { current: null }
+    const renderModeId   = selectedRenderMode?.id !== 'auto' ? selectedRenderMode?.id : null
+    const donePayload    = { current: null }
+    const handleSSEEvent = createFollowUpSSEHandler(turn.tempId, { setTurns, toast, donePayloadRef: donePayload })
 
     try {
       await api.generateStream(
@@ -586,53 +606,21 @@ export function useGeneration({
           parentSessionId: turn.parentSessionId ?? null,
           videoEnabled,
           researchMode:    'instant',
-          // No signal — retries are user-initiated and not cancelled by navigation.
         },
         (event) => {
-          switch (event.type) {
-            case 'stage':
-              setTurns(prev => prev.map(t => t.tempId === turn.tempId
-                ? { ...t, stages: _applyStage(t.stages ?? [], event) }
-                : t
-              ))
-              break
-            case 'stage_done':
-              setTurns(prev => prev.map(t => t.tempId === turn.tempId
-                ? { ...t, stages: _applyStageDone(t.stages ?? [], event) }
-                : t
-              ))
-              break
-            case 'meta':
-              setTurns(prev => prev.map(t => t.tempId === turn.tempId ? {
-                ...t, render_path: 'interactive', isLoading: true,
-                title: event.title ?? '', followUps: event.follow_ups ?? [],
-                learningObjective: event.learning_objective ?? null, blocks: [],
-              } : t))
-              break
-            case 'block':
-              setTurns(prev => prev.map(t => t.tempId === turn.tempId
-                ? { ...t, blocks: [...(t.blocks ?? []), event.block] }
-                : t
-              ))
-              break
-            case 'done':
-              donePayload.current = event
-              setTurns(prev => prev.map(t => t.tempId === turn.tempId
-                ? { ...t, stages: _finalizeAllStages(t.stages ?? []) }
-                : t
-              ))
-              break
-            case 'error':
-              toast.error(event.message || 'Generation failed. Please try again.')
-              setTurns(prev => prev.map(t => t.tempId === turn.tempId
-                ? { ...t, isLoading: false, videoPhase: 'error' }
-                : t
-              ))
-              break
-          }
+          if (isStale()) return
+          handleSSEEvent(event)
         },
-        // No AbortSignal — retries run to completion
+        genController.signal,
       )
+
+      if (genController.signal.aborted) {
+        setTurns(prev => prev.map(t => t.tempId === turn.tempId
+          ? { ...t, isLoading: false, videoPhase: 'error' }
+          : t
+        ))
+        return
+      }
 
       const done = donePayload.current
       if (!done) return
@@ -656,12 +644,17 @@ export function useGeneration({
       if (videoEnabled) runVideoGenerationForTurn(turn.tempId, done.session_id)
 
     } catch (err) {
-      if (err?.name !== 'AbortError') {
-        toast.error('Generation failed. Please try again.')
-        setTurns(prev => prev.map(t =>
-          t.tempId === turn.tempId ? { ...t, isLoading: false, videoPhase: 'error' } : t
+      if (genController.signal.aborted) {
+        setTurns(prev => prev.map(t => t.tempId === turn.tempId
+          ? { ...t, isLoading: false, videoPhase: 'error' }
+          : t
         ))
+        return
       }
+      toast.error('Generation failed. Please try again.')
+      setTurns(prev => prev.map(t =>
+        t.tempId === turn.tempId ? { ...t, isLoading: false, videoPhase: 'error' } : t
+      ))
     }
   }, [
     activeConvId, notesEnabled, videoEnabled, selectedModel, selectedRenderMode,

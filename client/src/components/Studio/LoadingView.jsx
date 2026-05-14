@@ -429,7 +429,7 @@ export default function LoadingView({
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
           {displayStages.map((s, i) => (
             <StageRow
-              key={`${s.id}-${i}`}
+              key={s.id}
               stage={s}
               sources={sources}
               isLast={i === displayStages.length - 1}

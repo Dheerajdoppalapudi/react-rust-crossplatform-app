@@ -50,25 +50,24 @@ function pickRandom(exclude = []) {
 }
 
 function SuggestionCard({ label, onClick, isDark }) {
-  const theme = useTheme()
   return (
     <Box
       component="button"
       type="button"
       onClick={() => onClick(label)}
       sx={{
-        display:        'flex',
-        alignItems:     'center',
-        px:             2,
-        py:             1.25,
-        textAlign:      'left',
-        cursor:         'pointer',
-        background:     'none',
-        fontFamily:     'inherit',
-        borderRadius:   '10px',
-        border: `1px solid ${isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)'}`,
+        display:         'flex',
+        alignItems:      'center',
+        px:              2,
+        py:              1.25,
+        textAlign:       'left',
+        cursor:          'pointer',
+        background:      'none',
+        fontFamily:      'inherit',
+        borderRadius:    '10px',
+        border:          `1px solid ${isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)'}`,
         backgroundColor: isDark ? 'rgba(255,255,255,0.025)' : 'rgba(0,0,0,0.018)',
-        transition:     'all 0.15s',
+        transition:      'all 0.15s',
         '&:hover': {
           borderColor:     isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.18)',
           backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
@@ -82,7 +81,6 @@ function SuggestionCard({ label, onClick, isDark }) {
         fontWeight: 400,
         lineHeight: 1.5,
         color:      isDark ? 'rgba(255,255,255,0.65)' : 'rgba(0,0,0,0.6)',
-        '&:hover':  { color: theme.palette.text.primary },
       }}>
         {label}
       </Typography>

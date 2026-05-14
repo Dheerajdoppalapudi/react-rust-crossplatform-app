@@ -5,6 +5,7 @@ import NotesOutlinedIcon    from '@mui/icons-material/NotesOutlined'
 import EditNoteIcon         from '@mui/icons-material/EditNote'
 import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined'
 import VideocamOffOutlined  from '@mui/icons-material/VideocamOffOutlined'
+import { BRAND } from '../../theme/tokens.js'
 
 const VIEWS = ['Chat', 'Learn']
 
@@ -37,11 +38,11 @@ function StudioToolbar({
   const isDark = theme.palette.mode === 'dark'
   const primary = theme.palette.primary.main
 
-  const borderOn  = isDark ? 'rgba(79,110,255,0.45)' : '#c7d2fe'
+  const borderOn  = isDark ? `${BRAND.accent}72` : `${BRAND.primary}33`
   const borderOff = isDark ? 'rgba(255,255,255,0.12)' : '#e2e8f0'
   const colorOn   = primary
   const colorOff  = isDark ? 'rgba(255,255,255,0.4)' : '#94a3b8'
-  const bgOn      = isDark ? 'rgba(79,110,255,0.1)' : '#f0f4ff'
+  const bgOn      = isDark ? `${BRAND.accent}1a` : `${BRAND.primary}0d`
 
   const btnSx = (active) => ({
     borderRadius: '7px', p: 0.6,
