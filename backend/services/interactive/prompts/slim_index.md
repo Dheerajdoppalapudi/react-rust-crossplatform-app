@@ -7,7 +7,7 @@ You MAY use any entity listed here — if you pick one not detailed above, const
 |---|---|---|
 | `mermaid_viewer` | Flowcharts, sequence diagrams, state machines, architecture diagrams, process flows | `diagram` (Mermaid syntax) |
 | `code_walkthrough` | Step-by-step code execution, algorithm walkthroughs, annotated implementations | `language`, `code`, `steps[]` ({line, explanation}) |
-| `step_controls` | Driving a code_walkthrough or math_formula step-by-step — ALWAYS pair with them | `steps[]` (labels), `targetEntityId` |
+| `step_controls` | Driving a `timeline` with `stepReveal: true` — place immediately after. Do NOT use with code_walkthrough or math_formula (both have built-in navigation) | `steps[]` (labels), `targetEntityId` |
 | `math_formula` | LaTeX equations, derivations, physics formulas, step-by-step proofs | `latex` OR `steps[]` ({latex, label}) |
 | `chart` | Quantitative data — bar, line, pie, scatter, radar, area, composed charts | `type`, `data[]`, `series[]` (not pie), `xKey` (not pie) |
 | `graph_canvas` | Node-edge graphs, trees, DAGs, dependency graphs, network topologies | `nodes[]`, `edges[]` |

@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { Box, Typography, Skeleton, IconButton, Tooltip, useTheme } from '@mui/material'
 import { useExpanded } from '../BlockWrapper'
-import ZoomInIcon       from '@mui/icons-material/ZoomIn'
-import ZoomOutIcon      from '@mui/icons-material/ZoomOut'
-import ZoomOutMapIcon   from '@mui/icons-material/ZoomOutMap'
-import ContentCopyIcon  from '@mui/icons-material/ContentCopy'
-import CheckIcon        from '@mui/icons-material/Check'
+import ZoomInIcon      from '@mui/icons-material/ZoomIn'
+import ZoomOutIcon     from '@mui/icons-material/ZoomOut'
+import FitScreenIcon   from '@mui/icons-material/FitScreen'
+import ContentCopyIcon from '@mui/icons-material/ContentCopy'
+import CheckIcon       from '@mui/icons-material/Check'
+import DownloadIcon    from '@mui/icons-material/Download'
 import mermaid from 'mermaid'
 
 let _initializedTheme = null
@@ -33,14 +34,15 @@ const MAX_SCALE = 3.0
 const STEP      = 0.25
 
 export default function MermaidViewer({ entityId, diagram, caption }) {
-  const theme             = useTheme()
-  const isDark            = theme.palette.mode === 'dark'
+  const theme               = useTheme()
+  const isDark              = theme.palette.mode === 'dark'
   const [svg, setSvg]       = useState(null)
   const [error, setError]   = useState(null)
   const [scale, setScale]   = useState(1)
   const [copied, setCopied] = useState(false)
   const isExpanded          = useExpanded()
-  const idRef             = useRef(`mermaid-${entityId ?? ++_idCounter}`)
+  const idRef               = useRef(`mermaid-${entityId ?? ++_idCounter}`)
+  const svgWrapRef          = useRef(null)
 
   useEffect(() => {
     if (!diagram) return
@@ -51,22 +53,18 @@ export default function MermaidViewer({ entityId, diagram, caption }) {
 
     mermaid.render(idRef.current, fixNewlines(diagram))
       .then(({ svg: rendered }) => {
-        // Mermaid v11 may resolve with an error SVG instead of rejecting.
-        // Detect by checking for known error markers in the returned string.
         if (!rendered || rendered.includes('Syntax error') || rendered.includes('Parse error') || rendered.includes('mermaid-error')) {
           setError('Could not render diagram — the generated syntax had errors.')
         } else {
           setSvg(rendered)
         }
       })
-      .catch(err => {
-        setError('Could not render diagram — the generated syntax had errors.')
-      })
+      .catch(() => setError('Could not render diagram — the generated syntax had errors.'))
   }, [diagram, isDark])
 
   const zoomIn    = () => setScale(s => Math.min(MAX_SCALE, +(s + STEP).toFixed(2)))
   const zoomOut   = () => setScale(s => Math.max(MIN_SCALE, +(s - STEP).toFixed(2)))
-  const zoomReset = () => setScale(1)
+  const fitScreen = () => setScale(1)
 
   const handleCopy = useCallback(async () => {
     if (!diagram) return
@@ -76,6 +74,54 @@ export default function MermaidViewer({ entityId, diagram, caption }) {
       setTimeout(() => setCopied(false), 2000)
     } catch {}
   }, [diagram])
+
+  const handleDownloadPNG = useCallback(() => {
+    if (!svgWrapRef.current) return
+    const svgEl = svgWrapRef.current.querySelector('svg')
+    if (!svgEl) return
+
+    const bbox   = svgEl.getBoundingClientRect()
+    const width  = Math.round(bbox.width)  || 800
+    const height = Math.round(bbox.height) || 600
+
+    const clone = svgEl.cloneNode(true)
+    clone.setAttribute('width',  width)
+    clone.setAttribute('height', height)
+    // ensure white/dark background is embedded
+    const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
+    bg.setAttribute('width',  '100%')
+    bg.setAttribute('height', '100%')
+    bg.setAttribute('fill', isDark ? '#1a1a1a' : '#ffffff')
+    clone.insertBefore(bg, clone.firstChild)
+
+    const svgStr  = new XMLSerializer().serializeToString(clone)
+    const svgBlob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' })
+    const url     = URL.createObjectURL(svgBlob)
+
+    const img    = new Image()
+    img.onload = () => {
+      const dpr    = 2
+      const canvas = document.createElement('canvas')
+      canvas.width  = width  * dpr
+      canvas.height = height * dpr
+      const ctx = canvas.getContext('2d')
+      ctx.scale(dpr, dpr)
+      ctx.fillStyle = isDark ? '#1a1a1a' : '#ffffff'
+      ctx.fillRect(0, 0, width, height)
+      ctx.drawImage(img, 0, 0, width, height)
+      URL.revokeObjectURL(url)
+      canvas.toBlob(blob => {
+        if (!blob) return
+        const a  = document.createElement('a')
+        a.href   = URL.createObjectURL(blob)
+        a.download = 'diagram.png'
+        a.click()
+        setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+      }, 'image/png')
+    }
+    img.onerror = () => URL.revokeObjectURL(url)
+    img.src = url
+  }, [isDark])
 
   if (error) {
     return (
@@ -119,11 +165,18 @@ export default function MermaidViewer({ entityId, diagram, caption }) {
             <ZoomInIcon sx={{ fontSize: 15 }} />
           </IconButton></span>
         </Tooltip>
-        <Tooltip title="Reset zoom">
-          <span><IconButton size="small" onClick={zoomReset} disabled={scale === 1}
+        <Tooltip title="Fit to screen">
+          <span><IconButton size="small" onClick={fitScreen} disabled={scale === 1}
             sx={{ color: 'text.secondary', width: 26, height: 26 }}>
-            <ZoomOutMapIcon sx={{ fontSize: 15 }} />
+            <FitScreenIcon sx={{ fontSize: 15 }} />
           </IconButton></span>
+        </Tooltip>
+        <Box sx={{ width: 1, height: 16, backgroundColor: 'divider', mx: 0.25 }} />
+        <Tooltip title="Download PNG">
+          <IconButton size="small" onClick={handleDownloadPNG}
+            sx={{ color: 'text.secondary', width: 26, height: 26 }}>
+            <DownloadIcon sx={{ fontSize: 14 }} />
+          </IconButton>
         </Tooltip>
         <Tooltip title={copied ? 'Copied!' : 'Copy diagram source'}>
           <IconButton size="small" onClick={handleCopy}
@@ -136,6 +189,7 @@ export default function MermaidViewer({ entityId, diagram, caption }) {
       {/* Diagram with zoom */}
       <Box sx={{ overflow: 'auto', p: 2 }}>
         <Box
+          ref={svgWrapRef}
           dangerouslySetInnerHTML={{ __html: svg }}
           sx={{
             '& svg': {

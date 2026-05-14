@@ -1,4 +1,4 @@
-import { useRef, useCallback } from 'react'
+import { useRef, useCallback, useMemo } from 'react'
 import { Box, Typography, Tooltip, IconButton, useTheme } from '@mui/material'
 import DownloadIcon from '@mui/icons-material/Download'
 import {
@@ -6,7 +6,8 @@ import {
   BarChart, Bar,
   LineChart, Line,
   AreaChart, Area,
-  ScatterChart, Scatter, XAxis as SXAxis, YAxis as SYAxis,
+  ScatterChart, Scatter, ZAxis,
+  XAxis as SXAxis, YAxis as SYAxis,
   PieChart, Pie, Cell,
   RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
   ComposedChart,
@@ -56,17 +57,114 @@ function ChartTitle({ title, isDark }) {
   )
 }
 
+// ── Heatmap (custom — Recharts has no built-in heatmap) ───────────────────────
+
+function interpolateColor(value, min, max, isDark) {
+  const t = max === min ? 0 : (value - min) / (max - min)
+  // cool → warm: blue → orange/red
+  const r = Math.round(59  + t * (239 - 59))
+  const g = Math.round(130 + t * (68  - 130))
+  const b = Math.round(246 + t * (68  - 246))
+  return `rgb(${r},${g},${b})`
+}
+
+function HeatmapChart({ data, xKey = 'x', yKey = 'y', valueKey = 'value', title, caption, isDark }) {
+  const xs = useMemo(() => [...new Set(data.map(d => d[xKey]))], [data, xKey])
+  const ys = useMemo(() => [...new Set(data.map(d => d[yKey]))], [data, yKey])
+  const vals = useMemo(() => data.map(d => d[valueKey]), [data, valueKey])
+  const min  = Math.min(...vals)
+  const max  = Math.max(...vals)
+
+  const cellMap = useMemo(() => {
+    const m = {}
+    data.forEach(d => { m[`${d[xKey]}__${d[yKey]}`] = d[valueKey] })
+    return m
+  }, [data, xKey, yKey, valueKey])
+
+  const yLabelWidth = Math.max(...ys.map(y => String(y).length)) * 7 + 8
+
+  return (
+    <Box>
+      <Box sx={{ display: 'flex' }}>
+        {/* Y-axis labels */}
+        <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-around', pr: 1, minWidth: yLabelWidth }}>
+          {ys.map(y => (
+            <Typography key={y} sx={{
+              fontSize: 10, color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)',
+              textAlign: 'right', lineHeight: 1, py: 0.25,
+            }}>
+              {y}
+            </Typography>
+          ))}
+        </Box>
+
+        <Box sx={{ flex: 1 }}>
+          {/* Grid */}
+          {ys.map(y => (
+            <Box key={y} sx={{ display: 'flex', gap: '2px', mb: '2px' }}>
+              {xs.map(x => {
+                const val = cellMap[`${x}__${y}`] ?? 0
+                const bg  = interpolateColor(val, min, max, isDark)
+                return (
+                  <Tooltip key={x} title={`${x} / ${y}: ${val}`} arrow>
+                    <Box sx={{
+                      flex: 1, height: 32, borderRadius: '3px',
+                      backgroundColor: bg,
+                      opacity: 0.85,
+                      cursor: 'default',
+                      transition: 'opacity 0.15s',
+                      '&:hover': { opacity: 1 },
+                    }} />
+                  </Tooltip>
+                )
+              })}
+            </Box>
+          ))}
+
+          {/* X-axis labels */}
+          <Box sx={{ display: 'flex', gap: '2px', mt: 0.75 }}>
+            {xs.map(x => (
+              <Typography key={x} sx={{
+                flex: 1, fontSize: 10, textAlign: 'center',
+                color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>
+                {x}
+              </Typography>
+            ))}
+          </Box>
+        </Box>
+      </Box>
+
+      {/* Color scale legend */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1.5 }}>
+        <Typography sx={{ fontSize: 10, color: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)' }}>{min}</Typography>
+        <Box sx={{
+          flex: 1, height: 6, borderRadius: 3,
+          background: `linear-gradient(to right, ${interpolateColor(min, min, max, isDark)}, ${interpolateColor(max, min, max, isDark)})`,
+        }} />
+        <Typography sx={{ fontSize: 10, color: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)' }}>{max}</Typography>
+      </Box>
+    </Box>
+  )
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
+
 export default function ChartViewer({
   type        = 'bar',
   data        = [],
   series      = [],
   xKey,
+  yKey,
+  valueKey    = 'value',
   pieKey      = 'value',
   nameKey     = 'name',
+  zKey        = 'z',
   title,
   xLabel,
   yLabel,
-  height      = 280,
+  height      = 300,
   stacked     = false,
   layout      = 'horizontal',
   logScale    = false,
@@ -148,6 +246,29 @@ export default function ChartViewer({
     </>
   )
 
+  // ── Heatmap ─────────────────────────────────────────────────────────────────
+  if (type === 'heatmap') {
+    return (
+      <Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: title ? 0 : 0.5 }}>
+          <ChartTitle title={title} isDark={isDark} />
+        </Box>
+        <HeatmapChart
+          data={data}
+          xKey={xKey ?? 'x'}
+          yKey={yKey ?? 'y'}
+          valueKey={valueKey}
+          isDark={isDark}
+        />
+        {caption && (
+          <Typography sx={{ mt: 1, fontSize: TYPOGRAPHY.sizes.caption, textAlign: 'center', color: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)' }}>
+            {caption}
+          </Typography>
+        )}
+      </Box>
+    )
+  }
+
   let chart = null
 
   if (type === 'pie' || type === 'donut') {
@@ -176,21 +297,56 @@ export default function ChartViewer({
         {showLegend && <Legend wrapperStyle={{ fontSize: TYPOGRAPHY.sizes.caption }} />}
       </RadarChart>
     )
-  } else if (type === 'scatter') {
+
+  } else if (type === 'bubble') {
+    // Bubble: scatter chart where a third variable (zKey) controls dot size
+    const multiGroup = series.some(s => Array.isArray(s.data))
     chart = (
       <ScatterChart>
         {showGrid && <CartesianGrid strokeDasharray="3 3" stroke={grid} />}
-        <SXAxis dataKey={series[0]?.dataKey ?? 'x'} type="number" {...sharedAxisProps} />
-        <SYAxis dataKey={series[1]?.dataKey ?? 'y'} type="number" {...sharedAxisProps} />
+        <SXAxis dataKey="x" type="number" name={xLabel ?? 'x'} {...sharedAxisProps}
+          label={xLabel ? { value: xLabel, position: 'insideBottom', offset: -4, style: axis } : undefined} />
+        <SYAxis dataKey="y" type="number" name={yLabel ?? 'y'} {...sharedAxisProps}
+          label={yLabel ? { value: yLabel, angle: -90, position: 'insideLeft', style: axis } : undefined} />
+        <ZAxis dataKey={zKey} range={[30, 500]} name={zKey} />
         <RTooltip cursor={{ strokeDasharray: '3 3' }} {...tt} />
         {showLegend && <Legend wrapperStyle={{ fontSize: TYPOGRAPHY.sizes.caption }} />}
-        <Scatter name={series[0]?.name ?? 'data'} data={data} fill={color(series[0], 0, colors)} />
+        {multiGroup
+          ? series.map((s, i) => (
+              <Scatter key={i} name={s.name ?? `Group ${i + 1}`} data={s.data} fill={color(s, i, colors)} fillOpacity={0.75} />
+            ))
+          : <Scatter name={series[0]?.name ?? 'data'} data={data} fill={color(series[0], 0, colors)} fillOpacity={0.75} />
+        }
+      </ScatterChart>
+    )
+
+  } else if (type === 'scatter') {
+    // Multi-group scatter: each series can have its own data array
+    const multiGroup = series.some(s => Array.isArray(s.data))
+    const xDataKey   = series[0]?.xKey ?? 'x'
+    const yDataKey   = series[0]?.yKey ?? 'y'
+    chart = (
+      <ScatterChart>
+        {showGrid && <CartesianGrid strokeDasharray="3 3" stroke={grid} />}
+        <SXAxis dataKey={xDataKey} type="number" name={xLabel ?? xDataKey} {...sharedAxisProps}
+          label={xLabel ? { value: xLabel, position: 'insideBottom', offset: -4, style: axis } : undefined} />
+        <SYAxis dataKey={yDataKey} type="number" name={yLabel ?? yDataKey} {...sharedAxisProps}
+          label={yLabel ? { value: yLabel, angle: -90, position: 'insideLeft', style: axis } : undefined} />
+        <RTooltip cursor={{ strokeDasharray: '3 3' }} {...tt} />
+        {showLegend && <Legend wrapperStyle={{ fontSize: TYPOGRAPHY.sizes.caption }} />}
+        {multiGroup
+          ? series.map((s, i) => (
+              <Scatter key={i} name={s.name ?? `Group ${i + 1}`} data={s.data} fill={color(s, i, colors)} />
+            ))
+          : <Scatter name={series[0]?.name ?? 'data'} data={data} fill={color(series[0], 0, colors)} />
+        }
         {annotationDots}
       </ScatterChart>
     )
+
   } else if (type === 'composed') {
     chart = (
-      <ComposedChart data={data} layout={layout === 'vertical' ? 'vertical' : 'horizontal'}>
+      <ComposedChart data={data} layout={isVertical ? 'vertical' : 'horizontal'}>
         {commonChildren}
         {series.map((s, i) => {
           const c = color(s, i, colors)
@@ -221,8 +377,9 @@ export default function ChartViewer({
       </LineChart>
     )
   } else {
+    // bar (default)
     chart = (
-      <BarChart data={data} layout={layout === 'vertical' ? 'vertical' : 'horizontal'}>
+      <BarChart data={data} layout={isVertical ? 'vertical' : 'horizontal'}>
         {commonChildren}
         {series.map((s, i) => (
           <Bar key={s.dataKey} dataKey={s.dataKey} name={s.name}

@@ -11,6 +11,7 @@ import TerminalOutput  from './entities/TerminalOutput'
 import DiffViewer      from './entities/DiffViewer'
 import QuizBlock       from './entities/QuizBlock'
 import FlashcardDeck   from './entities/FlashcardDeck'
+import DSViewer        from './entities/DSViewer'
 
 // Heavy — lazy loaded so they only download when actually rendered.
 // mermaid ~400 KB, reactflow ~300 KB, leaflet ~280 KB, recharts ~200 KB

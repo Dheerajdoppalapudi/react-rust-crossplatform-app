@@ -84,10 +84,10 @@ class SceneBlock(BaseModel):
                 if "latex" not in self.props and "steps" not in self.props:
                     raise ValueError("math_formula requires either 'latex' or 'steps' prop")
 
-            # pie / donut / radar don't use series or xKey
+            # pie / donut / radar / heatmap / bubble don't use series or xKey in the standard way
             if self.entity_type == "chart":
                 chart_type = self.props.get("type", "")
-                if chart_type not in ("pie", "donut", "radar"):
+                if chart_type not in ("pie", "donut", "radar", "heatmap", "bubble"):
                     extra_missing = [k for k in ("series", "xKey") if k not in self.props]
                     if extra_missing:
                         raise ValueError(f"chart missing required props: {extra_missing}")
