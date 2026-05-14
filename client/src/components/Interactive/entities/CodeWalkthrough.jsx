@@ -223,7 +223,7 @@ export default function CodeWalkthrough({
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography sx={{ display: 'block', mb: 0.4, fontWeight: 500, fontSize: 12, color: 'text.primary',
               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {steps[step] ?? stepLabel}
+              {stepLabel}
             </Typography>
             <LinearProgress
               variant="determinate"

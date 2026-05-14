@@ -59,6 +59,7 @@ export const REGISTRY = {
     component: FlashcardDeck,
     getCopyText: p => (p.cards ?? []).map(c => `Q: ${c.front}\nA: ${c.back}`).join('\n\n'),
   },
+  ds_viewer: { component: DSViewer },
 }
 
 export function resolveEntity(type) {

@@ -19,5 +19,6 @@ You MAY use any entity listed here — if you pick one not detailed above, const
 | `terminal_output` | CLI commands + output, git walkthroughs, build steps, debugging sessions | `blocks[]` ({type: command\|output\|comment, content}) |
 | `diff_viewer` | Code before/after: refactors, bug fixes, type annotation additions, API migrations | `before`, `after` |
 | `p5_sketch` | Looping physics/math animations — pendulums, waves, particles, orbits (60fps, 3s latency) | `spec` (detailed animation description) |
-| `quiz_block` | Self-check question after explaining a concept — MCQ or true/false with reveal | `question`, `options[]`, `correctIndex` |
+| `quiz_block` | Self-check MCQ — only when user asks for a quiz/test OR lesson teaches one specific testable concept. At most once per lesson. Do NOT add by default | `question`, `options[]`, `correctIndex` |
 | `flashcard_deck` | Memorising terms, definitions, algorithms, formulas — flippable card set | `cards[]` ({front, back, hint?}) |
+| `ds_viewer` | CS data structures — linked list, stack, queue, BST, hash table — rendered visually with a built-in interactive operations panel | `type`, `nodes[]` |

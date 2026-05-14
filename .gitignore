@@ -38,6 +38,7 @@ backend/logs/app.log
 /backend/logs
 references/
 backend/database.sqlite
+backend/chromadb/
 
 # Graphify
 graphify-out/

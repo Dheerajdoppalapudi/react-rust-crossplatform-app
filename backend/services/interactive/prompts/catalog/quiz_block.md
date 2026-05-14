@@ -1,6 +1,6 @@
 ## quiz_block
 
-**Use when**: testing understanding after an explanation — MCQ or true/false with immediate feedback. Add to any topic that has testable key insights. Use `questions` array for a multi-question quiz with a score summary at the end.
+Use `questions` array for a multi-question quiz.
 
 **Props** — single question mode:
 - `question` (string, **required**)
