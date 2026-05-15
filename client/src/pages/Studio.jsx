@@ -95,15 +95,7 @@ export default function Studio({
     loadConversationById,
   } = useConversation({ setTurns, runVideoGenerationForTurn, abortAllVideoStreams, scrollToTop, toast })
 
-  // Derived bootstrap values — kept out of render so Studio.jsx stays declarative.
-  const isBootstrapping       = bootstrap !== null
-  const bootstrapStage         = bootstrap?.stage          ?? 'planning'
-  const bootstrapPrompt        = bootstrap?.prompt         ?? ''
-  const bootstrapStages        = bootstrap?.stages         ?? null
-  const bootstrapSources       = bootstrap?.sources        ?? []
-  const bootstrapSynthesisText = bootstrap?.synthesisText  ?? ''
-  const bootstrapBeatTitles    = bootstrap?.beatTitles     ?? null
-  const bootstrapCompletedBeats = bootstrap?.completedBeats ?? null
+  const isBootstrapping = bootstrap !== null
 
   // Memoized derived scalars — O(n) scans run only when turns change, not on
   // every render triggered by unrelated state (prompt, viewMode, etc.).
@@ -367,18 +359,18 @@ export default function Studio({
           >
             {showLoader && (
               <Box sx={{ width: '100%', maxWidth: 760, mx: 'auto', px: { xs: 2, sm: 3 } }}>
-                {bootstrapPrompt && (
+                {bootstrap?.prompt && (
                   <Box sx={{ display: 'flex', justifyContent: 'flex-end', pt: 3, pb: 1.5 }}>
-                    <UserBubble prompt={bootstrapPrompt} />
+                    <UserBubble prompt={bootstrap.prompt} />
                   </Box>
                 )}
                 <LoadingView
-                  stages={bootstrapStages?.length ? bootstrapStages : null}
-                  stage={bootstrapStage}
-                  sources={bootstrapSources}
-                  synthesisText={bootstrapSynthesisText}
-                  beatTitles={bootstrapBeatTitles}
-                  completedBeats={bootstrapCompletedBeats}
+                  stages={bootstrap?.stages?.length ? bootstrap.stages : null}
+                  stage={bootstrap?.stage ?? 'planning'}
+                  sources={bootstrap?.sources ?? []}
+                  synthesisText={bootstrap?.synthesisText ?? ''}
+                  beatTitles={bootstrap?.beatTitles ?? null}
+                  completedBeats={bootstrap?.completedBeats ?? null}
                 />
               </Box>
             )}

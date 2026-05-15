@@ -27,38 +27,41 @@ function _finalizeAllStages(stages) {
   return stages.map(s => s.status === 'active' ? { ...s, status: 'done' } : s)
 }
 
-// ── Shared SSE event handler for follow-up turns ──────────────────────────────
-// handleLearnGenerate and handleRetryGeneration process the same six event types
-// with identical logic. handleGenerate has first-turn branching and extra events
-// (init, source, token, synthesis_done, frame) so it manages its own switch.
+// ── SSE reducers ──────────────────────────────────────────────────────────────
+// Pure functions: (state, event) → newState
+// Used by both handleGenerate (via dispatch) and createTurnSSEHandler.
+// Adding a new streaming event = one entry here + one case in the SSE router.
 
-function createFollowUpSSEHandler(id, { setTurns, toast, donePayloadRef }) {
-  return function (event) {
+const SSE_REDUCERS = {
+  stage:          (s, e) => ({ ...s, stages:           _applyStage(s.stages ?? [], e) }),
+  stage_done:     (s, e) => ({ ...s, stages:           _applyStageDone(s.stages ?? [], e) }),
+  source:         (s, e) => ({ ...s, sources:          [...(s.sources ?? []), e.source] }),
+  token:          (s, e) => ({ ...s, synthesisText:    (s.synthesisText ?? '') + e.text }),
+  synthesis_done: (s, e) => ({ ...s, synthesisComplete: true, sources: e.sources ?? s.sources ?? [] }),
+  beats_planned:  (s, e) => ({ ...s, beatTitles:       e.beat_titles ?? [], completedBeats: [] }),
+  beat_ready:     (s, e) => ({ ...s, completedBeats:   [...(s.completedBeats ?? []), e.beat_index] }),
+  block:          (s, e) => ({ ...s, blocks:           [...(s.blocks ?? []), e.block] }),
+}
+
+// ── Shared SSE handler for follow-up / retry / learn turns ───────────────────
+// Handles all reducer-driven events plus meta, done, error.
+// No first-turn branching needed — only handleGenerate needs that.
+
+function createTurnSSEHandler(id, { setTurns, toast, donePayloadRef }) {
+  return function handleEvent(event) {
+    const reducer = SSE_REDUCERS[event.type]
+    if (reducer) {
+      setTurns(prev => prev.map(t => t.tempId === id ? reducer(t, event) : t))
+      return
+    }
     switch (event.type) {
-      case 'stage':
-        setTurns(prev => prev.map(t => t.tempId === id
-          ? { ...t, stages: _applyStage(t.stages ?? [], event) }
-          : t
-        ))
-        break
-      case 'stage_done':
-        setTurns(prev => prev.map(t => t.tempId === id
-          ? { ...t, stages: _applyStageDone(t.stages ?? [], event) }
-          : t
-        ))
-        break
       case 'meta':
         setTurns(prev => prev.map(t => t.tempId === id ? {
-          ...t, render_path: 'interactive', isLoading: true,
+          ...t,
+          render_path: 'interactive', isLoading: true,
           title: event.title ?? '', followUps: event.follow_ups ?? [],
           learningObjective: event.learning_objective ?? null, blocks: [],
         } : t))
-        break
-      case 'block':
-        setTurns(prev => prev.map(t => t.tempId === id
-          ? { ...t, blocks: [...(t.blocks ?? []), event.block] }
-          : t
-        ))
         break
       case 'done':
         donePayloadRef.current = event
@@ -114,9 +117,12 @@ export function useGeneration({
   const generationIdRef    = useRef(0)
   const generationAbortRef = useRef(null)
   const lastSubmitRef      = useRef(0)
-  // Staging buffer for the first turn — accumulates stages/sources/tokens
-  // before the turn row exists in state (turns starts as []).
-  const firstTurnStagingRef = useRef({ stages: [], sources: [], synthesisText: '' })
+  // Staging buffer for the first turn — accumulates SSE state before the turn
+  // row exists in state (turns starts as []). Carried forward into the turn on meta/done.
+  const stagingRef = useRef({
+    stages: [], sources: [], synthesisText: '', synthesisComplete: false,
+    beatTitles: null, completedBeats: null,
+  })
 
   const promptRef = useRef(prompt)
   useEffect(() => { promptRef.current = prompt })
@@ -139,8 +145,10 @@ export function useGeneration({
     const thisGenId = ++generationIdRef.current
     const isStale   = () => generationIdRef.current !== thisGenId
 
-    // Reset first-turn staging buffer for this generation run
-    firstTurnStagingRef.current = { stages: [], sources: [], synthesisText: '' }
+    stagingRef.current = {
+      stages: [], sources: [], synthesisText: '', synthesisComplete: false,
+      beatTitles: null, completedBeats: null,
+    }
 
     generationAbortRef.current?.abort()
     const genController = new AbortController()
@@ -165,7 +173,7 @@ export function useGeneration({
       setBootstrap({
         stage: 'planning',
         prompt: submittedPrompt,
-        stages: [{ id: 'planning', label: 'Planning…', status: 'active' }],
+        stages: [],   // SSE stages populate in arrival order; fallback shows via `stage` prop
       })
       setTurns([])
       scrollToTop()
@@ -191,6 +199,16 @@ export function useGeneration({
     const resolvedConvId = { current: activeConvId }
     const donePayload    = { current: null }
 
+    // dispatch: applies a reducer to staging ref, bootstrap, and turns in one call.
+    // This is the single place that syncs all three state sinks for reducer-handled events.
+    function dispatch(event) {
+      const reducer = SSE_REDUCERS[event.type]
+      if (!reducer) return
+      stagingRef.current = reducer(stagingRef.current, event)
+      if (isFirstTurn) setBootstrap(b => b ? reducer(b, event) : b)
+      setTurns(prev => prev.map(t => t.tempId === tempId ? reducer(t, event) : t))
+    }
+
     try {
       await api.generateStream(
         {
@@ -209,73 +227,16 @@ export function useGeneration({
         (event) => {
           if (isStale()) return
 
+          // Reducer-handled events: delegate to dispatch (updates staging + bootstrap + turns)
+          if (SSE_REDUCERS[event.type]) {
+            dispatch(event)
+            return
+          }
+
           switch (event.type) {
             case 'init': {
-              // Cache the id — navigation stays at 'done' to avoid
-              // resetting bootstrap/turns state during active generation
               if (isFirstTurn) {
                 resolvedConvId.current = event.conversation_id
-              }
-              break
-            }
-            case 'stage': {
-              if (isFirstTurn) {
-                firstTurnStagingRef.current.stages = _applyStage(firstTurnStagingRef.current.stages, event)
-                setBootstrap(b => b ? { ...b, stage: event.stage, stages: firstTurnStagingRef.current.stages } : b)
-              }
-              // Always update turns too — no-op before meta (turn doesn't exist yet),
-              // correctly updates the turn after meta for stages like 'designing'.
-              setTurns(prev => prev.map(t => t.tempId === tempId
-                ? { ...t, stages: _applyStage(t.stages ?? [], event) }
-                : t
-              ))
-              break
-            }
-            case 'stage_done': {
-              if (isFirstTurn) {
-                firstTurnStagingRef.current.stages = _applyStageDone(firstTurnStagingRef.current.stages, event)
-                setBootstrap(b => b ? { ...b, stages: firstTurnStagingRef.current.stages } : b)
-              }
-              // Always update turns too.
-              setTurns(prev => prev.map(t => t.tempId === tempId
-                ? { ...t, stages: _applyStageDone(t.stages ?? [], event) }
-                : t
-              ))
-              break
-            }
-            case 'source': {
-              if (isFirstTurn) {
-                firstTurnStagingRef.current.sources = [...firstTurnStagingRef.current.sources, event.source]
-                setBootstrap(b => b ? { ...b, sources: firstTurnStagingRef.current.sources } : b)
-              } else {
-                setTurns(prev => prev.map(t => t.tempId === tempId
-                  ? { ...t, sources: [...(t.sources ?? []), event.source] }
-                  : t
-                ))
-              }
-              break
-            }
-            case 'token': {
-              if (isFirstTurn) {
-                firstTurnStagingRef.current.synthesisText += event.text
-                setBootstrap(b => b ? { ...b, synthesisText: firstTurnStagingRef.current.synthesisText } : b)
-              } else {
-                setTurns(prev => prev.map(t => t.tempId === tempId
-                  ? { ...t, synthesisText: (t.synthesisText ?? '') + event.text }
-                  : t
-                ))
-              }
-              break
-            }
-            case 'synthesis_done': {
-              if (isFirstTurn) {
-                if (event.sources) firstTurnStagingRef.current.sources = event.sources
-                setBootstrap(b => b ? { ...b, sources: firstTurnStagingRef.current.sources } : b)
-              } else {
-                setTurns(prev => prev.map(t => t.tempId === tempId
-                  ? { ...t, synthesisComplete: true, sources: event.sources ?? t.sources ?? [] }
-                  : t
-                ))
               }
               break
             }
@@ -289,29 +250,25 @@ export function useGeneration({
                 blocks:            [],
               }
               if (isFirstTurn) {
+                const staging = stagingRef.current
                 setTurns([{
                   tempId, id: null, prompt: submittedPrompt,
                   stage: null, framesData: null, videoPhase: 'disabled',
                   parentSessionId,
                   parentFrameIndex: capturedPauseContext?.frameIndex ?? null,
-                  // Carry forward all stages/sources/tokens buffered before meta arrived
-                  stages:        firstTurnStagingRef.current.stages,
-                  sources:       firstTurnStagingRef.current.sources,
-                  synthesisText: firstTurnStagingRef.current.synthesisText,
-                  synthesisComplete: false,
+                  // Carry forward all staged data buffered before meta arrived
+                  stages:            staging.stages,
+                  sources:           staging.sources,
+                  synthesisText:     staging.synthesisText,
+                  synthesisComplete: staging.synthesisComplete,
+                  beatTitles:        staging.beatTitles,
+                  completedBeats:    staging.completedBeats,
                   ...turnData,
                 }])
                 setBootstrap(null)
               } else {
                 setTurns(prev => prev.map(t => t.tempId === tempId ? { ...t, ...turnData } : t))
               }
-              break
-            }
-            case 'block': {
-              setTurns(prev => prev.map(t => t.tempId === tempId
-                ? { ...t, blocks: [...(t.blocks ?? []), event.block] }
-                : t
-              ))
               break
             }
             case 'frame': {
@@ -321,52 +278,15 @@ export function useGeneration({
               ))
               break
             }
-            case 'beats_planned': {
-              const titles = event.beat_titles ?? []
-              if (isFirstTurn) {
-                setBootstrap(b => b ? { ...b, beatTitles: titles, completedBeats: [] } : b)
-              }
-              setTurns(prev => prev.map(t => t.tempId === tempId
-                ? { ...t,
-                    beatTitles:     titles,
-                    completedBeats: [],
-                    loadingLabel:   titles[0]
-                      ? `Rendering "${titles[0]}" and ${event.beat_count - 1} more scenes…`
-                      : 'Rendering scenes…',
-                  }
-                : t
-              ))
-              break
-            }
-            case 'beat_ready': {
-              if (isFirstTurn) {
-                setBootstrap(b => b
-                  ? { ...b, completedBeats: [...(b.completedBeats ?? []), event.beat_index] }
-                  : b
-                )
-              }
-              setTurns(prev => prev.map(t => t.tempId === tempId
-                ? { ...t,
-                    completedBeats: [...(t.completedBeats ?? []), event.beat_index],
-                    loadingLabel:   `Scene ${event.beat_index + 1} / ${event.total_beats} ready`,
-                  }
-                : t
-              ))
-              break
-            }
             case 'done': {
-              // resolvedConvId was already set by the 'init' event for first-turn
               resolvedConvId.current = event.conversation_id ?? resolvedConvId.current
               donePayload.current    = event
-              // For first-turn: the ref has the complete stages list (including stages added
-              // after meta, like 'designing'). Use it directly so nothing is lost.
-              // For follow-up: turns state has everything; just finalize any stragglers.
               if (isFirstTurn) {
-                firstTurnStagingRef.current.stages = _finalizeAllStages(firstTurnStagingRef.current.stages)
+                stagingRef.current = { ...stagingRef.current, stages: _finalizeAllStages(stagingRef.current.stages) }
               }
               setTurns(prev => prev.map(t => t.tempId === tempId
                 ? { ...t, stages: isFirstTurn
-                    ? firstTurnStagingRef.current.stages
+                    ? stagingRef.current.stages
                     : _finalizeAllStages(t.stages ?? []) }
                 : t
               ))
@@ -414,22 +334,24 @@ export function useGeneration({
           setBootstrap(b => b ? { ...b, stage: 'frames', frames: { framesData, sessionId: done.session_id } } : b)
           setTurns([{
             tempId, id: done.session_id,
-            conversation_id:  done.conversation_id,
-            turn_index:       done.turn_index,
-            prompt:           submittedPrompt,
-            intent_type:      done.intent_type,
-            render_path:      done.render_path,
-            frame_count:      done.frame_count,
-            isLoading:        false,
-            stage:            null,
+            conversation_id:   done.conversation_id,
+            turn_index:        done.turn_index,
+            prompt:            submittedPrompt,
+            intent_type:       done.intent_type,
+            render_path:       done.render_path,
+            frame_count:       done.frame_count,
+            isLoading:         false,
+            stage:             null,
             framesData,
-            videoPhase:       'generating',
+            videoPhase:        'generating',
             parentSessionId,
-            parentFrameIndex: capturedPauseContext?.frameIndex ?? null,
-            stages:        firstTurnStagingRef.current.stages,
-            sources:       firstTurnStagingRef.current.sources,
-            synthesisText: firstTurnStagingRef.current.synthesisText,
-            synthesisComplete: false,
+            parentFrameIndex:  capturedPauseContext?.frameIndex ?? null,
+            stages:            stagingRef.current.stages,
+            sources:           stagingRef.current.sources,
+            synthesisText:     stagingRef.current.synthesisText,
+            synthesisComplete: stagingRef.current.synthesisComplete,
+            beatTitles:        stagingRef.current.beatTitles,
+            completedBeats:    stagingRef.current.completedBeats,
           }])
         } else {
           // meta/block events already built the turn — finalize it
@@ -536,7 +458,7 @@ export function useGeneration({
 
     const renderModeId   = selectedRenderMode?.id !== 'auto' ? selectedRenderMode?.id : null
     const donePayload    = { current: null }
-    const handleSSEEvent = createFollowUpSSEHandler(tempId, { setTurns, toast, donePayloadRef: donePayload })
+    const handleSSEEvent = createTurnSSEHandler(tempId, { setTurns, toast, donePayloadRef: donePayload })
 
     try {
       await api.generateStream(
@@ -624,7 +546,7 @@ export function useGeneration({
 
     const renderModeId   = selectedRenderMode?.id !== 'auto' ? selectedRenderMode?.id : null
     const donePayload    = { current: null }
-    const handleSSEEvent = createFollowUpSSEHandler(turn.tempId, { setTurns, toast, donePayloadRef: donePayload })
+    const handleSSEEvent = createTurnSSEHandler(turn.tempId, { setTurns, toast, donePayloadRef: donePayload })
 
     try {
       await api.generateStream(
@@ -684,6 +606,7 @@ export function useGeneration({
         ))
         return
       }
+      console.error('[Studio] handleRetryGeneration:', err)
       toast.error('Generation failed. Please try again.')
       setTurns(prev => prev.map(t =>
         t.tempId === turn.tempId ? { ...t, isLoading: false, videoPhase: 'error' } : t

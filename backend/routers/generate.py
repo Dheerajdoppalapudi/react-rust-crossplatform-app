@@ -601,9 +601,6 @@ async def _search_phase(
     ranked    = rank_and_deduplicate(all_results, DEEP_SEARCH_SOURCES)
     all_final = file_sources + url_sources + ranked
 
-    # Save full raw content to disk before any truncation
-    _save_sources_raw(all_final, output_dir)
-
     # Top-N for LLM — only these get content-truncated and fed to the scene planner
     final = all_final[:DEEP_SOURCES_IN_ANSWER]
 
@@ -612,10 +609,15 @@ async def _search_phase(
         yield {"type": "stage", "stage": "reading", "label": f"Reading {n_read} sources…"}
         t_read = time.time()
 
+        # Disk I/O + truncation both run inside the reading stage so duration is meaningful
+        _save_sources_raw(all_final, output_dir)
+
         for s in final:
             s.content = truncate_content(s.content or s.snippet)
 
         yield {"type": "stage_done", "stage": "reading", "duration_s": round(time.time() - t_read, 2)}
+    else:
+        _save_sources_raw(all_final, output_dir)
 
     yield {
         "type":         "_sources_ready",
