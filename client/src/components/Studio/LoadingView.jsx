@@ -15,7 +15,7 @@ import CheckCircleOutlineIcon       from '@mui/icons-material/CheckCircleOutline
 import KeyboardArrowDownIcon        from '@mui/icons-material/KeyboardArrowDown'
 import KeyboardArrowUpIcon          from '@mui/icons-material/KeyboardArrowUp'
 import RadioButtonUncheckedIcon     from '@mui/icons-material/RadioButtonUnchecked'
-import { pulse, fadeIn, shimmer } from '../../theme/animations'
+import { softPulse, fadeIn, shimmer } from '../../theme/animations'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -81,6 +81,61 @@ function FrameSkeletonCards({ isDark }) {
   )
 }
 
+
+// ── Beat progress list (beat pipeline only) ───────────────────────────────────
+
+function BeatRow({ title, isDone, isDark }) {
+  return (
+    <Typography sx={{
+      fontSize: 12.5, lineHeight: 1.55, py: 0.35,
+      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+      transition: 'color 0.4s',
+      ...(isDone
+        ? { color: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.22)' }
+        : {
+            color: isDark ? 'rgba(255,255,255,0.82)' : 'rgba(0,0,0,0.76)',
+            animation: `${softPulse} 3s ease-in-out infinite`,
+          }
+      ),
+    }}>
+      {title}
+    </Typography>
+  )
+}
+
+const BEATS_INITIAL_SHOW = 5
+
+function BeatProgressList({ beatTitles, completedBeats, isDark }) {
+  const [showAll, setShowAll]   = useState(false)
+  const completedSet            = new Set(completedBeats ?? [])
+  const borderColor             = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)'
+  const visible                 = showAll ? beatTitles : beatTitles.slice(0, BEATS_INITIAL_SHOW)
+  const hiddenCount             = beatTitles.length - BEATS_INITIAL_SHOW
+
+  return (
+    <Box sx={{ mt: 1, mb: 0.5, pl: 1.25, borderLeft: `1.5px solid ${borderColor}`, ml: 0.25 }}>
+      {visible.map((title, i) => (
+        <BeatRow key={i} title={title} isDone={completedSet.has(i)} isDark={isDark} />
+      ))}
+      {!showAll && hiddenCount > 0 && (
+        <Box
+          component="button"
+          onClick={() => setShowAll(true)}
+          sx={{
+            fontSize: 12, mt: 0.25,
+            color: isDark ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.28)',
+            background: 'none', border: 'none', cursor: 'pointer',
+            fontFamily: 'inherit', p: 0,
+            '&:hover': { color: isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.55)' },
+            transition: 'color 0.15s',
+          }}
+        >
+          +{hiddenCount} more
+        </Box>
+      )}
+    </Box>
+  )
+}
 
 function VideoSkeletonCard({ isDark }) {
   return (
@@ -230,7 +285,7 @@ function SourceItem({ source, idx, isDark }) {
 
 // ── Single stage row ──────────────────────────────────────────────────────────
 
-function StageRow({ stage, sources, isLast, compact, isDark }) {
+function StageRow({ stage, sources, isLast, compact, isDark, beatTitles, completedBeats }) {
   const IconComponent = STAGE_ICONS[stage.id] ?? RadioButtonUncheckedIcon
   const isActive  = stage.status === 'active'
   const isDone    = stage.status === 'done'
@@ -257,7 +312,10 @@ function StageRow({ stage, sources, isLast, compact, isDark }) {
 
   const [showAll, setShowAll] = useState(false)
 
-  const showFrameSkeleton = (stage.id === 'generating_frames' || stage.id === 'generating' || stage.id === 'rendering' || stage.id === 'frames') && isActive
+  const isFrameStage      = stage.id === 'generating_frames' || stage.id === 'generating' || stage.id === 'rendering' || stage.id === 'frames'
+  const hasBeatData       = beatTitles && beatTitles.length > 0
+  const showBeatList      = isFrameStage && isActive && hasBeatData
+  const showFrameSkeleton = isFrameStage && isActive && !hasBeatData
   const showVideoSkeleton = stage.id === 'video' && isActive
   const showBlockSkeleton = stage.id === 'designing' && isActive
 
@@ -274,10 +332,7 @@ function StageRow({ stage, sources, isLast, compact, isDark }) {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           flexShrink: 0,
         }}>
-          <IconComponent sx={{
-            fontSize: 15, color: iconColor,
-            ...(isActive ? { animation: `${pulse} 2s ease-in-out infinite` } : {}),
-          }} />
+          <IconComponent sx={{ fontSize: 15, color: iconColor }} />
         </Box>
         {!isLast && (
           <Box sx={{ width: '1px', flex: 1, minHeight: 10, backgroundColor: lineColor }} />
@@ -304,9 +359,20 @@ function StageRow({ stage, sources, isLast, compact, isDark }) {
             lineHeight: 1.4,
             transition: 'color 0.3s',
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            ...(isActive ? { animation: `${softPulse} 3s ease-in-out infinite` } : {}),
           }}>
             {stage.label}
           </Typography>
+
+          {showBeatList && completedBeats != null && beatTitles?.length > 0 && (
+            <Typography sx={{
+              fontSize: 11, flexShrink: 0,
+              color: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.20)',
+              mr: 0.5,
+            }}>
+              {completedBeats.length} / {beatTitles.length}
+            </Typography>
+          )}
 
           {isDone && stage.duration_s != null && (
             <Typography sx={{
@@ -326,6 +392,7 @@ function StageRow({ stage, sources, isLast, compact, isDark }) {
         </Box>
 
         {/* Skeleton previews (live only) */}
+        {showBeatList      && <BeatProgressList beatTitles={beatTitles} completedBeats={completedBeats} isDark={isDark} />}
         {showFrameSkeleton && <FrameSkeletonCards isDark={isDark} />}
         {showVideoSkeleton && <VideoSkeletonCard isDark={isDark} />}
         {showBlockSkeleton && <BlockSkeletonPreview isDark={isDark} />}
@@ -362,12 +429,14 @@ function StageRow({ stage, sources, isLast, compact, isDark }) {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function LoadingView({
-  stages        = null,
-  stage         = null,
-  compact       = false,
-  synthesisText = '',
-  sources       = [],
-  defaultOpen   = true,
+  stages         = null,
+  stage          = null,
+  compact        = false,
+  synthesisText  = '',
+  sources        = [],
+  defaultOpen    = true,
+  beatTitles     = null,
+  completedBeats = null,
 }) {
   const theme     = useTheme()
   const isDark    = theme.palette.mode === 'dark'
@@ -435,6 +504,8 @@ export default function LoadingView({
               isLast={i === displayStages.length - 1}
               compact={compact}
               isDark={isDark}
+              beatTitles={beatTitles}
+              completedBeats={completedBeats}
             />
           ))}
         </Box>

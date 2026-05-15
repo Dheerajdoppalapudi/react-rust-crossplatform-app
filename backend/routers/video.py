@@ -122,6 +122,27 @@ async def generate_video(
             detail=f"Session not ready (status: {row['status']})",
         )
 
+    # Beat pipeline: video already assembled — skip TTS and return immediately.
+    if row["render_path"] == "beats":
+        if not row["video_path"]:
+            raise HTTPException(status_code=404, detail="Beat video not found for this session")
+        safe_beat_video = safe_resolve(row["video_path"])
+        if not safe_beat_video.exists():
+            raise HTTPException(status_code=404, detail="Beat video file missing from disk")
+
+        async def _beat_stream():
+            yield _sse({
+                "type":        "done",
+                "session_id":  session_id,
+                "video_path":  row["video_path"],
+                "frame_count": row["frame_count"],
+                "tts_backend": "none",
+            })
+
+        return StreamingResponse(
+            _beat_stream(), media_type="text/event-stream", headers=_SSE_HEADERS
+        )
+
     output_dir = row["output_dir"]
     if not output_dir:
         raise HTTPException(status_code=404, detail="Session output directory missing")

@@ -121,10 +121,12 @@ const TurnView = memo(function TurnView({ turn, onPauseAsk, onRetryTurn, onRetry
               />
             )
           ) : (
-            <LoadingView stages={turn.stages} sources={turn.sources ?? []} compact synthesisText={turn.synthesisText} />
+            <LoadingView stages={turn.stages} sources={turn.sources ?? []} compact synthesisText={turn.synthesisText}
+              beatTitles={turn.beatTitles} completedBeats={turn.completedBeats} />
           )
         ) : turn.isLoading ? (
-          <LoadingView stages={turn.stages} sources={turn.sources ?? []} compact synthesisText={turn.synthesisText} />
+          <LoadingView stages={turn.stages} sources={turn.sources ?? []} compact synthesisText={turn.synthesisText}
+            beatTitles={turn.beatTitles} completedBeats={turn.completedBeats} />
         ) : turn.videoPhase === 'error' && !turn.id ? (
           <Box sx={{
             py: 2.5, px: 3, borderRadius: '12px',

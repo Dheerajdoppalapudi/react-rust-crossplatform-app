@@ -125,3 +125,14 @@ MAX_FRAMES_JSON_BYTES:        int = int(os.getenv("MAX_FRAMES_JSON_BYTES", "1000
 SOURCES_SNIPPET_MAX_CHARS:    int = int(os.getenv("SOURCES_SNIPPET_MAX_CHARS", "2500"))
 SOURCES_TOP_K:                int = int(os.getenv("SOURCES_TOP_K", "8"))
 SCENE_PLANNER_MAX_TOKENS:     int = int(os.getenv("SCENE_PLANNER_MAX_TOKENS", "8192"))
+
+# ── Beat pipeline ─────────────────────────────────────────────────────────────
+# Set BEAT_PIPELINE_ENABLED=false to fall back to legacy manim_generator_legacy.py
+BEAT_PIPELINE_ENABLED:        bool = os.getenv("BEAT_PIPELINE_ENABLED", "true").lower() != "false"
+BEAT_MAX_CONCURRENT_RENDERS:  int  = int(os.getenv("BEAT_MAX_CONCURRENT_RENDERS", "3"))
+BEAT_RENDER_TIMEOUT_S:        int  = int(os.getenv("BEAT_RENDER_TIMEOUT_S", "90"))
+BEAT_RENDER_QUALITY:          str  = os.getenv("BEAT_RENDER_QUALITY", "-ql")
+BEAT_CACHE_DIR:               Path = OUTPUTS_DIR / "beat_cache"
+BEAT_PLANNER_MODEL:           str  = os.getenv("BEAT_PLANNER_MODEL", "claude-sonnet-4-6")
+# "openai" (higher quality, needs OPENAI_API_KEY) or "gtts" (free, no key needed)
+BEAT_TTS_BACKEND:             str  = os.getenv("BEAT_TTS_BACKEND", "openai")

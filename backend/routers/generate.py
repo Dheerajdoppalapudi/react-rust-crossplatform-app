@@ -446,13 +446,15 @@ async def _generate_stream(p: dict):
             frame_count=result_payload.get("frame_count"),
             output_dir=output_dir,
             ui_output_file=result_payload.pop("ui_output_file", None),
+            # Beat pipeline assembles session_final.mp4 directly — save it so the
+            # video router can serve it without re-assembling with TTS.
+            video_path=result_payload.get("video_path") or None,
             api_call_count=api_call_count,
             prompt_tokens=final_usage.get("prompt_tokens", 0),
             completion_tokens=final_usage.get("completion_tokens", 0),
             total_tokens=final_usage.get("total_tokens", 0),
             model_name=model_name,
             research_mode=research_mode,
-            # Store all found source summaries so the UI sources panel shows everything
             sources_json=json.dumps(sources) if sources else None,
             stages_json=json.dumps(stages_log) if stages_log else None,
             synthesis_text=synthesis_text or None,

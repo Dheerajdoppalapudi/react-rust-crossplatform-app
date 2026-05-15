@@ -321,6 +321,39 @@ export function useGeneration({
               ))
               break
             }
+            case 'beats_planned': {
+              const titles = event.beat_titles ?? []
+              if (isFirstTurn) {
+                setBootstrap(b => b ? { ...b, beatTitles: titles, completedBeats: [] } : b)
+              }
+              setTurns(prev => prev.map(t => t.tempId === tempId
+                ? { ...t,
+                    beatTitles:     titles,
+                    completedBeats: [],
+                    loadingLabel:   titles[0]
+                      ? `Rendering "${titles[0]}" and ${event.beat_count - 1} more scenes…`
+                      : 'Rendering scenes…',
+                  }
+                : t
+              ))
+              break
+            }
+            case 'beat_ready': {
+              if (isFirstTurn) {
+                setBootstrap(b => b
+                  ? { ...b, completedBeats: [...(b.completedBeats ?? []), event.beat_index] }
+                  : b
+                )
+              }
+              setTurns(prev => prev.map(t => t.tempId === tempId
+                ? { ...t,
+                    completedBeats: [...(t.completedBeats ?? []), event.beat_index],
+                    loadingLabel:   `Scene ${event.beat_index + 1} / ${event.total_beats} ready`,
+                  }
+                : t
+              ))
+              break
+            }
             case 'done': {
               // resolvedConvId was already set by the 'init' event for first-turn
               resolvedConvId.current = event.conversation_id ?? resolvedConvId.current

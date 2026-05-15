@@ -21,6 +21,8 @@ from core.config import (
     MANIM_INTENT_TYPES,
     SVG_INTENT_TYPES,
     INTERACTIVE_CONTEXT_TURNS,
+    BEAT_PIPELINE_ENABLED,
+    BEAT_TTS_BACKEND,
 )
 from core.database import get_db
 from services.frame_generation.planner import (
@@ -30,6 +32,8 @@ from services.frame_generation.planner import (
     _log,
 )
 from services.frame_generation.manim.manim_generator import generate_manim_frames, manim_available
+from services.frame_generation.manim import beat_planner
+from services.frame_generation.manim.beat_generator import BeatGenerator, assemble_beats, add_audio_to_beats
 from services.frame_generation.svg.svg_generator import generate_svg_frames, svg_available
 from services.frame_generation.slide_generator import generate_slide, generate_summary_slide
 
@@ -316,6 +320,115 @@ def build_interactive_context(
     return "\n".join(lines)
 
 
+# ── Beat pipeline ─────────────────────────────────────────────────────────────
+
+async def _run_beat_pipeline(
+    intent:               dict,
+    synthesis_text:       str,
+    session_id:           str,
+    output_dir:           str,
+    conversation_context: str,
+) -> AsyncGenerator[dict, None]:
+    """
+    Beat-based Manim pipeline. Runs when BEAT_PIPELINE_ENABLED=true and
+    intent_type is "math".
+
+    SSE events emitted:
+      beats_planned  — beat titles and total count (for loading label)
+      beat_ready     — per-beat mp4 path, caption, keywords, narration
+      done           — assembled final MP4 path
+    """
+    t0 = time.time()
+
+    effective_message = synthesis_text or intent.get("enriched_prompt", "")
+
+    yield {"type": "stage", "stage": "planning", "label": "Planning lesson beats…"}
+    _log({"event": "stage_start", "stage": "beat_planning"})
+
+    script = await beat_planner.plan_beats(effective_message, conversation_context)
+
+    _log({"event": "stage_complete", "stage": "beat_planning",
+          "beat_count": script.beat_count})
+    yield {
+        "type":        "stage_done",
+        "stage":       "planning",
+        "duration_s":  round(time.time() - t0, 2),
+    }
+    yield {
+        "type":        "beats_planned",
+        "beat_titles": [b.title for b in script.beats],
+        "beat_count":  script.beat_count,
+    }
+
+    beats_dir = os.path.join(output_dir, "beats")
+    generator = BeatGenerator()
+    completed: list = []
+
+    yield {"type": "stage", "stage": "generating_frames", "label": "Generating scenes…"}
+
+    async for result in generator.generate_beats(script, beats_dir):
+        completed.append(result)
+        if result.mp4_path:
+            yield {
+                "type":        "beat_ready",
+                "beat_index":  result.beat_index,
+                "total_beats": script.beat_count,
+                "mp4_path":    result.mp4_path,
+                "caption":     result.caption,
+                "keywords":    result.keywords,
+                "narration":   result.narration,
+                "duration_s":  result.duration_s,
+                "cache_hit":   result.cache_hit,
+            }
+
+    yield {
+        "type":       "stage_done",
+        "stage":      "generating_frames",
+        "duration_s": round(time.time() - t0, 2),
+    }
+
+    # Assemble beats in index order
+    completed.sort(key=lambda r: r.beat_index)
+    successful = [r for r in completed if r.mp4_path]
+    captions   = [r.caption for r in successful]
+
+    # Mix TTS narration into each beat MP4 concurrently before assembly
+    use_openai_tts = BEAT_TTS_BACKEND == "openai"
+    mp4s = await add_audio_to_beats(successful, output_dir, use_openai=use_openai_tts)
+
+    assembled = await assemble_beats(mp4s, os.path.join(output_dir, "session_final.mp4"))
+
+    # Persist frames.json for SessionView
+    frames_data = json.dumps({
+        "render_path":         "beats",
+        "video_path":          assembled,
+        "captions":            captions,
+        "suggested_followups": script.suggested_followups,
+        "notes":               "\n".join(script.notes),
+    }, indent=2)
+    os.makedirs(output_dir, exist_ok=True)
+    await asyncio.to_thread(
+        Path(os.path.join(output_dir, "frames.json")).write_text,
+        frames_data, "utf-8",
+    )
+
+    yield {
+        "type":                "result",
+        "payload": {
+            "session_id":          session_id,
+            "render_path":         "beats",
+            "frame_count":         len(mp4s),
+            "intent_type":         "math",
+            "captions":            captions,
+            "images":              [],
+            "video_path":          assembled,
+            "ui_file_type":        "video",
+            "suggested_followups": script.suggested_followups,
+            "notes":               "\n".join(script.notes),
+        },
+    }
+
+
 # ── Video pipeline ────────────────────────────────────────────────────────────
 
 async def run_video_pipeline_from_intent(
@@ -347,6 +460,14 @@ async def run_video_pipeline_from_intent(
         frame_count = 4
 
     notes = "\n".join(notes_list) if isinstance(notes_list, list) else (notes_list or "")
+
+    # Beat pipeline — handles all math intent when enabled
+    if BEAT_PIPELINE_ENABLED and intent_type in MANIM_INTENT_TYPES and manim_available():
+        async for event in _run_beat_pipeline(
+            intent, synthesis_text, session_id, output_dir, conversation_context
+        ):
+            yield event
+        return
 
     # Use synthesis_text (grounded in sources) if available, else enriched_prompt
     effective_message = synthesis_text or intent.get("enriched_prompt", "")
