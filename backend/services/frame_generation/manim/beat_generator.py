@@ -307,118 +307,53 @@ class BeatGenerator:
 # Audio: TTS + mix per beat
 # ---------------------------------------------------------------------------
 
-from services.video_generation.video_assembler import _probe_duration
-
-
-def _mix_audio_into_video(
-    video_path: str,
-    audio_path: str,
-    output_path: str,
-) -> Optional[str]:
-    """
-    Mix a narration audio file into a silent Manim MP4.
-
-    - If audio is shorter than video: pad audio with silence so the video
-      continues playing quietly after the narration ends.
-    - If audio is longer than video: freeze the last video frame so the
-      narration completes rather than being cut off mid-sentence.
-
-    Returns output_path on success, None on failure.
-    """
-    if not _FFMPEG_EXE:
-        logger.error("beat_mix_no_ffmpeg")
-        return None
-
-    video_dur = _probe_duration(video_path)
-    audio_dur = _probe_duration(audio_path)
-
-    if video_dur is None or audio_dur is None:
-        logger.error("beat_mix_probe_failed video=%s audio=%s", video_path, audio_path)
-        return None
-
-    try:
-        if audio_dur > video_dur + 0.3:
-            # Audio is longer — freeze last frame to let narration finish
-            extra = audio_dur - video_dur
-            cmd = [
-                _FFMPEG_EXE, "-y", "-hide_banner", "-loglevel", "error",
-                "-i", video_path,
-                "-i", audio_path,
-                "-filter_complex",
-                f"[0:v]tpad=stop_mode=clone:stop_duration={extra:.3f}[vout]",
-                "-map", "[vout]",
-                "-map", "1:a",
-                "-c:v", "libx264", "-preset", "fast", "-crf", "22",
-                "-c:a", "aac", "-b:a", "128k",
-                output_path,
-            ]
-        else:
-            # Audio is shorter or equal — pad audio with silence, copy video stream
-            cmd = [
-                _FFMPEG_EXE, "-y", "-hide_banner", "-loglevel", "error",
-                "-i", video_path,
-                "-i", audio_path,
-                "-filter_complex", "[1:a]apad[apadded]",
-                "-map", "0:v",
-                "-map", "[apadded]",
-                "-c:v", "copy",
-                "-c:a", "aac", "-b:a", "128k",
-                "-shortest",
-                output_path,
-            ]
-
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
-        if result.returncode != 0:
-            logger.error("beat_mix_failed video=%s\nSTDERR: %s",
-                         video_path, result.stderr[-400:])
-            return None
-        return output_path
-
-    except subprocess.TimeoutExpired:
-        logger.error("beat_mix_timeout video=%s", video_path)
-        return None
-    except Exception as exc:
-        logger.error("beat_mix_error error=%s", exc, exc_info=True)
-        return None
-
-
 async def _add_audio_to_one_beat(
     result: BeatResult,
     audio_dir: str,
     use_openai: bool,
 ) -> str:
     """
-    Generate TTS for one beat and mix into its MP4.
-    Returns path to the audio+video MP4, or the original silent MP4 on any failure.
+    Generate TTS for one beat and mix into its MP4 via _build_mp4_clip.
+
+    Reuses the same ffmpeg path as the SVG pipeline — handles missing ffprobe
+    gracefully via fallback_duration, adds caption bar and fade transitions.
+    Returns the mixed MP4 path, or the original silent MP4 on any failure.
     """
     from services.video_generation.tts_service import (
         _openai_tts_generate, _gtts_generate,
     )
+    from services.video_generation.video_assembler import _build_video_clip
 
     silent_mp4 = result.mp4_path
-    if not result.narration.strip():
-        return silent_mp4
 
     audio_path = os.path.join(audio_dir, f"beat_{result.beat_index:03d}.mp3")
     mixed_path = os.path.join(audio_dir, f"beat_{result.beat_index:03d}_av.mp4")
 
     # TTS (idempotent — skip if already generated)
-    if not os.path.exists(audio_path):
+    if result.narration.strip() and not os.path.exists(audio_path):
         backend = _openai_tts_generate if use_openai else _gtts_generate
         ok = await asyncio.to_thread(backend, result.narration, audio_path)
         if not ok:
             logger.warning("beat_tts_failed beat=%d — keeping silent", result.beat_index)
-            return silent_mp4
+            audio_path = None  # type: ignore[assignment]
 
-    mixed = await asyncio.to_thread(
-        _mix_audio_into_video, silent_mp4, audio_path, mixed_path
-    )
-    if mixed is None:
-        logger.warning("beat_mix_failed beat=%d — keeping silent", result.beat_index)
+    effective_audio = audio_path if (audio_path and os.path.exists(audio_path)) else None
+
+    try:
+        await asyncio.to_thread(
+            _build_video_clip,
+            silent_mp4,
+            effective_audio,
+            float(result.duration_s),  # fallback if ffprobe unavailable
+            result.caption,
+            mixed_path,
+        )
+        logger.info("beat_audio_done beat=%d", result.beat_index)
+        return mixed_path
+    except Exception as exc:
+        logger.warning("beat_mix_failed beat=%d error=%s — keeping silent",
+                       result.beat_index, exc)
         return silent_mp4
-
-    logger.info("beat_audio_done beat=%d", result.beat_index)
-    return mixed
 
 
 async def add_audio_to_beats(

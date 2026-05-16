@@ -1,6 +1,22 @@
 import { useRef, useCallback } from 'react'
 import { api } from '../services/api'
 
+function _applyStage(stages, event) {
+  const exists = stages.find(s => s.id === event.stage)
+  const extra  = event.queries ? { queries: event.queries } : {}
+  return exists
+    ? stages.map(s => s.id === event.stage
+        ? { ...s, status: 'active', label: event.label ?? s.label, ...extra }
+        : s)
+    : [...stages, { id: event.stage, label: event.label ?? event.stage, status: 'active', ...extra }]
+}
+
+function _applyStageDone(stages, event) {
+  return stages.map(s =>
+    s.id === event.stage ? { ...s, status: 'done', duration_s: event.duration_s } : s
+  )
+}
+
 /**
  * Manages all video generation SSE streams for the Studio.
  *
@@ -44,7 +60,19 @@ export function useVideoStream({ setTurns, toast }) {
       await api.generateVideoStream(
         sessionId,
         (event) => {
-          if (event.type === 'done') {
+          if (event.type === 'stage') {
+            setTurns(prev => prev.map(t =>
+              t.tempId === tempId || (sessionId && t.id === sessionId)
+                ? { ...t, videoStages: _applyStage(t.videoStages ?? [], event) }
+                : t
+            ))
+          } else if (event.type === 'stage_done') {
+            setTurns(prev => prev.map(t =>
+              t.tempId === tempId || (sessionId && t.id === sessionId)
+                ? { ...t, videoStages: _applyStageDone(t.videoStages ?? [], event) }
+                : t
+            ))
+          } else if (event.type === 'done') {
             setTurnVideoPhase(tempId, sessionId, event.video_path ? 'ready' : 'error')
           } else if (event.type === 'error') {
             setTurnVideoPhase(tempId, sessionId, 'error')

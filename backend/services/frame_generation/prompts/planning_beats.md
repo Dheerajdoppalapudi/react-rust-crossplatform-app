@@ -66,6 +66,8 @@ TEACHING EMPHASIS:
 - All text strings: max 45 characters
 - Colors to use: BLUE, GREEN, YELLOW, RED, ORANGE, TEAL, GOLD, GRAY, WHITE
 - Each beat teaches ONE new idea — no repetition across beats
+- duration_s: structural beats 9–12 s, visualization beats 12–18 s
+  Err on the longer side — animations run slowly and narration needs room to breathe
 
 ## BEAT SEQUENCING RULES
 
@@ -108,7 +110,7 @@ Output ONLY valid JSON. No markdown fences, no explanation text before or after.
       "beat_class": "structural",
       "template_type": "concept_reveal",
       "title": "<2-4 word title>",
-      "duration_s": 7,
+      "duration_s": 10,
       "description": "<brief prose description>",
       "content": {
         "heading": "Gradient Descent",
@@ -120,18 +122,18 @@ Output ONLY valid JSON. No markdown fences, no explanation text before or after.
         "accent_color": "BLUE"
       },
       "keywords": ["gradient", "optimization", "minimum"],
-      "narration": "<2-3 sentences the narrator says while this plays>"
+      "narration": "<3-5 sentences spoken aloud — explain what is shown, why it matters, and what the learner should notice>"
     },
     {
       "index": 1,
       "beat_class": "visualization",
       "template_type": "",
       "title": "<2-4 word title>",
-      "duration_s": 9,
+      "duration_s": 14,
       "description": "WHAT TO SHOW:\n  - Coordinate axes, x from -3 to 3, labeled x and L(x)\n  - Parabola f(x)=x² in BLUE — the loss curve\n  - Red dot starting at x=2.5 on the curve, labeled 'start' above\n\nANIMATION SEQUENCE:\n  1. Draw axes, then gradually draw the parabola left-to-right\n  2. Red dot and 'start' label appear at x=2.5\n  3. Red downward arrow appears next to dot, labeled '-∇L' (gradient direction)\n  4. Arrow disappears, dot smoothly slides to x=1.25 (lr=0.5 so x halves)\n  5. Repeat steps 3-4 two more times: x=1.25→0.625→0.3\n  6. KEY REVEAL: Gold star appears at x=0 (minimum), 'minimum' text above it\n\nSEMANTIC LAYOUT:\n  Axes centered on screen. Dot rides the curve. Labels above dots.\n  Star and 'minimum' label at the bottom of the parabola.\n\nTEACHING EMPHASIS:\n  The dot moves in the direction that reduces the loss — reveal the minimum.",
       "content": {},
       "keywords": ["gradient", "learning rate", "convergence"],
-      "narration": "<2-3 sentences the narrator says while this plays>"
+      "narration": "<3-5 sentences spoken aloud — explain what is shown, why it matters, and what the learner should notice>"
     }
   ]
 }

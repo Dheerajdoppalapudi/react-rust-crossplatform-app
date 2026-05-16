@@ -331,6 +331,8 @@ async def generate_video(
                 session_id, video_path, d3,
             )
 
+            yield _sse({"type": "stage_done", "stage": "assembling", "duration_s": d3})
+
             update_session(session_id, video_path=video_path)
 
             total = elapsed()

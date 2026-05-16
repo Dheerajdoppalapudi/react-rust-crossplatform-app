@@ -392,11 +392,16 @@ async def _run_beat_pipeline(
     successful = [r for r in completed if r.mp4_path]
     captions   = [r.caption for r in successful]
 
+    yield {"type": "stage", "stage": "assembling", "label": "Assembling video…"}
+    t_assemble = time.time()
+
     # Mix TTS narration into each beat MP4 concurrently before assembly
     use_openai_tts = BEAT_TTS_BACKEND == "openai"
     mp4s = await add_audio_to_beats(successful, output_dir, use_openai=use_openai_tts)
 
     assembled = await assemble_beats(mp4s, os.path.join(output_dir, "session_final.mp4"))
+
+    yield {"type": "stage_done", "stage": "assembling", "duration_s": round(time.time() - t_assemble, 2)}
 
     # Persist frames.json for SessionView
     frames_data = json.dumps({

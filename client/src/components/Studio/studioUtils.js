@@ -54,6 +54,7 @@ export function createTempTurn({ tempId, prompt, videoEnabled, parentSessionId, 
     isLoading:        true,
     framesData:       null,
     videoPhase:       videoEnabled ? 'generating' : 'disabled',
+    videoStages:      [],
     parentSessionId,
     parentFrameIndex,
   }

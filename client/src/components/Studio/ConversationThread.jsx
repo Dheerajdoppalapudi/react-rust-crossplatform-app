@@ -6,6 +6,7 @@ import RefreshIcon from '@mui/icons-material/Refresh'
 import ErrorBoundary from '../error/ErrorBoundary'
 import SessionView from './SessionView'
 import LoadingView from './LoadingView'
+import VideoAssemblingView from './VideoAssemblingView'
 import NotesPanel from './NotesPanel'
 import { isTextTurn } from './studioUtils'
 import { BRAND, PALETTE } from '../../theme/tokens.js'
@@ -139,7 +140,7 @@ const TurnView = memo(function TurnView({ turn, onPauseAsk, onRetryTurn, onRetry
             <RetryBanner turn={turn} onRetry={onRetryGeneration} />
           </Box>
         ) : turn.id && turn.videoPhase === 'generating' ? (
-          <LoadingView stages={[{id:'video', label:'Assembling video', status:'active'}]} compact />
+          <VideoAssemblingView turn={turn} />
         ) : turn.id && turn.videoPhase === 'error' ? (
           <>
             {turn.framesData && (

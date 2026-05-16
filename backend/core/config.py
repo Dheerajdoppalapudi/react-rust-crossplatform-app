@@ -131,7 +131,7 @@ SCENE_PLANNER_MAX_TOKENS:     int = int(os.getenv("SCENE_PLANNER_MAX_TOKENS", "8
 BEAT_PIPELINE_ENABLED:        bool = os.getenv("BEAT_PIPELINE_ENABLED", "true").lower() != "false"
 BEAT_MAX_CONCURRENT_RENDERS:  int  = int(os.getenv("BEAT_MAX_CONCURRENT_RENDERS", "3"))
 BEAT_RENDER_TIMEOUT_S:        int  = int(os.getenv("BEAT_RENDER_TIMEOUT_S", "90"))
-BEAT_RENDER_QUALITY:          str  = os.getenv("BEAT_RENDER_QUALITY", "-ql")
+BEAT_RENDER_QUALITY:          str  = os.getenv("BEAT_RENDER_QUALITY", "-qm")
 BEAT_CACHE_DIR:               Path = OUTPUTS_DIR / "beat_cache"
 BEAT_PLANNER_MODEL:           str  = os.getenv("BEAT_PLANNER_MODEL", "claude-sonnet-4-6")
 # "openai" (higher quality, needs OPENAI_API_KEY) or "gtts" (free, no key needed)

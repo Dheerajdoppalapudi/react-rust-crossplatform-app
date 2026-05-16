@@ -15,6 +15,7 @@ import CheckCircleOutlineIcon       from '@mui/icons-material/CheckCircleOutline
 import KeyboardArrowDownIcon        from '@mui/icons-material/KeyboardArrowDown'
 import KeyboardArrowUpIcon          from '@mui/icons-material/KeyboardArrowUp'
 import RadioButtonUncheckedIcon     from '@mui/icons-material/RadioButtonUnchecked'
+import SlideshowOutlinedIcon        from '@mui/icons-material/SlideshowOutlined'
 import { softPulse, fadeIn, shimmer } from '../../theme/animations'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -38,6 +39,7 @@ const STAGE_ICONS = {
   rendering:         PhotoFilterOutlinedIcon,
   frames:            BurstModeOutlinedIcon,
   video:             MovieCreationOutlinedIcon,
+  assembling:        SlideshowOutlinedIcon,
 }
 
 // ── Skeleton helpers (visual generation stages) ───────────────────────────────
@@ -84,38 +86,49 @@ function FrameSkeletonCards({ isDark }) {
 
 // ── Beat progress list (beat pipeline only) ───────────────────────────────────
 
-function BeatRow({ title, isDone, isDark }) {
+function BeatRow({ title, isDone, isActive, isDark }) {
+  const Icon      = isDone ? CheckCircleOutlineIcon : RadioButtonUncheckedIcon
+  const iconColor = isDone
+    ? (isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.18)')
+    : (isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.45)')
+  const animSx    = (isActive && !isDone) ? { animation: `${softPulse} 3s ease-in-out infinite` } : {}
+
   return (
-    <Typography sx={{
-      fontSize: 12.5, lineHeight: 1.55, py: 0.35,
-      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-      transition: 'color 0.4s',
-      ...(isDone
-        ? { color: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.22)' }
-        : {
-            color: isDark ? 'rgba(255,255,255,0.82)' : 'rgba(0,0,0,0.76)',
-            animation: `${softPulse} 3s ease-in-out infinite`,
-          }
-      ),
-    }}>
-      {title}
-    </Typography>
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, py: 0.3 }}>
+      <Icon sx={{ fontSize: 11, flexShrink: 0, color: iconColor, ...animSx }} />
+      <Typography sx={{
+        fontSize: 12.5, lineHeight: 1.5,
+        color: isDone
+          ? (isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.22)')
+          : (isDark ? 'rgba(255,255,255,0.82)' : 'rgba(0,0,0,0.76)'),
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        transition: 'color 0.4s',
+        ...animSx,
+      }}>
+        {title}
+      </Typography>
+    </Box>
   )
 }
 
 const BEATS_INITIAL_SHOW = 5
 
 function BeatProgressList({ beatTitles, completedBeats, isDark }) {
-  const [showAll, setShowAll]   = useState(false)
-  const completedSet            = new Set(completedBeats ?? [])
-  const borderColor             = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)'
-  const visible                 = showAll ? beatTitles : beatTitles.slice(0, BEATS_INITIAL_SHOW)
-  const hiddenCount             = beatTitles.length - BEATS_INITIAL_SHOW
+  const [showAll, setShowAll] = useState(false)
+  const completedSet          = new Set(completedBeats ?? [])
+  const activeIndex           = beatTitles.findIndex((_, i) => !completedSet.has(i))
+  const visible               = showAll ? beatTitles : beatTitles.slice(0, BEATS_INITIAL_SHOW)
+  const hiddenCount           = beatTitles.length - BEATS_INITIAL_SHOW
 
   return (
-    <Box sx={{ mt: 1, mb: 0.5, pl: 1.25, borderLeft: `1.5px solid ${borderColor}`, ml: 0.25 }}>
+    <Box sx={{ mt: 0.75, mb: 0.5, pl: 1.5 }}>
       {visible.map((title, i) => (
-        <BeatRow key={i} title={title} isDone={completedSet.has(i)} isDark={isDark} />
+        <BeatRow
+          key={i} title={title}
+          isDone={completedSet.has(i)}
+          isActive={i === activeIndex}
+          isDark={isDark}
+        />
       ))}
       {!showAll && hiddenCount > 0 && (
         <Box

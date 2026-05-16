@@ -44,7 +44,11 @@
       "Bash(python3 -c \"import json,sys; data=json.load\\(sys.stdin\\); print\\(data[0]['text']\\)\")",
       "Bash(mkdir -p \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/services/frame_generation/manim/templates\")",
       "Bash(cp \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/services/frame_generation/manim/manim_generator.py\" \"/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/services/frame_generation/manim/manim_generator_legacy.py\")",
-      "Bash(grep -A2 \"useGeneration.js$\\\\|Studio.jsx$\")"
+      "Bash(grep -A2 \"useGeneration.js$\\\\|Studio.jsx$\")",
+      "Read(//Users/dheerajdoppalapudi/.claude/skills/**)",
+      "Bash(mkdir -p ~/.claude/skills/deep-plan)",
+      "Skill(deep-plan)",
+      "Skill(deep-plan:*)"
     ],
     "additionalDirectories": [
       "/tmp",
@@ -57,7 +61,8 @@
       "/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/services",
       "/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend",
       "/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/services/research",
-      "/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/services/frame_generation/manim"
+      "/Users/dheerajdoppalapudi/Desktop/Dheeraj /desktop app/backend/services/frame_generation/manim",
+      "/Users/dheerajdoppalapudi/.claude/skills"
     ]
   }
 }
