@@ -45,14 +45,14 @@ export default function VideoAssemblingView({ turn }) {
         </Box>
       </Box>
 
-      {/* Video-phase stage rows (assembling, export, tts, etc.) */}
-      {turn.videoStages?.length > 0 && (
-        <LoadingView
-          stages={turn.videoStages}
-          stage="assembling"
-          compact
-        />
-      )}
+      {/* Video-phase stage rows from stream 2 (export_frames, tts, assembling) */}
+      {(() => {
+        const VIDEO_STAGE_IDS = new Set(['export_frames', 'tts', 'assembling'])
+        const videoStages = turn.stages?.filter(s => VIDEO_STAGE_IDS.has(s.id)) ?? []
+        return videoStages.length > 0 && (
+          <LoadingView stages={videoStages} stage="assembling" compact />
+        )
+      })()}
     </Box>
   )
 }

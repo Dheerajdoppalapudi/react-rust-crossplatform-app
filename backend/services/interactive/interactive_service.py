@@ -280,6 +280,7 @@ async def run_interactive_pipeline(
     # Stage 1: Enrich prompt + select entities + recommend model.
     # Entity selector receives the enriched_prompt (richer spec) for better widget selection.
     entity_input = enriched_prompt or original_message
+    yield {"type": "stage", "stage": "designing", "label": "Selecting widgets…"}
     selection = await _select_entities(entity_input, domain, conversation_context)
 
     # Honour per-request model override; fall back to entity selector recommendation
@@ -287,6 +288,7 @@ async def run_interactive_pipeline(
     downstream_svc  = user_forced_svc if user_forced_svc else _get_llm_service(selection.model)
 
     # Stage 2: Plan scene IR — enriched prompt + sources for grounded citations
+    yield {"type": "stage", "stage": "designing", "label": "Planning lesson structure…"}
     scene = await _plan_scene(
         selection.enriched_prompt, domain, conversation_context,
         selection.entities, sources, svc=downstream_svc,

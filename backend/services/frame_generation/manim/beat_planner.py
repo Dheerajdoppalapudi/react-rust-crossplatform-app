@@ -10,8 +10,7 @@ import asyncio
 import logging
 from pathlib import Path
 
-from core.config import BEAT_PLANNER_MODEL
-from services.llm_service import LLMService, ClaudeProvider
+from services.llm_service import LLMService, OpenAIProvider
 from services.frame_generation.planner import call_llm, _extract_json, _log
 from .beat_types import BeatScript
 
@@ -20,9 +19,7 @@ logger = logging.getLogger(__name__)
 _PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
 _PROMPT_TEMPLATE: str = (_PROMPTS_DIR / "planning_beats.md").read_text(encoding="utf-8")
 
-# Fixed Sonnet service — the planner always uses Sonnet regardless of the user's
-# model choice, because description quality determines all downstream reliability.
-_planner_service = LLMService(provider=ClaudeProvider(model=BEAT_PLANNER_MODEL))
+_planner_service = LLMService(provider=OpenAIProvider(model="gpt-4.1"))
 
 # Static portion of the prompt (everything before the TOPIC substitution) is
 # eligible for Anthropic prompt caching — saves ~90% on repeated topics.

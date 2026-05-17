@@ -240,7 +240,7 @@ export default function ResearchResult({
 }) {
   const theme      = useTheme()
   const isDark     = theme.palette.mode === 'dark'
-  const [sourcesOpen, setSourcesOpen] = useState(true)
+  const [sourcesOpen, setSourcesOpen] = useState(false)
   // Ref on the content wrapper — passed to toolbar so html2canvas knows what to capture
   const contentRef = useRef(null)
 

@@ -25,7 +25,7 @@ from typing import List, Union
 from pydantic import BaseModel, field_validator
 
 from core.config import CLASSIFY_MODEL
-from services.llm_service import LLMService, ClaudeProvider, default_llm_service
+from services.llm_service import LLMService, ClaudeProvider, OpenAIProvider, default_llm_service
 
 # Per-request lifecycle log. main.py sets this before each pipeline run.
 request_log: ContextVar[list | None] = ContextVar("request_log", default=None)
@@ -38,9 +38,7 @@ token_usage: ContextVar[dict | None] = ContextVar("token_usage", default=None)
 # default_llm_service — allows the UI to choose Claude vs OpenAI per request.
 request_llm_service: ContextVar[LLMService | None] = ContextVar("request_llm_service", default=None)
 
-# Fixed Haiku service for plan_and_classify — cheap/fast, always Claude.
-# Bypasses the per-request service so the user's model choice doesn't affect it.
-_classify_service = LLMService(provider=ClaudeProvider(model=CLASSIFY_MODEL))
+_classify_service = LLMService(provider=OpenAIProvider(model="gpt-4.1-mini"))
 
 # Calibrated max_tokens per planning call type.
 # These are generous upper bounds based on observed output sizes; setting them

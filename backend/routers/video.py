@@ -224,11 +224,11 @@ async def generate_video(
             )
             yield _sse({
                 "type": "stage", "stage": "export_frames",
-                "message": "Exporting frames", "elapsed_s": elapsed(),
+                "label": "Exporting frames…", "elapsed_s": elapsed(),
             })
             yield _sse({
                 "type": "stage", "stage": "tts",
-                "message": "Generating audio", "total": total_frames, "elapsed_s": elapsed(),
+                "label": "Generating audio…", "total": total_frames, "elapsed_s": elapsed(),
             })
 
             t1 = time.time()
@@ -293,7 +293,7 @@ async def generate_video(
             )
             yield _sse({
                 "type": "stage", "stage": "assembling",
-                "message": "Assembling video", "elapsed_s": elapsed(),
+                "label": "Assembling video…", "elapsed_s": elapsed(),
             })
 
             session_lock = _session_locks.setdefault(session_id, asyncio.Lock())

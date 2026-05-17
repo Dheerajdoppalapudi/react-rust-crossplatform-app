@@ -378,7 +378,7 @@ class LLMService:
 #   default_llm_service = LLMService(provider=OpenAIProvider(model="gpt-4.1"))
 # ---------------------------------------------------------------------------
 
-default_llm_service = LLMService(provider=ClaudeProvider())
+default_llm_service = LLMService(provider=OpenAIProvider(model="gpt-4.1"))
 
 # ── Startup diagnostic ────────────────────────────────────────────────────────
 def _log_startup() -> None:

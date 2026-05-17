@@ -1,46 +1,20 @@
 import { useState, useEffect } from 'react'
 import { Box, Typography, Collapse, useTheme } from '@mui/material'
-import LightbulbOutlinedIcon        from '@mui/icons-material/LightbulbOutlined'
-import TravelExploreOutlinedIcon    from '@mui/icons-material/TravelExploreOutlined'
-import ArticleOutlinedIcon          from '@mui/icons-material/ArticleOutlined'
-import AutoFixHighOutlinedIcon      from '@mui/icons-material/AutoFixHighOutlined'
-import AccountTreeOutlinedIcon      from '@mui/icons-material/AccountTreeOutlined'
-import DashboardOutlinedIcon        from '@mui/icons-material/DashboardOutlined'
-import GridViewOutlinedIcon         from '@mui/icons-material/GridViewOutlined'
 import MovieCreationOutlinedIcon    from '@mui/icons-material/MovieCreationOutlined'
-import BurstModeOutlinedIcon        from '@mui/icons-material/BurstModeOutlined'
-import PhotoFilterOutlinedIcon      from '@mui/icons-material/PhotoFilterOutlined'
 import SearchOutlinedIcon           from '@mui/icons-material/SearchOutlined'
 import CheckCircleOutlineIcon       from '@mui/icons-material/CheckCircleOutline'
 import KeyboardArrowDownIcon        from '@mui/icons-material/KeyboardArrowDown'
 import KeyboardArrowUpIcon          from '@mui/icons-material/KeyboardArrowUp'
 import RadioButtonUncheckedIcon     from '@mui/icons-material/RadioButtonUnchecked'
-import SlideshowOutlinedIcon        from '@mui/icons-material/SlideshowOutlined'
-import { softPulse, fadeIn, shimmer } from '../../theme/animations'
+import ChevronRightIcon             from '@mui/icons-material/ChevronRight'
+import { fadeIn, shimmer, textShimmer, dotBounce } from '../../theme/animations'
+import { STAGE_REGISTRY, FALLBACK_STAGE_ICON } from '../../constants/stageRegistry'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const MAX_SHOWN_SOURCES = 5
 const FRAME_COUNT       = 5
 const FRAME_INDICES     = Array.from({ length: FRAME_COUNT }, (_, i) => i)
-
-// ── Stage icon map ────────────────────────────────────────────────────────────
-
-const STAGE_ICONS = {
-  thinking:          LightbulbOutlinedIcon,
-  decomposing:       LightbulbOutlinedIcon,
-  searching:         TravelExploreOutlinedIcon,
-  reading:           ArticleOutlinedIcon,
-  synthesising:      AutoFixHighOutlinedIcon,
-  planning:          AccountTreeOutlinedIcon,
-  designing:         DashboardOutlinedIcon,
-  generating_frames: GridViewOutlinedIcon,
-  generating:        GridViewOutlinedIcon,
-  rendering:         PhotoFilterOutlinedIcon,
-  frames:            BurstModeOutlinedIcon,
-  video:             MovieCreationOutlinedIcon,
-  assembling:        SlideshowOutlinedIcon,
-}
 
 // ── Skeleton helpers (visual generation stages) ───────────────────────────────
 
@@ -57,6 +31,7 @@ function ShimmerOverlay({ isDark, delay = 0 }) {
     }} />
   )
 }
+
 
 function FrameSkeletonCards({ isDark }) {
   return (
@@ -91,19 +66,33 @@ function BeatRow({ title, isDone, isActive, isDark }) {
   const iconColor = isDone
     ? (isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.18)')
     : (isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.45)')
-  const animSx    = (isActive && !isDone) ? { animation: `${softPulse} 3s ease-in-out infinite` } : {}
+  const showShimmer = isActive && !isDone
+
+  const shimmerSx = showShimmer ? {
+    backgroundImage: `linear-gradient(90deg,
+      ${isDark ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.22)'} 35%,
+      ${isDark ? 'rgba(255,255,255,0.90)' : 'rgba(0,0,0,0.76)'} 50%,
+      ${isDark ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.22)'} 65%)`,
+    backgroundSize: '300% 100%',
+    backgroundClip: 'text',
+    WebkitBackgroundClip: 'text',
+    color: 'transparent',
+    animation: `${textShimmer} 1.6s linear infinite`,
+    transition: 'none',
+  } : {}
 
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, py: 0.3 }}>
-      <Icon sx={{ fontSize: 11, flexShrink: 0, color: iconColor, ...animSx }} />
+      <Icon sx={{ fontSize: 11, flexShrink: 0, color: iconColor }} />
       <Typography sx={{
+        flex: 1, minWidth: 0,
         fontSize: 12.5, lineHeight: 1.5,
         color: isDone
           ? (isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.22)')
           : (isDark ? 'rgba(255,255,255,0.82)' : 'rgba(0,0,0,0.76)'),
         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         transition: 'color 0.4s',
-        ...animSx,
+        ...shimmerSx,
       }}>
         {title}
       </Typography>
@@ -237,8 +226,8 @@ function QueryItem({ query, idx, isDark }) {
     <Box sx={{
       display: 'flex', alignItems: 'center', gap: 1,
       py: 0.45, minWidth: 0,
-      animation: `${fadeIn} 0.25s ease both`,
-      animationDelay: `${idx * 0.06}s`,
+      animation: `${fadeIn} 0.3s ease both`,
+      animationDelay: `${idx * 0.18}s`,
     }}>
       <SearchOutlinedIcon sx={{
         fontSize: 11.5, flexShrink: 0,
@@ -262,8 +251,8 @@ function SourceItem({ source, idx, isDark }) {
     <Box sx={{
       display: 'flex', alignItems: 'center', gap: 1,
       py: 0.4,
-      animation: `${fadeIn} 0.25s ease both`,
-      animationDelay: `${idx * 0.05}s`,
+      animation: `${fadeIn} 0.3s ease both`,
+      animationDelay: `${idx * 0.14}s`,
     }}>
       <DomainCircle domain={source.domain} isDark={isDark} />
       <Box
@@ -296,15 +285,39 @@ function SourceItem({ source, idx, isDark }) {
   )
 }
 
+// ── Running person loader ─────────────────────────────────────────────────────
+
+function DotsLoader({ isDark }) {
+  const c = isDark ? 'rgba(100,134,255,0.9)' : 'rgba(24,71,214,0.72)'
+  return (
+    <Box sx={{ display: 'flex', gap: 0, mt: 0.75, mb: 0.25 }}>
+      {/* Sits in the same 28px icon-track column as StageRow icons */}
+      <Box sx={{ width: 28, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Box sx={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+          {[0, 1, 2].map(i => (
+            <Box key={i} sx={{
+              width: 4, height: 4, borderRadius: '50%',
+              backgroundColor: c,
+              animation: `${dotBounce} 1.1s ease-in-out infinite`,
+              animationDelay: `${i * 0.18}s`,
+            }} />
+          ))}
+        </Box>
+      </Box>
+    </Box>
+  )
+}
+
 // ── Single stage row ──────────────────────────────────────────────────────────
 
 function StageRow({ stage, sources, isLast, compact, isDark, beatTitles, completedBeats }) {
-  const IconComponent = STAGE_ICONS[stage.id] ?? RadioButtonUncheckedIcon
+  const stageConfig   = STAGE_REGISTRY[stage.id]
+  const IconComponent = stageConfig?.Icon ?? FALLBACK_STAGE_ICON
   const isActive  = stage.status === 'active'
   const isDone    = stage.status === 'done'
   const isPending = stage.status === 'pending'
 
-  const iconColor = isActive  ? (isDark ? 'rgba(75,114,255,0.58)'  : 'rgba(24,71,214,0.48)')
+  const iconColor = isActive  ? (isDark ? 'rgba(255,255,255,0.68)' : 'rgba(0,0,0,0.58)')
                   : isDone    ? (isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.18)')
                               : (isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)')
 
@@ -315,7 +328,7 @@ function StageRow({ stage, sources, isLast, compact, isDark, beatTitles, complet
   const lineColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)'
 
   const queries      = stage.queries ?? []
-  const stageSources = (stage.id === 'searching' || stage.id === 'reading') ? sources : []
+  const stageSources = stageConfig?.hasSourceItems ? sources : []
   const hasSubItems  = queries.length > 0 || stageSources.length > 0
 
   const [expanded, setExpanded] = useState(stage.status !== 'done')
@@ -325,12 +338,12 @@ function StageRow({ stage, sources, isLast, compact, isDark, beatTitles, complet
 
   const [showAll, setShowAll] = useState(false)
 
-  const isFrameStage      = stage.id === 'generating_frames' || stage.id === 'generating' || stage.id === 'rendering' || stage.id === 'frames'
+  const skeletonType      = stageConfig?.skeleton
   const hasBeatData       = beatTitles && beatTitles.length > 0
-  const showBeatList      = isFrameStage && isActive && hasBeatData
-  const showFrameSkeleton = isFrameStage && isActive && !hasBeatData
-  const showVideoSkeleton = stage.id === 'video' && isActive
-  const showBlockSkeleton = stage.id === 'designing' && isActive
+  const showBeatList      = skeletonType === 'frames_or_beats' && isActive && hasBeatData
+  const showFrameSkeleton = skeletonType === 'frames_or_beats' && isActive && !hasBeatData
+  const showVideoSkeleton = skeletonType === 'video' && isActive
+  const showBlockSkeleton = skeletonType === 'blocks' && isActive
 
   return (
     <Box sx={{
@@ -367,12 +380,24 @@ function StageRow({ stage, sources, isLast, compact, isDark, beatTitles, complet
         >
           <Typography sx={{
             flex: 1, minWidth: 0,
-            fontSize: 13, fontWeight: 400,
-            color: textColor,
+            fontSize: 13.5, fontWeight: 400,
             lineHeight: 1.4,
-            transition: 'color 0.3s',
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            ...(isActive ? { animation: `${softPulse} 3s ease-in-out infinite` } : {}),
+            ...(isActive ? {
+              backgroundImage: `linear-gradient(90deg,
+                ${isDark ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.22)'} 35%,
+                ${isDark ? 'rgba(255,255,255,0.90)' : 'rgba(0,0,0,0.76)'} 50%,
+                ${isDark ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.22)'} 65%)`,
+              backgroundSize: '300% 100%',
+              backgroundClip: 'text',
+              WebkitBackgroundClip: 'text',
+              color: 'transparent',
+              animation: `${textShimmer} 1.6s linear infinite`,
+              transition: 'none',
+            } : {
+              color: textColor,
+              transition: 'color 0.3s',
+            }),
           }}>
             {stage.label}
           </Typography>
@@ -397,11 +422,21 @@ function StageRow({ stage, sources, isLast, compact, isDark, beatTitles, complet
             </Typography>
           )}
 
-          {hasSubItems && (
-            <Box sx={{ display: 'flex', alignItems: 'center', color: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)' }}>
-              {expanded ? <KeyboardArrowUpIcon sx={{ fontSize: 14 }} /> : <KeyboardArrowDownIcon sx={{ fontSize: 14 }} />}
+          {hasSubItems ? (
+            <Box sx={{
+              display: 'flex', alignItems: 'center', flexShrink: 0,
+              color: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)',
+              transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)',
+              transition: 'transform 0.2s ease',
+            }}>
+              <ChevronRightIcon sx={{ fontSize: 14 }} />
             </Box>
-          )}
+          ) : isActive ? (
+            <ChevronRightIcon sx={{
+              fontSize: 13, flexShrink: 0,
+              color: isDark ? 'rgba(255,255,255,0.20)' : 'rgba(0,0,0,0.18)',
+            }} />
+          ) : null}
         </Box>
 
         {/* Skeleton previews (live only) */}
@@ -523,6 +558,11 @@ export default function LoadingView({
           ))}
         </Box>
       </Collapse>
+
+      {/* Dots loader — visible while any stage is active */}
+      {!allDone && displayStages.some(s => s.status === 'active') && (
+        <DotsLoader isDark={isDark} />
+      )}
 
       {/* Streaming synthesis preview */}
       {synthesisText && (

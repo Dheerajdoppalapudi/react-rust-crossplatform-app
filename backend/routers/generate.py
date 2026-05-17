@@ -236,12 +236,17 @@ async def _generate_stream(p: dict):
             if existing:
                 existing["status"] = "active"
                 existing["label"]  = event.get("label", existing["label"])
+                if event.get("queries"):
+                    existing["queries"] = event["queries"]
             else:
-                stages_log.append({
+                entry = {
                     "id":     event["stage"],
                     "label":  event.get("label", event["stage"]),
                     "status": "active",
-                })
+                }
+                if event.get("queries"):
+                    entry["queries"] = event["queries"]
+                stages_log.append(entry)
         elif event["type"] == "stage_done":
             for s in stages_log:
                 if s["id"] == event["stage"]:
@@ -352,6 +357,8 @@ async def _generate_stream(p: dict):
                     yield _sse({"type": "token", "text": token})
                     synthesis_text += token
 
+                yield _sse({"type": "synthesis_done"})
+
                 synth_done = {"type": "stage_done", "stage": "synthesising",
                               "duration_s": round(time.time() - t_synth, 2)}
                 _apply_stage_log(synth_done)
@@ -408,6 +415,8 @@ async def _generate_stream(p: dict):
                 elif event["type"] == "done":
                     pass  # router emits the unified done
                 else:
+                    if event["type"] in ("stage", "stage_done"):
+                        _apply_stage_log(event)
                     yield _sse(event)
 
             design_done = {"type": "stage_done", "stage": "designing",

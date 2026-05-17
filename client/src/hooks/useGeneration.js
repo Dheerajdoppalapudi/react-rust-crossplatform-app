@@ -2,46 +2,7 @@ import { useRef, useCallback, useEffect } from 'react'
 import { api } from '../services/api'
 import { createTempTurn, normalizeFramesData } from '../components/Studio/studioUtils'
 import { withSpan } from '../lib/sentry.js'
-
-// ── Stage array helpers ───────────────────────────────────────────────────────
-
-function _applyStage(stages, event) {
-  const exists = stages.find(s => s.id === event.stage)
-  const extra  = event.queries ? { queries: event.queries } : {}
-  return exists
-    ? stages.map(s => s.id === event.stage
-        ? { ...s, status: 'active', label: event.label ?? s.label, ...extra }
-        : s)
-    : [...stages, { id: event.stage, label: event.label ?? event.stage, status: 'active', ...extra }]
-}
-
-function _applyStageDone(stages, event) {
-  return stages.map(s =>
-    s.id === event.stage ? { ...s, status: 'done', duration_s: event.duration_s } : s
-  )
-}
-
-// Mark every still-active stage as done — called defensively on stream completion
-// so any stage that never received stage_done (backend bug / missing event) is finalized.
-function _finalizeAllStages(stages) {
-  return stages.map(s => s.status === 'active' ? { ...s, status: 'done' } : s)
-}
-
-// ── SSE reducers ──────────────────────────────────────────────────────────────
-// Pure functions: (state, event) → newState
-// Used by both handleGenerate (via dispatch) and createTurnSSEHandler.
-// Adding a new streaming event = one entry here + one case in the SSE router.
-
-const SSE_REDUCERS = {
-  stage:          (s, e) => ({ ...s, stages:           _applyStage(s.stages ?? [], e) }),
-  stage_done:     (s, e) => ({ ...s, stages:           _applyStageDone(s.stages ?? [], e) }),
-  source:         (s, e) => ({ ...s, sources:          [...(s.sources ?? []), e.source] }),
-  token:          (s, e) => ({ ...s, synthesisText:    (s.synthesisText ?? '') + e.text }),
-  synthesis_done: (s, e) => ({ ...s, synthesisComplete: true, sources: e.sources ?? s.sources ?? [] }),
-  beats_planned:  (s, e) => ({ ...s, beatTitles:       e.beat_titles ?? [], completedBeats: [] }),
-  beat_ready:     (s, e) => ({ ...s, completedBeats:   [...(s.completedBeats ?? []), e.beat_index] }),
-  block:          (s, e) => ({ ...s, blocks:           [...(s.blocks ?? []), e.block] }),
-}
+import { SSE_REDUCERS, finalizeAllStages } from '../utils/sseUtils'
 
 // ── Shared SSE handler for follow-up / retry / learn turns ───────────────────
 // Handles all reducer-driven events plus meta, done, error.
@@ -66,14 +27,14 @@ function createTurnSSEHandler(id, { setTurns, toast, donePayloadRef }) {
       case 'done':
         donePayloadRef.current = event
         setTurns(prev => prev.map(t => t.tempId === id
-          ? { ...t, stages: _finalizeAllStages(t.stages ?? []) }
+          ? { ...t, stages: finalizeAllStages(t.stages ?? []) }
           : t
         ))
         break
       case 'error':
         toast.error(event.message || 'Generation failed. Please try again.')
         setTurns(prev => prev.map(t => t.tempId === id
-          ? { ...t, isLoading: false, videoPhase: 'error' }
+          ? { ...t, isLoading: false, ...(t.videoPhase !== 'disabled' ? { videoPhase: 'error' } : {}) }
           : t
         ))
         break
@@ -282,12 +243,12 @@ export function useGeneration({
               resolvedConvId.current = event.conversation_id ?? resolvedConvId.current
               donePayload.current    = event
               if (isFirstTurn) {
-                stagingRef.current = { ...stagingRef.current, stages: _finalizeAllStages(stagingRef.current.stages) }
+                stagingRef.current = { ...stagingRef.current, stages: finalizeAllStages(stagingRef.current.stages) }
               }
               setTurns(prev => prev.map(t => t.tempId === tempId
                 ? { ...t, stages: isFirstTurn
                     ? stagingRef.current.stages
-                    : _finalizeAllStages(t.stages ?? []) }
+                    : finalizeAllStages(t.stages ?? []) }
                 : t
               ))
               break
