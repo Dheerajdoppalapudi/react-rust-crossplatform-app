@@ -1,6 +1,6 @@
 import { useState, memo } from 'react'
 import { Box, Typography, useTheme } from '@mui/material'
-import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
+import ZenithLogo from '../common/ZenithLogo'
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline'
 import { useMediaUrl } from '../../hooks/useMediaUrl'
 import { PALETTE } from '../../theme/tokens.js'
@@ -56,7 +56,7 @@ function FrameThumbnail({ sessionId, frameIndex, caption, type, isActive, onClic
         }}>
           {type === 'video'
             ? <PlayCircleOutlineIcon sx={{ fontSize: 22, color: theme.palette.primary.main, opacity: 0.7 }} />
-            : <AutoAwesomeIcon sx={{ fontSize: 18, color: theme.palette.text.secondary, opacity: 0.35 }} />
+            : <ZenithLogo sx={{ fontSize: 18, color: theme.palette.text.secondary, opacity: 0.35 }} />
           }
           <Typography sx={{
             fontSize: 9, color: theme.palette.text.secondary, opacity: 0.7,

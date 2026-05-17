@@ -7,13 +7,12 @@ import {
 } from '@mui/material'
 import HomeOutlinedIcon        from '@mui/icons-material/HomeOutlined'
 import SettingsOutlinedIcon    from '@mui/icons-material/SettingsOutlined'
-import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined'
 import SearchIcon              from '@mui/icons-material/Search'
 import AddIcon                 from '@mui/icons-material/Add'
 import DarkModeOutlinedIcon    from '@mui/icons-material/DarkModeOutlined'
 import LightModeOutlinedIcon   from '@mui/icons-material/LightModeOutlined'
-import AutoAwesomeIcon         from '@mui/icons-material/AutoAwesome'
 import ChevronLeftIcon         from '@mui/icons-material/ChevronLeft'
+import ZenithLogo              from './ZenithLogo'
 import ChevronRightIcon        from '@mui/icons-material/ChevronRight'
 import LogoutOutlinedIcon      from '@mui/icons-material/LogoutOutlined'
 import MoreHorizIcon           from '@mui/icons-material/MoreHoriz'
@@ -32,7 +31,7 @@ const ICON_SIZE     = 17
 
 const mainItems = [
   { label: 'About Us', path: '/',       icon: <HomeOutlinedIcon        sx={{ fontSize: ICON_SIZE }} /> },
-  { label: 'Studio',   path: '/studio', icon: <AutoAwesomeOutlinedIcon sx={{ fontSize: ICON_SIZE }} /> },
+  { label: 'Studio',   path: '/studio', icon: <ZenithLogo sx={{ fontSize: ICON_SIZE }} /> },
 ]
 const bottomItems = [
   { label: 'Settings', path: '/settings', icon: <SettingsOutlinedIcon sx={{ fontSize: ICON_SIZE }} /> },
@@ -79,7 +78,7 @@ const LogoButton = ({ open, accent, onToggle }) => {
       >
         {(!open && hovered)
           ? <ChevronRightIcon sx={{ fontSize: 18, color: theme.palette.text.secondary }} />
-          : <AutoAwesomeIcon  sx={{ fontSize: 14, color: '#fff' }} />
+          : <ZenithLogo sx={{ fontSize: 14, color: '#fff' }} />
         }
       </Box>
     </Tooltip>
@@ -529,7 +528,7 @@ const Sidebar = ({
               width: 32, height: 32, borderRadius: '8px', flexShrink: 0,
               background: BRAND.gradient, display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
-              <AutoAwesomeIcon sx={{ fontSize: 14, color: '#fff' }} />
+              <ZenithLogo sx={{ fontSize: 14, color: '#fff' }} />
             </Box>
           )}
 

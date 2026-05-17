@@ -8,7 +8,7 @@ import AddIcon                from '@mui/icons-material/Add'
 import CloseIcon              from '@mui/icons-material/Close'
 import PauseCircleOutlineIcon from '@mui/icons-material/PauseCircleOutline'
 import KeyboardArrowDownIcon  from '@mui/icons-material/KeyboardArrowDown'
-import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined'
+import ZenithLogo             from '../common/ZenithLogo'
 import FunctionsOutlinedIcon  from '@mui/icons-material/FunctionsOutlined'
 import BrushOutlinedIcon      from '@mui/icons-material/BrushOutlined'
 import AttachFileIcon         from '@mui/icons-material/AttachFile'
@@ -23,7 +23,7 @@ const claudeModels = MODELS.filter((m) => m.provider === 'claude')
 const openaiModels = MODELS.filter((m) => m.provider === 'openai')
 
 const RENDER_MODE_ICONS = {
-  auto:  <AutoAwesomeOutlinedIcon sx={{ fontSize: 13 }} />,
+  auto:  <ZenithLogo sx={{ fontSize: 13 }} />,
   manim: <FunctionsOutlinedIcon  sx={{ fontSize: 13 }} />,
   svg:   <BrushOutlinedIcon      sx={{ fontSize: 13 }} />,
 }
@@ -501,7 +501,7 @@ function PromptBar({
                     sx={{ px: 2, py: 0.75, mx: 0.5, borderRadius: '8px' }}
                   >
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <AutoAwesomeOutlinedIcon sx={{ fontSize: 14, color: theme.palette.text.disabled }} />
+                      <ZenithLogo sx={{ fontSize: 14, color: theme.palette.text.disabled }} />
                       <Box>
                         <Typography sx={{ fontSize: 13, fontWeight: 500, lineHeight: 1.3 }}>{autoModel.label}</Typography>
                         <Typography sx={{ fontSize: 11, color: theme.palette.text.secondary, lineHeight: 1.4 }}>{autoModel.description}</Typography>

@@ -9,7 +9,7 @@ import {
   useInView,
   AnimatePresence,
 } from 'framer-motion'
-import AutoAwesomeIcon       from '@mui/icons-material/AutoAwesome'
+import ZenithLogo            from '../components/common/ZenithLogo'
 import OndemandVideoIcon     from '@mui/icons-material/OndemandVideo'
 import AccountTreeIcon       from '@mui/icons-material/AccountTree'
 import SpeedIcon             from '@mui/icons-material/Speed'
@@ -96,7 +96,7 @@ const features = [
   { icon: <AccountTreeIcon   sx={{ fontSize: 26 }} />, title: 'Learning Canvas',       desc: 'Visualise your full learning journey as an interactive tree. See how ideas branch and connect.', color: '#0891B2' },
   { icon: <TuneIcon          sx={{ fontSize: 26 }} />, title: 'Deep-Dive on Demand',   desc: 'Click any frame and ask a follow-up. The AI digs deeper without losing context from before.', color: '#059669' },
   { icon: <SpeedIcon         sx={{ fontSize: 26 }} />, title: 'Learn at Your Pace',    desc: 'Pause, branch into subtopics, or merge everything into one continuous review video.', color: '#DC2626' },
-  { icon: <AutoAwesomeIcon   sx={{ fontSize: 26 }} />, title: 'Rich Visualisations',   desc: 'Complex ideas rendered as animations, diagrams, and step-by-step breakdowns — not just slides.', color: '#D97706' },
+  { icon: <ZenithLogo        sx={{ fontSize: 26 }} />, title: 'Rich Visualisations',   desc: 'Complex ideas rendered as animations, diagrams, and step-by-step breakdowns — not just slides.', color: '#D97706' },
 ]
 
 const stats = [
@@ -739,7 +739,7 @@ export default function AboutUs() {
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                           boxShadow: `0 4px 12px ${accent}40`,
                         }}>
-                          <AutoAwesomeIcon sx={{ fontSize: 13, color: '#fff' }} />
+                          <ZenithLogo sx={{ fontSize: 13, color: '#fff' }} />
                         </Box>
                       )}
                       <Box sx={{
@@ -894,7 +894,7 @@ export default function AboutUs() {
               background: 'linear-gradient(135deg, #001AFF 0%, #6B44F8 100%)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
-              <AutoAwesomeIcon sx={{ fontSize: 11, color: '#fff' }} />
+              <ZenithLogo sx={{ fontSize: 11, color: '#fff' }} />
             </Box>
             <Typography sx={{ fontSize: 12.5, color: theme.palette.text.disabled }}>
               Built with the belief that understanding should never be a barrier to learning.

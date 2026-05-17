@@ -3,7 +3,6 @@ import { Routes, Route, useLocation, useNavigate, useMatch, Navigate } from 'rea
 import { Box, ThemeProvider, CssBaseline, IconButton, Typography, useTheme, useMediaQuery } from '@mui/material'
 import MenuIcon from '@mui/icons-material/Menu'
 import AddIcon from '@mui/icons-material/Add'
-import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
 import { buildTheme } from './theme/index.js'
 import Sidebar from './components/common/Sidebar'
 import Footer from './components/common/Footer'
