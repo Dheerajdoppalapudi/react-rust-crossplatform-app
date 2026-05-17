@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+import { API_BASE } from '../constants/api.js'
 
 // ── Core request helper ────────────────────────────────────────────────────────
 //
@@ -315,8 +315,12 @@ export const api = {
 
   // ── Conversations ─────────────────────────────────────────────────────────────
 
-  getConversations: async () => {
-    return _request(`${API_BASE}/api/conversations`)
+  // Returns { items, next_cursor, has_more } — paginated, 30 per page.
+  getConversations: async ({ cursor } = {}) => {
+    const url = cursor
+      ? `${API_BASE}/api/conversations?cursor=${encodeURIComponent(cursor)}`
+      : `${API_BASE}/api/conversations`
+    return _request(url)
   },
 
   // Returns the conversation object or null if not found / deleted.

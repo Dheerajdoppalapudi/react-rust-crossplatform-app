@@ -12,8 +12,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import { setAccessToken, setAuthCallbacks, getAccessToken } from '../services/authBridge'
 import { setUser as setSentryUser } from '../lib/sentry.js'
-
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+import { API_BASE } from '../constants/api.js'
 
 const AuthContext = createContext(null)
 export const useAuth = () => useContext(AuthContext)

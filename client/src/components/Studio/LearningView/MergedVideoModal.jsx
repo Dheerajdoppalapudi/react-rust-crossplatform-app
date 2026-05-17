@@ -5,8 +5,7 @@ import MergeTypeIcon from '@mui/icons-material/MergeType'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
 import { getSessionMediaToken } from '../../../services/mediaToken'
 import { blink } from '../../../theme/animations'
-
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+import { API_BASE } from '../../../constants/api.js'
 
 function fmtTime(s) {
   if (!s || isNaN(s)) return '0:00'

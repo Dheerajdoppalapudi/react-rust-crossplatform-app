@@ -93,8 +93,11 @@ function AppInner() {
   const slotCtx = useMemo(() => ({ setSlot: setMobileHeaderSlot }), [])
 
   // ── Conversations — lifted so Sidebar and Studio share state ─────────────
-  const [conversations, setConversations]             = useState([])
+  const [conversations, setConversations]                   = useState([])
   const [isLoadingConversations, setIsLoadingConversations] = useState(true)
+  const [convNextCursor, setConvNextCursor]                 = useState(null)
+  const [hasMoreConvs, setHasMoreConvs]                     = useState(false)
+  const [isLoadingMoreConvs, setIsLoadingMoreConvs]         = useState(false)
 
   // activeConvId is derived directly from the URL — the URL is the single source
   // of truth. No state, no sync effects, no stale closures. This is how
@@ -116,13 +119,30 @@ function AppInner() {
     }
     try {
       const data = await api.getConversations()
-      setConversations(Array.isArray(data) ? data : [])
+      setConversations(data?.items ?? (Array.isArray(data) ? data : []))
+      setConvNextCursor(data?.next_cursor ?? null)
+      setHasMoreConvs(data?.has_more ?? false)
     } catch {
       toast.error('Could not load your conversations. Check your connection and try again.')
     } finally {
       setIsLoadingConversations(false)
     }
   }, [toast, user])
+
+  const fetchMoreConversations = useCallback(async () => {
+    if (!convNextCursor || isLoadingMoreConvs) return
+    setIsLoadingMoreConvs(true)
+    try {
+      const data = await api.getConversations({ cursor: convNextCursor })
+      setConversations(prev => [...prev, ...(data?.items ?? [])])
+      setConvNextCursor(data?.next_cursor ?? null)
+      setHasMoreConvs(data?.has_more ?? false)
+    } catch {
+      toast.error('Could not load more conversations.')
+    } finally {
+      setIsLoadingMoreConvs(false)
+    }
+  }, [convNextCursor, isLoadingMoreConvs, toast])
 
   useEffect(() => { fetchConversations() }, [fetchConversations])
 
@@ -187,6 +207,9 @@ function AppInner() {
             themeMode={themeMode}
             onThemeToggle={onThemeToggle}
             isLoading={isLoadingConversations}
+            hasMore={hasMoreConvs}
+            isLoadingMore={isLoadingMoreConvs}
+            onLoadMore={fetchMoreConversations}
             mobileOpen={mobileDrawerOpen}
             onMobileClose={() => setMobileDrawerOpen(false)}
           />
@@ -227,6 +250,9 @@ function AppInner() {
                 } />
 
                 {/* Protected — require login */}
+                {/* Single Studio route with optional :convId child — keeps the same
+                    Studio instance mounted across /studio and /studio/:convId so
+                    component state (turns, scroll, generation) survives navigation. */}
                 <Route path={ROUTES.STUDIO} element={
                   <ProtectedRoute>
                     <Studio
@@ -235,16 +261,9 @@ function AppInner() {
                       onConversationsRefresh={fetchConversations}
                     />
                   </ProtectedRoute>
-                } />
-                <Route path={ROUTES.STUDIO_CONV} element={
-                  <ProtectedRoute>
-                    <Studio
-                      activeConvId={activeConvId}
-                      onActiveConvIdChange={onActiveConvIdChange}
-                      onConversationsRefresh={fetchConversations}
-                    />
-                  </ProtectedRoute>
-                } />
+                }>
+                  <Route path=":convId" />
+                </Route>
                 <Route path={ROUTES.SETTINGS} element={
                   <ProtectedRoute>
                     <Settings />

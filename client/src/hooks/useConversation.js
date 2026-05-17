@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback } from 'react'
 import { api } from '../services/api'
 import { normalizeFramesData, migrateOldSceneIR } from '../components/Studio/studioUtils'
+import { safeParse, RawConversationSchema } from '../services/schemas'
 
 /**
  * Manages conversation loading, bootstrap animation state, and the
@@ -61,14 +62,21 @@ export function useConversation({
     abortAllVideoStreams()
 
     try {
-      const data = await api.getConversation(convId, loadSignal)
+      const raw = await api.getConversation(convId, loadSignal)
       if (loadSignal.aborted) return
-      if (!data) {
+      if (!raw) {
         toast.error('Could not load this conversation. It may have been deleted.')
         return
       }
 
-      const loadedTurns = data.turns.map((t) => ({
+      const { data, error } = safeParse(RawConversationSchema, raw)
+      if (error) {
+        // Log and fall back to raw — schema mismatch should not block the user
+        console.warn('[useConversation] schema mismatch, proceeding with raw data', error.issues)
+      }
+      const turns = (data ?? raw).turns ?? []
+
+      const loadedTurns = turns.map((t) => ({
         tempId:           t.id,
         id:               t.id,
         prompt:           t.prompt,

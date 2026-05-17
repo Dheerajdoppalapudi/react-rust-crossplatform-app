@@ -71,21 +71,51 @@ def get_conversation_media_token(
 
 
 @router.get("/api/conversations")
-def list_conversations(current_user: User = Depends(get_current_user)):
+def list_conversations(
+    current_user: User = Depends(get_current_user),
+    limit: int = Query(default=30, ge=1, le=100),
+    cursor: Optional[str] = Query(default=None, description="updated_at of last item from previous page (ISO 8601)"),
+):
+    """
+    Paginated conversation list, ordered by updated_at DESC.
+    Pass `cursor=<updated_at of last item>` to fetch the next page.
+    Returns { items, next_cursor, has_more }.
+    """
     with get_db() as conn:
-        rows = conn.execute("""
-            SELECT c.id, c.title, c.created_at, c.updated_at,
-                   COALESCE(c.starred, 0) AS starred,
-                   COUNT(s.id) AS turn_count,
-                   MIN(s.intent_type) AS intent_type
-            FROM conversations c
-            LEFT JOIN sessions s ON s.conversation_id = c.id AND s.status = 'done'
-            WHERE c.user_id = ? AND c.deleted_at IS NULL
-            GROUP BY c.id
-            ORDER BY c.updated_at DESC
-        """, (current_user.id,)).fetchall()
-    # M-1: Serialize through schema — contract-enforced response shape.
-    return success([ConversationSummary(**dict(r)).model_dump() for r in rows])
+        if cursor:
+            rows = conn.execute("""
+                SELECT c.id, c.title, c.created_at, c.updated_at,
+                       COALESCE(c.starred, 0) AS starred,
+                       COUNT(s.id) AS turn_count,
+                       MIN(s.intent_type) AS intent_type
+                FROM conversations c
+                LEFT JOIN sessions s ON s.conversation_id = c.id AND s.status = 'done'
+                WHERE c.user_id = ? AND c.deleted_at IS NULL
+                  AND c.updated_at < ?
+                GROUP BY c.id
+                ORDER BY c.updated_at DESC
+                LIMIT ?
+            """, (current_user.id, cursor, limit + 1)).fetchall()
+        else:
+            rows = conn.execute("""
+                SELECT c.id, c.title, c.created_at, c.updated_at,
+                       COALESCE(c.starred, 0) AS starred,
+                       COUNT(s.id) AS turn_count,
+                       MIN(s.intent_type) AS intent_type
+                FROM conversations c
+                LEFT JOIN sessions s ON s.conversation_id = c.id AND s.status = 'done'
+                WHERE c.user_id = ? AND c.deleted_at IS NULL
+                GROUP BY c.id
+                ORDER BY c.updated_at DESC
+                LIMIT ?
+            """, (current_user.id, limit + 1)).fetchall()
+
+    has_more    = len(rows) > limit
+    page_rows   = rows[:limit]
+    next_cursor = page_rows[-1]["updated_at"] if has_more and page_rows else None
+
+    items = [ConversationSummary(**dict(r)).model_dump() for r in page_rows]
+    return success({"items": items, "next_cursor": next_cursor, "has_more": has_more})
 
 
 @router.get("/api/conversations/{conversation_id}")

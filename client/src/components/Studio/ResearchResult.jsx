@@ -1,8 +1,9 @@
-import { useState, useRef, Children } from 'react'
+import { useState, useRef, useMemo, Children } from 'react'
 import { Box, Typography, Collapse, Tooltip, useTheme } from '@mui/material'
 import ReactMarkdown   from 'react-markdown'
 import BlockRenderer   from '../Interactive/BlockRenderer'
 import ResponseToolbar from './ResponseToolbar'
+import { safeHref }    from '../../utils/safeHref'
 
 // ── Citation chip ─────────────────────────────────────────────────────────────
 
@@ -63,48 +64,50 @@ function injectCitations(children, sources) {
 // ── Cited markdown ────────────────────────────────────────────────────────────
 
 function CitedMarkdown({ text, sources }) {
-  const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
+  const theme      = useTheme()
+  const isDark     = theme.palette.mode === 'dark'
+  const sourcesRef = useRef(sources)
+  sourcesRef.current = sources
 
-  const makeComponents = () => {
-    const textColor    = theme.palette.text.primary
-    const mutedColor   = theme.palette.text.secondary
-    const borderColor  = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'
+  const components = useMemo(() => {
+    const textColor   = theme.palette.text.primary
+    const mutedColor  = theme.palette.text.secondary
+    const borderColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'
 
     return {
       p:          ({ children }) => (
         <Typography component="p" sx={{ fontSize: 13.5, lineHeight: 1.75, color: textColor, mb: 1.25, mt: 0 }}>
-          {injectCitations(children, sources)}
+          {injectCitations(children, sourcesRef.current)}
         </Typography>
       ),
       li:         ({ children }) => (
         <Typography component="li" sx={{ fontSize: 13.5, lineHeight: 1.75, color: textColor, mb: 0.5 }}>
-          {injectCitations(children, sources)}
+          {injectCitations(children, sourcesRef.current)}
         </Typography>
       ),
       h1:         ({ children }) => (
         <Typography component="h1" sx={{ fontSize: 17, fontWeight: 700, color: textColor, mt: 2, mb: 1, lineHeight: 1.35 }}>
-          {injectCitations(children, sources)}
+          {injectCitations(children, sourcesRef.current)}
         </Typography>
       ),
       h2:         ({ children }) => (
         <Typography component="h2" sx={{ fontSize: 15, fontWeight: 600, color: textColor, mt: 1.75, mb: 0.75, lineHeight: 1.4 }}>
-          {injectCitations(children, sources)}
+          {injectCitations(children, sourcesRef.current)}
         </Typography>
       ),
       h3:         ({ children }) => (
         <Typography component="h3" sx={{ fontSize: 14, fontWeight: 600, color: textColor, mt: 1.5, mb: 0.5, lineHeight: 1.4 }}>
-          {injectCitations(children, sources)}
+          {injectCitations(children, sourcesRef.current)}
         </Typography>
       ),
       strong:     ({ children }) => (
         <Box component="strong" sx={{ fontWeight: 700, color: textColor }}>
-          {injectCitations(children, sources)}
+          {injectCitations(children, sourcesRef.current)}
         </Box>
       ),
       em:         ({ children }) => (
         <Box component="em" sx={{ fontStyle: 'italic', color: textColor }}>
-          {injectCitations(children, sources)}
+          {injectCitations(children, sourcesRef.current)}
         </Box>
       ),
       ul:         ({ children }) => (
@@ -139,18 +142,18 @@ function CitedMarkdown({ text, sources }) {
         </Box>
       ),
       a:          ({ href, children }) => (
-        <Box component="a" href={href} target="_blank" rel="noopener noreferrer"
+        <Box component="a" href={safeHref(href)} target="_blank" rel="noopener noreferrer"
           sx={{ color: isDark ? '#7b9fff' : '#1847d6', textDecoration: 'underline', textDecorationColor: 'transparent',
             '&:hover': { textDecorationColor: 'currentColor' }, transition: 'text-decoration-color 0.15s' }}>
           {children}
         </Box>
       ),
     }
-  }
+  }, [isDark, theme.palette.text.primary, theme.palette.text.secondary]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <Box>
-      <ReactMarkdown components={makeComponents()}>
+      <ReactMarkdown components={components}>
         {text}
       </ReactMarkdown>
     </Box>
@@ -175,7 +178,7 @@ function SourcesPanel({ sources, open }) {
             <Box
               key={s.url ?? i}
               component="a"
-              href={s.url}
+              href={safeHref(s.url)}
               target="_blank"
               rel="noopener noreferrer"
               sx={{
@@ -229,6 +232,7 @@ function SourcesPanel({ sources, open }) {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function ResearchResult({
+  turnId            = null,
   prompt            = '',
   synthesisText     = '',
   synthesisComplete = false,
@@ -278,6 +282,7 @@ export default function ResearchResult({
       {/* Interactive blocks */}
       {hasBlocks && (
         <BlockRenderer
+          turnId={turnId}
           title={title}
           learningObjective={learningObjective}
           blocks={blocks}

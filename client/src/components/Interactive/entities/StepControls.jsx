@@ -5,7 +5,7 @@ import SkipNextIcon     from '@mui/icons-material/SkipNext'
 import PlayArrowIcon    from '@mui/icons-material/PlayArrow'
 import PauseIcon        from '@mui/icons-material/Pause'
 import ReplayIcon       from '@mui/icons-material/Replay'
-import { useSceneStore } from '../useSceneStore'
+import { useSceneStore, useTurnId } from '../useSceneStore'
 
 const SPEED_OPTIONS = [
   { label: '2s',  value: 2000 },
@@ -25,9 +25,11 @@ export default function StepControls({
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
 
+  const turnId         = useTurnId()
   const resolvedTarget = targetEntityId || entityId
-  const step           = useSceneStore(s => s.getStep(resolvedTarget))
-  const setStep        = useSceneStore(s => s.setStep)
+  const step           = useSceneStore(s => s.getStep(turnId, resolvedTarget))
+  const _setStep       = useSceneStore(s => s.setStep)
+  const setStep        = useCallback((entityId, v) => _setStep(turnId, entityId, v), [turnId, _setStep])
 
   const total    = steps.length
   const atStart  = step === 0

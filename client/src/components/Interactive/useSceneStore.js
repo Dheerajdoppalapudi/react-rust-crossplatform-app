@@ -1,23 +1,53 @@
+import { createContext, useContext } from 'react'
 import { create } from 'zustand'
 
 /**
- * Scene-level step state shared across entities.
+ * Turn-scoped context — BlockRenderer provides this so every entity inside it
+ * knows which turn it belongs to without prop drilling.
+ * useSceneStore reads this to namespace step state per-turn.
+ */
+export const TurnIdContext = createContext(null)
+export const useTurnId = () => useContext(TurnIdContext)
+
+/**
+ * Scene-level step state, scoped per turn.
  *
- * Entities read/write via entityId key so each widget has independent state.
+ * Keys are (turnId, entityId) pairs so multiple turns can each have
+ * independent entity state simultaneously. Calling clearTurn() on unmount
+ * releases memory for that turn without touching other turns.
  *
- * step_controls writes: setStep(targetEntityId, step)
- * code_walkthrough reads: getStep(entityId)
- * SceneRenderer calls: resetScene() on mount to clear stale state from prior turns.
+ * step_controls writes: setStep(turnId, targetEntityId, step)
+ * Consumers read:       getStep(turnId, entityId)
+ * BlockRenderer calls:  clearTurn(turnId) on unmount
  */
 export const useSceneStore = create((set, get) => ({
-  stepsByEntityId: {},
+  stepsByTurn: {},  // { [turnId]: { [entityId]: number } }
 
-  setStep: (entityId, step) =>
-    set(state => ({
-      stepsByEntityId: { ...state.stepsByEntityId, [entityId]: step },
-    })),
+  setStep: (turnId, entityId, step) => {
+    if (!turnId || !entityId) return
+    set(state => {
+      const turnSlice = state.stepsByTurn[turnId] ?? {}
+      const current   = turnSlice[entityId] ?? 0
+      const resolved  = typeof step === 'function' ? step(current) : step
+      return {
+        stepsByTurn: {
+          ...state.stepsByTurn,
+          [turnId]: { ...turnSlice, [entityId]: resolved },
+        },
+      }
+    })
+  },
 
-  getStep: (entityId) => get().stepsByEntityId[entityId] ?? 0,
+  getStep: (turnId, entityId) =>
+    get().stepsByTurn[turnId]?.[entityId] ?? 0,
 
-  resetScene: () => set({ stepsByEntityId: {} }),
+  clearTurn: (turnId) => {
+    if (!turnId) return
+    set(state => {
+      if (!state.stepsByTurn[turnId]) return state
+      const next = { ...state.stepsByTurn }
+      delete next[turnId]
+      return { stepsByTurn: next }
+    })
+  },
 }))

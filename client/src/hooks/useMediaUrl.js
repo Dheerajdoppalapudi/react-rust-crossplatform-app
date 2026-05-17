@@ -1,9 +1,12 @@
 /**
- * useMediaUrl — CRIT-2
+ * useMediaUrl
  *
  * Fetches and caches a short-lived session media token so that <video src> and
  * <img src> elements can load authenticated media without embedding the main
  * access JWT in the URL.
+ *
+ * Tokens have a 5-minute TTL on the server. This hook refreshes every 4 minutes
+ * so there is always a valid token — prevents mid-playback 401s.
  *
  * Usage:
  *   const { videoUrl, getFrameUrl, loading } = useMediaUrl(sessionId)
@@ -14,7 +17,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { getSessionMediaToken } from '../services/mediaToken'
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+import { API_BASE } from '../constants/api.js'
+const REFRESH_MS    = 4 * 60 * 1000  // 4 minutes — server TTL is 5 minutes
 
 /**
  * @param {string|null} sessionId
@@ -31,6 +35,16 @@ export function useMediaUrl(sessionId) {
     return () => { mountedRef.current = false }
   }, [])
 
+  const fetchToken = useCallback(async (id) => {
+    if (!id) return
+    try {
+      const t = await getSessionMediaToken(id)
+      if (mountedRef.current) setToken(t)
+    } catch (err) {
+      if (mountedRef.current) setError(err.message || 'Failed to load media')
+    }
+  }, [])
+
   useEffect(() => {
     if (!sessionId) {
       setToken(null)
@@ -40,19 +54,13 @@ export function useMediaUrl(sessionId) {
     setLoading(true)
     setError(null)
 
-    getSessionMediaToken(sessionId)
-      .then((t) => {
-        if (!mountedRef.current) return
-        setToken(t)
-      })
-      .catch((err) => {
-        if (!mountedRef.current) return
-        setError(err.message || 'Failed to load media')
-      })
-      .finally(() => {
-        if (mountedRef.current) setLoading(false)
-      })
-  }, [sessionId])
+    fetchToken(sessionId).finally(() => {
+      if (mountedRef.current) setLoading(false)
+    })
+
+    const intervalId = setInterval(() => fetchToken(sessionId), REFRESH_MS)
+    return () => clearInterval(intervalId)
+  }, [sessionId, fetchToken])
 
   const videoUrl = sessionId && token
     ? `${API_BASE}/api/sessions/${sessionId}/video?token=${token}`

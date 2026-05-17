@@ -399,3 +399,79 @@ User pauses video → "Ask about this"
   → user submits → pauseContext attached to next handleGenerate() call
   → new turn.parentSessionId = sessionId → appears as branch in tree
 ```
+
+---
+
+## Architecture Decisions & Fixed Patterns
+
+### Turn-Scoped Scene Store (`src/components/Interactive/useSceneStore.js`)
+
+The Zustand scene store is **turn-scoped**. Step state is keyed by `(turnId, entityId)` pairs. This was changed from a single global store (which reset all entity states when any `BlockRenderer` mounted) to prevent turn A's steps from being wiped when turn B's `BlockRenderer` mounts.
+
+**Pattern:**
+- `BlockRenderer` accepts a `turnId` prop and provides `<TurnIdContext.Provider value={turnId}>`
+- Entity components (`StepControls`) read `turnId` via `useTurnId()` — no prop drilling
+- `BlockRenderer` calls `clearTurn(turnId)` on unmount (cleanup, not on mount)
+- `ConversationThread` passes `turnId={turn.tempId}` to both `BlockRenderer` and `ResearchResult`
+- `ResearchResult` accepts `turnId` and forwards it to its inner `BlockRenderer`
+
+**Never reset the entire store on mount.** The old `resetScene()` pattern is removed — use `clearTurn(turnId)` in the cleanup function only.
+
+### Memoized Markdown Components (`src/components/Studio/ResearchResult.jsx`)
+
+`CitedMarkdown.makeComponents()` is now a `useMemo` with `[isDark, theme.palette.text.primary, theme.palette.text.secondary]` dependencies. The `sources` array is read via `sourcesRef.current` inside component functions — this avoids recreating the entire component object map on every streaming token event.
+
+**Rule:** The `components` map passed to `<ReactMarkdown>` must not change reference during streaming. Always use a ref for data that updates at high frequency.
+
+### Single Studio Route (`src/App.jsx`)
+
+The duplicate `/studio` + `/studio/:convId` routes are replaced with a **nested route**:
+```jsx
+<Route path="/studio" element={<Studio .../>}>
+  <Route path=":convId" />
+</Route>
+```
+This keeps the same `Studio` instance mounted when navigating between `/studio` and `/studio/:convId`, preserving scroll position, turn state, and abort controllers.
+
+**Rule:** Never render two sibling routes that both render the same page component. Use nested routes to share component identity across URL variations.
+
+### API Base URL (`src/constants/api.js`)
+
+`API_BASE` is defined **once** in `src/constants/api.js` and imported everywhere. Never write `import.meta.env.VITE_API_URL || 'http://localhost:8000'` inline in any file.
+
+### Schema Validation in Data Path (`src/services/schemas.js`)
+
+`loadConversationById` validates the raw API response against `RawConversationSchema` via `safeParse()`. On failure it logs and gracefully continues with raw data — schema errors never block the user.
+
+`schemas.js` now exports `RawTurnSchema` and `RawConversationSchema` (wire-format) in addition to the client-side `TurnSchema` and `ConversationSchema`.
+
+### Media Token Auto-Refresh (`src/hooks/useMediaUrl.js`)
+
+`useMediaUrl` refreshes the media token every 4 minutes (server TTL is 5 minutes). The interval is set up in the `sessionId` effect and cleared on unmount. Refresh failures are non-fatal — the existing token continues to work until it actually expires.
+
+### Toast Timer Leak Fix (`src/contexts/ToastContext.jsx`)
+
+All `setTimeout` handles are stored in a `Map<id, handle>` ref (`timersRef`). They are cleared:
+- When `dismiss(id)` is called manually
+- When a toast is dropped due to the MAX_VISIBLE overflow
+- On `ToastProvider` unmount (via `useEffect` cleanup)
+
+### Conversation Pagination (`GET /api/conversations`)
+
+The list endpoint is paginated: `GET /api/conversations?limit=30&cursor=<updated_at>`. Response shape:
+```json
+{ "items": [...], "next_cursor": "2024-01-01T...", "has_more": true }
+```
+Frontend stores `convNextCursor` and `hasMoreConvs` in `App.jsx` state. `Sidebar` renders a "Load more" button when `hasMore` is true. `fetchMoreConversations` appends to the existing list.
+
+### URL Safety (`src/utils/safeHref.js`)
+
+All external `href` values (sources, markdown links) are passed through `safeHref(url)` before rendering. It blocks `javascript:`, `data:`, and `vbscript:` schemes, returning `'#'` instead. Relative URLs and `http:`/`https:`/`mailto:` pass through unchanged.
+
+### File Size Validation (`src/components/Studio/PromptBar.jsx`)
+
+`handleFilesSelected` checks file size against 25 MB per file before uploading. Oversized files show a toast and abort early — no API call is made.
+
+### `isTextTurn` Correction (`src/components/Studio/studioUtils.js`)
+
+`isTextTurn(turn)` now checks only `turn.render_path === 'interactive'`. The dead first branch `turn.framesData?.render_path === 'interactive'` was removed — `framesData` objects never carry a `render_path` field.

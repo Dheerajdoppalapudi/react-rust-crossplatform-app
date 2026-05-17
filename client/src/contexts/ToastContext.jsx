@@ -1,4 +1,4 @@
-import { createContext, useContext, useCallback, useState, useMemo } from 'react'
+import { createContext, useContext, useCallback, useState, useMemo, useRef, useEffect } from 'react'
 import { Box, Alert, IconButton, Collapse } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
 
@@ -30,8 +30,16 @@ const MAX_VISIBLE = 3
 
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([])
+  const timersRef = useRef(new Map())  // id → timer handle
+
+  useEffect(() => {
+    const timers = timersRef.current
+    return () => { timers.forEach(t => clearTimeout(t)); timers.clear() }
+  }, [])
 
   const dismiss = useCallback((id) => {
+    clearTimeout(timersRef.current.get(id))
+    timersRef.current.delete(id)
     setToasts((prev) => prev.filter((t) => t.id !== id))
   }, [])
 
@@ -40,12 +48,16 @@ export function ToastProvider({ children }) {
     const ms = duration ?? DEFAULT_DURATION[severity] ?? 4000
 
     setToasts((prev) => {
-      // Keep at most MAX_VISIBLE; drop oldest if over limit
+      // Keep at most MAX_VISIBLE; drop oldest (and cancel their timers) if over limit
       const next = [...prev, { id, message, severity }]
-      return next.slice(-MAX_VISIBLE)
+      if (next.length > MAX_VISIBLE) {
+        const dropped = next.splice(0, next.length - MAX_VISIBLE)
+        dropped.forEach(t => { clearTimeout(timersRef.current.get(t.id)); timersRef.current.delete(t.id) })
+      }
+      return next
     })
 
-    setTimeout(() => dismiss(id), ms)
+    timersRef.current.set(id, setTimeout(() => dismiss(id), ms))
     return id
   }, [dismiss])
 

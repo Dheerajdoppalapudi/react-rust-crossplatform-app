@@ -41,6 +41,28 @@ export const ConversationSchema = z.object({
   turns:  z.array(TurnSchema).default([]),
 })
 
+// Raw wire format from GET /api/conversations/:id — before client-side transform
+export const RawTurnSchema = z.object({
+  id:                 z.string(),
+  prompt:             z.string(),
+  render_path:        z.string().optional(),
+  frame_count:        z.number().optional(),
+  video_path:         z.string().nullable().optional(),
+  status:             z.string().optional(),
+  intent_type:        z.string().nullable().optional(),
+  parent_session_id:  z.string().nullable().optional(),
+  parent_frame_index: z.number().nullable().optional(),
+  stages_json:        z.string().nullable().optional(),
+  sources_json:       z.string().nullable().optional(),
+  synthesis_text:     z.string().nullable().optional(),
+})
+
+export const RawConversationSchema = z.object({
+  id:    z.string(),
+  title: z.string().optional(),
+  turns: z.array(RawTurnSchema).default([]),
+})
+
 export const ConversationSummarySchema = z.object({
   id:      z.string(),
   title:   z.string(),

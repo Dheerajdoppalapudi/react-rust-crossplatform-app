@@ -1,8 +1,9 @@
+import { memo } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { Box, useTheme } from '@mui/material'
 import { TYPOGRAPHY, RADIUS, PALETTE } from '../../theme/tokens.js'
 
-export default function MarkdownText({ content, sx = {} }) {
+function MarkdownText({ content, sx = {} }) {
   const theme = useTheme()
   const isDark = theme.palette.mode === 'dark'
 
@@ -49,3 +50,5 @@ export default function MarkdownText({ content, sx = {} }) {
     </Box>
   )
 }
+
+export default memo(MarkdownText)

@@ -13,7 +13,7 @@
  *   const url = `${API_BASE}/api/sessions/${sessionId}/video?token=${token}`
  */
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+import { API_BASE } from '../constants/api.js'
 
 // token_expire_minutes matches MEDIA_TOKEN_EXPIRE_MINUTES in backend/core/config.py (5 min).
 // We refresh 60 s early to avoid expiry during active playback.

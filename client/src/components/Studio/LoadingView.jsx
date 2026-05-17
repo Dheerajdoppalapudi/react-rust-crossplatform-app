@@ -9,6 +9,7 @@ import RadioButtonUncheckedIcon     from '@mui/icons-material/RadioButtonUncheck
 import ChevronRightIcon             from '@mui/icons-material/ChevronRight'
 import { fadeIn, shimmer, textShimmer, dotBounce } from '../../theme/animations'
 import { STAGE_REGISTRY, FALLBACK_STAGE_ICON } from '../../constants/stageRegistry'
+import { safeHref } from '../../utils/safeHref'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -257,7 +258,7 @@ function SourceItem({ source, idx, isDark }) {
       <DomainCircle domain={source.domain} isDark={isDark} />
       <Box
         component="a"
-        href={source.url}
+        href={safeHref(source.url)}
         target="_blank"
         rel="noopener noreferrer"
         sx={{

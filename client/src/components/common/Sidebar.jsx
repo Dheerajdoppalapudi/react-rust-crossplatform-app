@@ -414,8 +414,11 @@ const Sidebar = ({
   onDeleteConv,
   themeMode,
   onThemeToggle,
-  isLoading = false,
-  mobileOpen = false,
+  isLoading      = false,
+  hasMore        = false,
+  isLoadingMore  = false,
+  onLoadMore     = () => {},
+  mobileOpen     = false,
   onMobileClose,
 }) => {
   const theme    = useTheme()
@@ -731,6 +734,27 @@ const Sidebar = ({
                 ))}
               </Box>
             ))}
+
+            {/* ── Load more button ─────────────────────────────────────────── */}
+            {(isMobile || open) && !isLoading && !isSearching && hasMore && (
+              <Box sx={{ px: 1.5, pt: 0.5, pb: 1 }}>
+                <Button
+                  fullWidth
+                  size="small"
+                  variant="text"
+                  disabled={isLoadingMore}
+                  onClick={onLoadMore}
+                  sx={{
+                    fontSize: 11.5, fontWeight: 400, textTransform: 'none',
+                    color: theme.palette.text.disabled, borderRadius: '7px',
+                    py: 0.5,
+                    '&:hover': { color: theme.palette.text.secondary },
+                  }}
+                >
+                  {isLoadingMore ? 'Loading…' : 'Load more'}
+                </Button>
+              </Box>
+            )}
           </Box>
         </Box>
 

@@ -3,7 +3,7 @@ export function parseNotes(raw) {
 }
 
 export function isTextTurn(turn) {
-  return turn.framesData?.render_path === 'interactive' || turn.render_path === 'interactive'
+  return turn.render_path === 'interactive'
 }
 
 export function formatIntentType(intentType) {

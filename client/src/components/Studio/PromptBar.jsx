@@ -119,13 +119,13 @@ function PromptBar({
   onModelChange,
   selectedRenderMode,
   onRenderModeChange,
-  selectedMode,
-  onModeChange,
-  stagedFiles,
-  onAddFiles,
-  onRemoveFile,
+  selectedMode    = null,
+  onModeChange    = () => {},
+  stagedFiles     = [],
+  onAddFiles      = () => {},
+  onRemoveFile    = () => {},
   // When true: no outer horizontal padding (used inside EmptyView for width alignment)
-  embedded = false,
+  embedded        = false,
 }) {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
@@ -148,10 +148,20 @@ function PromptBar({
   const promptBorder = isDark ? PALETTE.dividerDark : PALETTE.borderCream
   const cardBg       = isDark ? PALETTE.darkSurface : PALETTE.ivory
 
+  const MAX_FILE_MB   = 25
+  const MAX_FILE_SIZE = MAX_FILE_MB * 1024 * 1024
+
   async function handleFilesSelected(e) {
     const files = Array.from(e.target.files || [])
     e.target.value = ''
     if (!files.length) return
+
+    const oversized = files.filter(f => f.size > MAX_FILE_SIZE)
+    if (oversized.length) {
+      toast.error(`File${oversized.length > 1 ? 's' : ''} too large — max ${MAX_FILE_MB} MB per file.`)
+      return
+    }
+
     setUploading(true)
     try {
       const result = await api.uploadFiles(files)
@@ -625,15 +635,6 @@ PromptBar.propTypes = {
   onAddFiles:          PropTypes.func,
   onRemoveFile:        PropTypes.func,
   embedded:            PropTypes.bool,
-}
-
-PromptBar.defaultProps = {
-  selectedMode: null,
-  onModeChange: () => {},
-  stagedFiles:  [],
-  onAddFiles:   () => {},
-  onRemoveFile: () => {},
-  embedded:     false,
 }
 
 export default memo(PromptBar)

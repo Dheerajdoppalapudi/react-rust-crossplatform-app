@@ -3,7 +3,7 @@ import { Box, Stack, Skeleton, Typography, useTheme } from '@mui/material'
 import { withProfiler } from '../../lib/sentry.js'
 import MarkdownText from './MarkdownText'
 import { resolveEntity, getBlockMeta } from './registry'
-import { useSceneStore } from './useSceneStore'
+import { TurnIdContext, useSceneStore } from './useSceneStore'
 import ErrorBoundary from '../error/ErrorBoundary'
 import BlockWrapper from './BlockWrapper'
 import { TYPOGRAPHY, RADIUS, BRAND } from '../../theme/tokens.js'
@@ -25,16 +25,15 @@ function FallbackCard({ entityType }) {
   )
 }
 
-function BlockRenderer({ title, learningObjective, blocks = [], isLoading }) {
-  const resetScene = useSceneStore(s => s.resetScene)
+function BlockRenderer({ turnId, title, learningObjective, blocks = [], isLoading }) {
+  const clearTurn = useSceneStore(s => s.clearTurn)
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
 
-  useEffect(() => {
-    resetScene()
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => { if (turnId) clearTurn(turnId) }, [turnId, clearTurn])
 
   return (
+    <TurnIdContext.Provider value={turnId ?? null}>
     <Stack spacing={2}>
       {title && (
         <Typography sx={{
@@ -105,6 +104,7 @@ function BlockRenderer({ title, learningObjective, blocks = [], isLoading }) {
         />
       )}
     </Stack>
+    </TurnIdContext.Provider>
   )
 }
 

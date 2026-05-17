@@ -8,8 +8,7 @@ import MergedVideoModal   from './MergedVideoModal'
 import MergeLoadingModal  from './MergeLoadingModal'
 import { api } from '../../../services/api'
 import { getConversationMediaToken } from '../../../services/mediaToken'
-
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+import { API_BASE } from '../../../constants/api.js'
 
 export default function LearningView({ turns, conversationId, onExit, onAskFromLearn, onGenerateFromCanvas, defaultModel, defaultVideoEnabled }) {
   const theme  = useTheme()
