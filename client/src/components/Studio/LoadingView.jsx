@@ -7,8 +7,10 @@ import KeyboardArrowDownIcon        from '@mui/icons-material/KeyboardArrowDown'
 import KeyboardArrowUpIcon          from '@mui/icons-material/KeyboardArrowUp'
 import RadioButtonUncheckedIcon     from '@mui/icons-material/RadioButtonUnchecked'
 import ChevronRightIcon             from '@mui/icons-material/ChevronRight'
-import { fadeIn, shimmer, textShimmer, dotBounce } from '../../theme/animations'
+import { fadeIn, shimmer, textShimmer, zenithSpin } from '../../theme/animations'
+import ZenithLogo from '../common/ZenithLogo'
 import { STAGE_REGISTRY, FALLBACK_STAGE_ICON } from '../../constants/stageRegistry'
+import { BRAND } from '../../theme/tokens.js'
 import { safeHref } from '../../utils/safeHref'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -286,25 +288,16 @@ function SourceItem({ source, idx, isDark }) {
   )
 }
 
-// ── Running person loader ─────────────────────────────────────────────────────
+// ── Zenith logo spinner ───────────────────────────────────────────────────────
 
-function DotsLoader({ isDark }) {
-  const c = isDark ? 'rgba(100,134,255,0.9)' : 'rgba(24,71,214,0.72)'
+function ZenithSpinner() {
   return (
-    <Box sx={{ display: 'flex', gap: 0, mt: 0.75, mb: 0.25 }}>
-      {/* Sits in the same 28px icon-track column as StageRow icons */}
-      <Box sx={{ width: 28, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Box sx={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-          {[0, 1, 2].map(i => (
-            <Box key={i} sx={{
-              width: 4, height: 4, borderRadius: '50%',
-              backgroundColor: c,
-              animation: `${dotBounce} 1.1s ease-in-out infinite`,
-              animationDelay: `${i * 0.18}s`,
-            }} />
-          ))}
-        </Box>
-      </Box>
+    <Box sx={{ display: 'flex', mt: 2.5, mb: 0.5, pl: '2px' }}>
+      <ZenithLogo sx={{
+        fontSize: 28,
+        color: BRAND.accent,
+        animation: `${zenithSpin} 1.5s ease-in-out infinite`,
+      }} />
     </Box>
   )
 }
@@ -560,9 +553,9 @@ export default function LoadingView({
         </Box>
       </Collapse>
 
-      {/* Dots loader — visible while any stage is active */}
+      {/* Zenith spinner — visible while any stage is active */}
       {!allDone && displayStages.some(s => s.status === 'active') && (
-        <DotsLoader isDark={isDark} />
+        <ZenithSpinner />
       )}
 
       {/* Streaming synthesis preview */}

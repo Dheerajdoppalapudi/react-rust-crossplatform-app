@@ -30,8 +30,7 @@ const DRAWER_CLOSED = 56
 const ICON_SIZE     = 17
 
 const mainItems = [
-  { label: 'About Us', path: '/',       icon: <HomeOutlinedIcon        sx={{ fontSize: ICON_SIZE }} /> },
-  { label: 'Studio',   path: '/studio', icon: <ZenithLogo sx={{ fontSize: ICON_SIZE }} /> },
+  { label: 'About Us', path: '/', icon: <HomeOutlinedIcon sx={{ fontSize: ICON_SIZE }} /> },
 ]
 const bottomItems = [
   { label: 'Settings', path: '/settings', icon: <SettingsOutlinedIcon sx={{ fontSize: ICON_SIZE }} /> },
@@ -56,29 +55,28 @@ function groupConversations(conversations) {
 }
 
 // ─── Logo / collapse toggle (owns its own hover state so Sidebar never re-renders on hover) ──
-const LogoButton = ({ open, accent, onToggle }) => {
+const LogoButton = ({ accent, onToggle }) => {
   const theme   = useTheme()
+  const isDark  = theme.palette.mode === 'dark'
   const [hovered, setHovered] = useState(false)
 
   return (
-    <Tooltip title={open ? 'Collapse' : 'Expand'} placement="right" arrow>
+    <Tooltip title="Expand" placement="right" arrow>
       <Box
         onClick={(e) => { e.stopPropagation(); onToggle() }}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         sx={{
-          width: 32, height: 32, borderRadius: '8px', flexShrink: 0,
-          background: (!open && hovered) ? 'transparent' : BRAND.gradient,
+          width: 36, height: 36, borderRadius: '10px', flexShrink: 0,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          boxShadow: (!open && hovered) ? 'none' : `0 2px 10px ${accent}40`,
           cursor: 'pointer',
-          transition: 'background 0.15s, box-shadow 0.15s, opacity 0.15s',
-          '&:hover': { opacity: (!open && hovered) ? 1 : 0.85 },
+          transition: 'background 0.15s',
+          '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)' },
         }}
       >
-        {(!open && hovered)
+        {hovered
           ? <ChevronRightIcon sx={{ fontSize: 18, color: theme.palette.text.secondary }} />
-          : <ZenithLogo sx={{ fontSize: 14, color: '#fff' }} />
+          : <ZenithLogo sx={{ fontSize: 30, color: theme.palette.text.primary }} />
         }
       </Box>
     </Tooltip>
@@ -516,38 +514,28 @@ const Sidebar = ({
         {/* ── Header ──────────────────────────────────────────────────────── */}
         <Box sx={{
           flexShrink: 0, display: 'flex', alignItems: 'center',
-          justifyContent: (isMobile || open) ? 'flex-start' : 'center',
-          px: (isMobile || open) ? 0.75 : 0, height: 46,
+          justifyContent: (isMobile || open) ? 'space-between' : 'center',
+          px: (isMobile || open) ? 1 : 0,
+          py: 1.5,
           borderBottom: `1px solid ${theme.palette.divider}`,
-          gap: 0.5,
-          margin: '6px',
+          mx: '6px',
         }}>
-          {!isMobile && <LogoButton open={open} accent={accent} onToggle={toggleOpen} />}
-          {isMobile && (
-            <Box sx={{
-              width: 32, height: 32, borderRadius: '8px', flexShrink: 0,
-              background: BRAND.gradient, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <ZenithLogo sx={{ fontSize: 14, color: '#fff' }} />
-            </Box>
-          )}
+          {/* Collapsed desktop — big icon, click to expand */}
+          {!isMobile && !open && <LogoButton accent={accent} onToggle={toggleOpen} />}
 
+          {/* Open / mobile — logo on left */}
           {(isMobile || open) && (
-            <Typography sx={{
-              fontWeight: 600, fontSize: 26, letterSpacing: '-0.2px', marginLeft:'4px',
-              color: theme.palette.text.primary, whiteSpace: 'nowrap', flex: 1,
-            }}>
-              Zenith
-            </Typography>
+            <ZenithLogo sx={{ fontSize: 34, color: theme.palette.text.primary }} />
           )}
 
+          {/* Close / collapse button on right */}
           {(isMobile || open) && (
             <IconButton
               size="small"
               aria-label="Close sidebar"
               onClick={(e) => { e.stopPropagation(); isMobile ? closeMobile() : setOpen(false) }}
               sx={{
-                width: 26, height: 26, borderRadius: '6px', flexShrink: 0,
+                width: 28, height: 28, borderRadius: '7px', flexShrink: 0,
                 color: theme.palette.text.disabled,
                 '&:hover': {
                   bgcolor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)',
@@ -556,7 +544,7 @@ const Sidebar = ({
                 transition: 'background 0.15s, color 0.15s',
               }}
             >
-              <ChevronLeftIcon sx={{ fontSize: 16 }} />
+              <ChevronLeftIcon sx={{ fontSize: 18 }} />
             </IconButton>
           )}
         </Box>

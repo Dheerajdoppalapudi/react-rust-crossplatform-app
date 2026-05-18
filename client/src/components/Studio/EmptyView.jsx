@@ -1,6 +1,7 @@
 import { Box, Typography, useTheme } from '@mui/material'
 import PromptBar      from './PromptBar'
 import SuggestionBoxes from './SuggestionBoxes'
+import ZenithLogo from '../common/ZenithLogo'
 import { PALETTE } from '../../theme/tokens.js'
 
 export default function EmptyView({ onSuggestionClick, ...promptBarProps }) {
@@ -21,17 +22,19 @@ export default function EmptyView({ onSuggestionClick, ...promptBarProps }) {
 
       {/* Title */}
       <Box sx={{ textAlign: 'center', mb: 5 }}>
-        
 
-        <Typography sx={{
-          fontSize:      { xs: 26, sm: 32 },
-          fontWeight:    600,
-          lineHeight:    1.15,
-          color:         theme.palette.text.primary,
-          letterSpacing: '-0.02em',
-        }}>
-          What do you want to learn?
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1.5, mb: 0.5 }}>
+          <ZenithLogo sx={{ fontSize: { xs: 34, sm: 42 }, color: theme.palette.text.primary }} />
+          <Typography sx={{
+            fontSize:      { xs: 26, sm: 32 },
+            fontWeight:    600,
+            lineHeight:    1.15,
+            color:         theme.palette.text.primary,
+            letterSpacing: '-0.02em',
+          }}>
+            What do you want to learn?
+          </Typography>
+        </Box>
         <Typography sx={{
           mt:         1.5,
           fontSize:   15,

@@ -11,3 +11,9 @@ export const textShimmer = keyframes`0% { background-position: 100% center; } 10
 export const spin = keyframes`from { transform: rotate(0deg); } to { transform: rotate(360deg); }`
 // Bouncing dot — stagger across 3 dots for typing-indicator effect
 export const dotBounce = keyframes`0%, 80%, 100% { transform: translateY(0); opacity: 0.7; } 40% { transform: translateY(-5px); opacity: 1; }`
+// Pulsed spin — spins for 1s then holds for 0.5s, repeat (total cycle 1.5s)
+export const zenithSpin = keyframes`
+  0%      { transform: rotate(0deg); }
+  66.67%  { transform: rotate(360deg); }
+  100%    { transform: rotate(360deg); }
+`
