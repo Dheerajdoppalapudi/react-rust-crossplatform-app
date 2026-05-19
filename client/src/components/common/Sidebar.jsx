@@ -24,6 +24,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { relativeTime } from '../Studio/constants'
 import { useAuth } from '../../contexts/AuthContext'
 import { BRAND, PALETTE } from '../../theme/tokens.js'
+import { fadeIn, fadeOut } from '../../theme/animations.js'
 
 const DRAWER_OPEN   = 260
 const DRAWER_CLOSED = 56
@@ -93,7 +94,7 @@ const CollapsedBtn = ({ label, icon, onClick, isActive, accent, isDark }) => {
     <Tooltip title={label} placement="right" arrow>
       <ListItem disablePadding sx={{ mb: 0.25 }}>
         <ListItemButton
-          onClick={onClick}
+          onClick={(e) => { e.stopPropagation(); onClick?.() }}
           sx={{
             borderRadius: '7px', minHeight: 34, px: 0,
             justifyContent: 'center',
@@ -427,11 +428,23 @@ const Sidebar = ({
   const { user, logout } = useAuth()
 
   const [open, setOpen]           = useState(false)
+  const [isClosing, setIsClosing] = useState(false)
   const [search, setSearch]       = useState('')
   const [renamingConv, setRenamingConv]     = useState(null)
-  const searchRef = useRef(null)
+  const searchRef    = useRef(null)
+  const closeTimer   = useRef(null)
 
   const toggleOpen = useCallback(() => setOpen(p => !p), [])
+
+  const handleClose = useCallback(() => {
+    setIsClosing(true)
+    closeTimer.current = setTimeout(() => {
+      setOpen(false)
+      setIsClosing(false)
+    }, 260)
+  }, [])
+
+  useEffect(() => () => clearTimeout(closeTimer.current), [])
 
   // On mobile the drawer is controlled by parent; on desktop it's self-managed.
   const drawerOpen   = isMobile ? mobileOpen : open
@@ -473,6 +486,10 @@ const Sidebar = ({
   const resultCount  = filtered.length
   const isSearching  = search.trim().length > 0
 
+  const contentAnim = isClosing
+    ? `${fadeOut} 0.26s ease forwards`
+    : `${fadeIn} 0.3s cubic-bezier(0.16, 1, 0.3, 1)`
+
   const convItemProps = (conv) => ({
     conv,
     isActive: activeConvId === conv.id,
@@ -496,10 +513,10 @@ const Sidebar = ({
           cursor: (!isMobile && !open) ? 'pointer' : 'default',
           width: isMobile ? 0 : (open ? DRAWER_OPEN : DRAWER_CLOSED),
           flexShrink: 0,
-          transition: 'width 0.25s cubic-bezier(0.4,0,0.2,1)',
+          transition: 'width 0.42s cubic-bezier(0.16, 1, 0.3, 1)',
           '& .MuiDrawer-paper': {
             width: DRAWER_OPEN,
-            transition: isMobile ? 'none' : 'width 0.25s cubic-bezier(0.4,0,0.2,1)',
+            transition: isMobile ? 'none' : 'width 0.42s cubic-bezier(0.16, 1, 0.3, 1)',
             overflowX: 'hidden',
             borderRight: `1px solid ${theme.palette.divider}`,
             backgroundColor: sidebarBg,
@@ -533,7 +550,7 @@ const Sidebar = ({
             <IconButton
               size="small"
               aria-label="Close sidebar"
-              onClick={(e) => { e.stopPropagation(); isMobile ? closeMobile() : setOpen(false) }}
+              onClick={(e) => { e.stopPropagation(); isMobile ? closeMobile() : handleClose() }}
               sx={{
                 width: 28, height: 28, borderRadius: '7px', flexShrink: 0,
                 color: theme.palette.text.disabled,
@@ -556,6 +573,7 @@ const Sidebar = ({
               fontSize: 9.5, fontWeight: 600, color: theme.palette.text.secondary,
               textTransform: 'uppercase', letterSpacing: '0.8px',
               px: 2, mb: 0.5, opacity: 0.5,
+              animation: contentAnim,
             }}>
               Workspace
             </Typography>
@@ -575,7 +593,7 @@ const Sidebar = ({
 
         {/* ── New Chat ─────────────────────────────────────────────────────── */}
         {(isMobile || open) ? (
-          <ListItem disablePadding sx={{ px: 0.75, py: 0.35 }}>
+          <ListItem disablePadding sx={{ px: 0.75, py: 0.35, animation: contentAnim }}>
             <ListItemButton
               onClick={() => { onNewConversation(); if (isMobile) closeMobile() }}
               sx={{
@@ -615,7 +633,7 @@ const Sidebar = ({
         <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
 
           {(isMobile || open) && (
-            <Box sx={{ px: 0.75, mb: 0.5, flexShrink: 0 }}>
+            <Box sx={{ px: 0.75, mb: 0.5, flexShrink: 0, animation: contentAnim }}>
               <Box sx={{ px: 0.75, mb: 0.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Typography sx={{
                   fontSize: 9.5, fontWeight: 600, color: theme.palette.text.secondary,
@@ -754,6 +772,7 @@ const Sidebar = ({
               <Box sx={{
                 display: 'flex', alignItems: 'center', gap: 1,
                 px: 1.5, py: 0.75, mb: 0.25,
+                animation: contentAnim,
               }}>
                 <Avatar src={user.avatar} alt={user.name} sx={{ width: 24, height: 24, flexShrink: 0 }} />
                 <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -797,7 +816,7 @@ const Sidebar = ({
           )}
 
           {(isMobile || open) ? (
-            <ListItem disablePadding sx={{ px: 0.75, mb: 0.25 }}>
+            <ListItem disablePadding sx={{ px: 0.75, mb: 0.25, animation: contentAnim }}>
               <ListItemButton
                 onClick={onThemeToggle}
                 sx={{
