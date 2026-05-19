@@ -21,7 +21,8 @@ const MoleculeViewer = lazy(() => import('./entities/MoleculeViewer'))
 const MapViewer      = lazy(() => import('./entities/MapViewer'))
 const P5Sketch       = lazy(() => import('./entities/P5Sketch'))
 const ChartViewer    = lazy(() => import('./entities/ChartViewer'))
-const PlotlyViewer   = lazy(() => import('./entities/PlotlyViewer'))
+const PlotlyViewer      = lazy(() => import('./entities/PlotlyViewer'))
+const FunctionPlotter   = lazy(() => import('./entities/FunctionPlotter'))
 
 // Each entry: { component, getCopyText?, noExpand? }
 // getCopyText(props) → string | null — used by BlockWrapper's copy button
@@ -62,6 +63,7 @@ export const REGISTRY = {
   },
   ds_viewer:        { component: DSViewer },
   plotly:           { component: PlotlyViewer },
+  function_plotter: { component: FunctionPlotter },
 }
 
 export function resolveEntity(type) {

@@ -66,6 +66,7 @@ class SceneBlock(BaseModel):
                 "flashcard_deck":   ["cards"],
                 "ds_viewer":        ["type", "nodes"],
                 "plotly":           ["data"],
+                "function_plotter": [],   # validated below: needs expr or functions
             }
             missing = [
                 k for k in required.get(self.entity_type or "", [])
@@ -85,6 +86,13 @@ class SceneBlock(BaseModel):
             if self.entity_type == "math_formula":
                 if "latex" not in self.props and "steps" not in self.props:
                     raise ValueError("math_formula requires either 'latex' or 'steps' prop")
+
+            # function_plotter needs either 'expr' (single) or 'functions' (array)
+            if self.entity_type == "function_plotter":
+                has_expr      = "expr" in self.props and isinstance(self.props["expr"], str)
+                has_functions = "functions" in self.props and isinstance(self.props["functions"], list)
+                if not has_expr and not has_functions:
+                    raise ValueError("function_plotter requires either 'expr' (string) or 'functions' (array)")
 
             # pie / donut / radar / heatmap / bubble don't use series or xKey in the standard way
             if self.entity_type == "chart":

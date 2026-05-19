@@ -23,3 +23,4 @@ You MAY use any entity listed here — if you pick one not detailed above, const
 | `flashcard_deck` | Memorising terms, definitions, algorithms, formulas — flippable card set | `cards[]` ({front, back, hint?}) |
 | `ds_viewer` | CS data structures — linked list, stack, queue, BST, hash table — rendered visually with a built-in interactive operations panel | `type`, `nodes[]` |
 | `plotly` | Complex / interactive charts — box, violin, 3D surface, contour, sankey, treemap, sunburst, waterfall, candlestick, indicator, choropleth. Use `chart` for simple bar/line/pie | `data[]` (Plotly traces) |
+| `function_plotter` | Mathematical function grapher — pass an expression string, component evaluates & plots. Multi-function overlay, zoom/pan, handles discontinuities. Use for calculus, trig, physics, distributions | `expr` (string) OR `functions[]` ({expr, label?, color?}) |
