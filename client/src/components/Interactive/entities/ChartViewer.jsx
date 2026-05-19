@@ -186,6 +186,24 @@ export default function ChartViewer({
   const stack     = stacked ? 'a' : undefined
   const isVertical = layout === 'vertical'
 
+  // When all y-values are identical Recharts computes domain [v, v] → zero-height
+  // chart area → invisible lines. Pad the domain by ±10% (+1 to handle 0) instead.
+  const yDomain = useMemo(() => {
+    if (isVertical || type === 'pie' || type === 'donut' || type === 'radar' ||
+        type === 'scatter' || type === 'bubble' || type === 'heatmap') return ['auto', 'auto']
+    const vals = data.flatMap(d => series.map(s => {
+      const v = d[s.dataKey]
+      return typeof v === 'number' ? v : null
+    })).filter(v => v !== null)
+    if (!vals.length) return ['auto', 'auto']
+    const lo = Math.min(...vals), hi = Math.max(...vals)
+    if (lo === hi) {
+      const pad = Math.abs(lo) * 0.1 + 1
+      return [lo - pad, hi + pad]
+    }
+    return ['auto', 'auto']
+  }, [data, series, type, isVertical])
+
   const handleDownload = useCallback(() => {
     const svg = chartRef.current?.querySelector('svg')
     if (!svg) return
@@ -217,24 +235,22 @@ export default function ChartViewer({
     <>
       {showGrid && <CartesianGrid strokeDasharray="3 3" stroke={grid} />}
       {isVertical
-        ? <>
-            <XAxis type="number" scale={yScale} {...sharedAxisProps}
-              label={yLabel ? { value: yLabel, position: 'insideBottom', offset: -4, style: axis } : undefined} />
-            <YAxis type="category" dataKey={xKey} {...sharedAxisProps} width={80}
-              label={xLabel ? { value: xLabel, angle: -90, position: 'insideLeft', style: axis } : undefined} />
-          </>
-        : <>
-            <XAxis dataKey={xKey} {...sharedAxisProps}
-              label={xLabel ? { value: xLabel, position: 'insideBottom', offset: -4, style: axis } : undefined} />
-            <YAxis scale={yScale} {...sharedAxisProps}
-              label={yLabel ? { value: yLabel, angle: -90, position: 'insideLeft', style: axis } : undefined} />
-          </>
+        ? <XAxis key="x" type="number" scale={yScale} {...sharedAxisProps}
+            label={yLabel ? { value: yLabel, position: 'insideBottom', offset: -4, style: axis } : undefined} />
+        : <XAxis key="x" dataKey={xKey} {...sharedAxisProps}
+            label={xLabel ? { value: xLabel, position: 'insideBottom', offset: -4, style: axis } : undefined} />
+      }
+      {isVertical
+        ? <YAxis key="y" type="category" dataKey={xKey} {...sharedAxisProps} width={80}
+            label={xLabel ? { value: xLabel, angle: -90, position: 'insideLeft', style: axis } : undefined} />
+        : <YAxis key="y" scale={yScale} domain={yDomain} {...sharedAxisProps}
+            label={yLabel ? { value: yLabel, angle: -90, position: 'insideLeft', style: axis } : undefined} />
       }
       <RTooltip {...tt} />
       {showLegend && <Legend wrapperStyle={{ fontSize: TYPOGRAPHY.sizes.caption }} />}
       {referenceLines.map((rl, i) => (
         <ReferenceLine
-          key={i}
+          key={`rl-${rl.axis ?? 'y'}-${rl.value ?? i}`}
           x={rl.axis === 'x' ? rl.value : undefined}
           y={rl.axis !== 'x' ? rl.value : undefined}
           stroke={rl.color ?? PALETTE.successGreen}

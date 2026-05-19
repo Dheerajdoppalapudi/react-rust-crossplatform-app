@@ -65,6 +65,7 @@ class SceneBlock(BaseModel):
                 "quiz_block":       [],  # validated below: accepts single-q or questions array
                 "flashcard_deck":   ["cards"],
                 "ds_viewer":        ["type", "nodes"],
+                "plotly":           ["data"],
             }
             missing = [
                 k for k in required.get(self.entity_type or "", [])

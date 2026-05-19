@@ -41,7 +41,8 @@ export default function MermaidViewer({ entityId, diagram, caption }) {
   const [scale, setScale]   = useState(1)
   const [copied, setCopied] = useState(false)
   const isExpanded          = useExpanded()
-  const idRef               = useRef(`mermaid-${entityId ?? ++_idCounter}`)
+  const idRef               = useRef(null)
+  if (idRef.current === null) idRef.current = `mermaid-${++_idCounter}`
   const svgWrapRef          = useRef(null)
 
   useEffect(() => {
@@ -51,15 +52,28 @@ export default function MermaidViewer({ entityId, diagram, caption }) {
     setSvg(null)
     setScale(1)
 
-    mermaid.render(idRef.current, fixNewlines(diagram))
-      .then(({ svg: rendered }) => {
-        if (!rendered || rendered.includes('Syntax error') || rendered.includes('Parse error') || rendered.includes('mermaid-error')) {
-          setError('Could not render diagram — the generated syntax had errors.')
-        } else {
-          setSvg(rendered)
-        }
-      })
-      .catch(() => setError('Could not render diagram — the generated syntax had errors.'))
+    let cancelled = false
+
+    // RAF defers the render until after the current paint cycle — required when
+    // mounting inside a Dialog portal whose layout isn't stable yet at effect time.
+    const raf = requestAnimationFrame(() => {
+      if (cancelled) return
+      mermaid.render(idRef.current, fixNewlines(diagram))
+        .then(({ svg: rendered }) => {
+          if (cancelled) return
+          if (!rendered || rendered.includes('Syntax error') || rendered.includes('Parse error') || rendered.includes('mermaid-error')) {
+            setError('Could not render diagram — the generated syntax had errors.')
+          } else {
+            setSvg(rendered)
+          }
+        })
+        .catch(() => { if (!cancelled) setError('Could not render diagram — the generated syntax had errors.') })
+    })
+
+    return () => {
+      cancelled = true
+      cancelAnimationFrame(raf)
+    }
   }, [diagram, isDark])
 
   const zoomIn    = () => setScale(s => Math.min(MAX_SCALE, +(s + STEP).toFixed(2)))

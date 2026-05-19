@@ -239,6 +239,96 @@ def _strip_trailing_commas(text: str) -> str:
     return re.sub(r",\s*([}\]])", r"\1", text)
 
 
+def _close_open_brackets(text: str) -> str:
+    """
+    Walk the JSON string tracking bracket depth and return it with any
+    unclosed '{' / '[' appended in reverse order.
+    Handles escaped characters and quoted strings so bracket counts are accurate.
+    """
+    stack = []
+    in_string = False
+    escape = False
+    for ch in text:
+        if escape:
+            escape = False
+            continue
+        if ch == "\\" and in_string:
+            escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch in ("{", "["):
+            stack.append(ch)
+        elif ch == "}" and stack and stack[-1] == "{":
+            stack.pop()
+        elif ch == "]" and stack and stack[-1] == "[":
+            stack.pop()
+    return text + "".join("}" if c == "{" else "]" for c in reversed(stack))
+
+
+def _last_comma_outside_string(text: str) -> int:
+    """Return the index of the last ',' that appears outside a JSON string, or -1."""
+    in_string = False
+    escape = False
+    last_comma = -1
+    for i, ch in enumerate(text):
+        if escape:
+            escape = False
+            continue
+        if ch == "\\" and in_string:
+            escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch == ",":
+            last_comma = i
+    return last_comma
+
+
+def _repair_truncated_json(text: str, error_pos: int) -> dict:
+    """
+    Fallback for LLM responses cut off mid-value (e.g. large arrays that hit
+    the token limit). Cuts back to the last comma outside a string, closes any
+    open brackets, and re-parses. Handles partial numbers like '0.' cleanly.
+    """
+    decoder = json.JSONDecoder()
+    chunk = text[:error_pos]
+
+    # Cut at the last safe boundary: the last comma outside any string literal.
+    # Everything after that comma is an incomplete value and can be discarded.
+    # If there is no comma (e.g. truncated inside the very first value), fall
+    # back to the opening '{' of the object — we'll return an empty dict.
+    cut = _last_comma_outside_string(chunk)
+    if cut == -1:
+        # No prior comma — fall back to returning an empty object
+        brace = chunk.find("{")
+        if brace == -1:
+            raise ValueError("No safe cut-point found before truncation")
+        cut = brace + 1   # include the opening brace itself
+
+    chunk = chunk[:cut].rstrip()
+    if not chunk:
+        raise ValueError("Nothing salvageable before the truncation point")
+
+    repaired = _close_open_brackets(chunk)
+    start = repaired.find("{")
+    if start == -1:
+        raise ValueError("No JSON object found after repair attempt")
+
+    obj, _ = decoder.raw_decode(repaired, start)
+    logger.warning(
+        "json_truncation_repaired  original_len=%d  repaired_len=%d",
+        len(text), len(repaired),
+    )
+    return obj
+
+
 def _extract_json(text: str) -> dict:
     """
     Pull the top-level JSON object out of an LLM response.
@@ -246,6 +336,9 @@ def _extract_json(text: str) -> dict:
     Only attempts the FIRST '{' found — never falls back to inner sub-objects,
     which would silently return the wrong dict (e.g. a canvas sub-object
     instead of the full GenerationPlan).
+
+    If the standard parse fails (e.g. the LLM hit its token limit mid-value),
+    a truncation-repair pass is attempted before raising.
     """
     decoder = json.JSONDecoder()
 
@@ -270,6 +363,11 @@ def _extract_json(text: str) -> dict:
         obj, _ = decoder.raw_decode(cleaned, start)
         return obj
     except json.JSONDecodeError as e:
+        # Attempt to repair a response truncated mid-value (token limit reached).
+        try:
+            return _repair_truncated_json(cleaned[start:], e.pos - start)
+        except Exception:
+            pass
         raise ValueError(
             f"JSON parse error at char {e.pos}: {e.msg}\n"
             f"Near: …{cleaned[max(0, e.pos - 80):e.pos + 80]}…"

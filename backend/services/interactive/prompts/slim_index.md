@@ -22,3 +22,4 @@ You MAY use any entity listed here — if you pick one not detailed above, const
 | `quiz_block` | Self-check MCQ — only when user asks for a quiz/test OR lesson teaches one specific testable concept. At most once per lesson. Do NOT add by default | `question`, `options[]`, `correctIndex` |
 | `flashcard_deck` | Memorising terms, definitions, algorithms, formulas — flippable card set | `cards[]` ({front, back, hint?}) |
 | `ds_viewer` | CS data structures — linked list, stack, queue, BST, hash table — rendered visually with a built-in interactive operations panel | `type`, `nodes[]` |
+| `plotly` | Complex / interactive charts — box, violin, 3D surface, contour, sankey, treemap, sunburst, waterfall, candlestick, indicator, choropleth. Use `chart` for simple bar/line/pie | `data[]` (Plotly traces) |

@@ -261,7 +261,7 @@ function AppInner() {
                     />
                   </ProtectedRoute>
                 }>
-                  <Route path=":convId" />
+                  <Route path=":convId" element={<></>} />
                 </Route>
                 <Route path={ROUTES.SETTINGS} element={
                   <ProtectedRoute>

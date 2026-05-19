@@ -14,13 +14,14 @@ import FlashcardDeck   from './entities/FlashcardDeck'
 import DSViewer        from './entities/DSViewer'
 
 // Heavy — lazy loaded so they only download when actually rendered.
-// mermaid ~400 KB, reactflow ~300 KB, leaflet ~280 KB, recharts ~200 KB
+// mermaid ~400 KB, reactflow ~300 KB, leaflet ~280 KB, recharts ~200 KB, plotly ~3.5 MB
 const MermaidViewer  = lazy(() => import('./entities/MermaidViewer'))
 const GraphCanvas    = lazy(() => import('./entities/GraphCanvas'))
 const MoleculeViewer = lazy(() => import('./entities/MoleculeViewer'))
 const MapViewer      = lazy(() => import('./entities/MapViewer'))
 const P5Sketch       = lazy(() => import('./entities/P5Sketch'))
 const ChartViewer    = lazy(() => import('./entities/ChartViewer'))
+const PlotlyViewer   = lazy(() => import('./entities/PlotlyViewer'))
 
 // Each entry: { component, getCopyText?, noExpand? }
 // getCopyText(props) → string | null — used by BlockWrapper's copy button
@@ -59,7 +60,8 @@ export const REGISTRY = {
     component: FlashcardDeck,
     getCopyText: p => (p.cards ?? []).map(c => `Q: ${c.front}\nA: ${c.back}`).join('\n\n'),
   },
-  ds_viewer: { component: DSViewer },
+  ds_viewer:        { component: DSViewer },
+  plotly:           { component: PlotlyViewer },
 }
 
 export function resolveEntity(type) {

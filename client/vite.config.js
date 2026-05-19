@@ -68,6 +68,10 @@ export default defineConfig({
           if (['mermaid', 'recharts', 'reactflow', '@xyflow', 'leaflet', 'react-leaflet', 'dagre'].includes(pkg)) {
             return 'vendor-viz'
           }
+          // Plotly — very large (~3.5 MB), isolated in its own chunk
+          if (['plotly.js-dist-min', 'react-plotly.js'].includes(pkg) || pkg.startsWith('plotly.js')) {
+            return 'vendor-plotly'
+          }
           // Rich text editor
           if (pkg.startsWith('@tiptap/')) {
             return 'vendor-editor'
