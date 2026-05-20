@@ -82,7 +82,7 @@ function RetryBanner({ turn, onRetry }) {
   )
 }
 
-const TurnView = memo(function TurnView({ turn, onPauseAsk, onRetryTurn, onRetryGeneration }) {
+const TurnView = memo(function TurnView({ turn, onPauseAsk, onRetryTurn, onRetryGeneration, notesEnabled }) {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
 
@@ -146,35 +146,35 @@ const TurnView = memo(function TurnView({ turn, onPauseAsk, onRetryTurn, onRetry
         ) : turn.id && turn.videoPhase === 'error' ? (
           <>
             {turn.framesData && (
-              <SessionView session={turn} videoPhase="error" framesData={turn.framesData} onPauseAsk={onPauseAsk} />
+              <SessionView session={turn} videoPhase="error" framesData={turn.framesData} onPauseAsk={onPauseAsk} notesEnabled={notesEnabled} />
             )}
             <Box sx={{ mt: turn.framesData ? 1.5 : 0 }}>
               <RetryBanner turn={turn} onRetry={onRetryTurn} />
             </Box>
           </>
         ) : turn.id && isTextTurn(turn) ? (
-          <NotesPanel notes={turn.framesData?.notes} />
+          notesEnabled ? <NotesPanel notes={turn.framesData?.notes} /> : null
         ) : turn.id ? (
-          <SessionView session={turn} videoPhase={turn.videoPhase} framesData={turn.framesData} onPauseAsk={onPauseAsk} />
+          <SessionView session={turn} videoPhase={turn.videoPhase} framesData={turn.framesData} onPauseAsk={onPauseAsk} notesEnabled={notesEnabled} />
         ) : null}
       </ContentColumn>
     </Box>
   )
 })
 
-const TurnWithBoundary = memo(function TurnWithBoundary({ turn, onPauseAsk, onRetryTurn, onRetryGeneration }) {
+const TurnWithBoundary = memo(function TurnWithBoundary({ turn, onPauseAsk, onRetryTurn, onRetryGeneration, notesEnabled }) {
   return (
     <ErrorBoundary level="component" key={`${turn.tempId}-boundary`}>
-      <TurnView turn={turn} onPauseAsk={onPauseAsk} onRetryTurn={onRetryTurn} onRetryGeneration={onRetryGeneration} />
+      <TurnView turn={turn} onPauseAsk={onPauseAsk} onRetryTurn={onRetryTurn} onRetryGeneration={onRetryGeneration} notesEnabled={notesEnabled} />
     </ErrorBoundary>
   )
 })
 
-const ConversationThread = memo(function ConversationThread({ turns, onPauseAsk, onRetryTurn, onRetryGeneration }) {
+const ConversationThread = memo(function ConversationThread({ turns, onPauseAsk, onRetryTurn, onRetryGeneration, notesEnabled }) {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', pt: 1, pb: 1 }}>
       {turns.map((turn) => (
-        <TurnWithBoundary key={turn.tempId} turn={turn} onPauseAsk={onPauseAsk} onRetryTurn={onRetryTurn} onRetryGeneration={onRetryGeneration} />
+        <TurnWithBoundary key={turn.tempId} turn={turn} onPauseAsk={onPauseAsk} onRetryTurn={onRetryTurn} onRetryGeneration={onRetryGeneration} notesEnabled={notesEnabled} />
       ))}
     </Box>
   )
@@ -201,6 +201,7 @@ ConversationThread.propTypes = {
   onPauseAsk:         PropTypes.func.isRequired,
   onRetryTurn:        PropTypes.func.isRequired,
   onRetryGeneration:  PropTypes.func.isRequired,
+  notesEnabled:       PropTypes.bool,
 }
 
 const ConversationThreadProfiled = withProfiler(ConversationThread, 'ConversationThread')

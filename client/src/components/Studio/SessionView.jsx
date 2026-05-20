@@ -266,7 +266,7 @@ function SlideDialog({ open, frameIndex, captions, images, sessionId, onClose, o
   )
 }
 
-function SessionView({ session, videoPhase, framesData, onPauseAsk }) {
+function SessionView({ session, videoPhase, framesData, onPauseAsk, notesEnabled }) {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
 
@@ -353,7 +353,7 @@ function SessionView({ session, videoPhase, framesData, onPauseAsk }) {
         </Box>
       )}
 
-      {notes && <NotesPanel notes={notes} />}
+      {notesEnabled && notes && <NotesPanel notes={notes} />}
 
       {expandedFrame !== null && captions.length > 0 && (
         <SlideDialog
@@ -385,14 +385,16 @@ SessionView.propTypes = {
     videoPhase: PropTypes.string,
     framesData: PropTypes.object,
   }).isRequired,
-  videoPhase: PropTypes.string.isRequired,
-  framesData: PropTypes.object,
-  onPauseAsk: PropTypes.func.isRequired,
+  videoPhase:   PropTypes.string.isRequired,
+  framesData:   PropTypes.object,
+  onPauseAsk:   PropTypes.func.isRequired,
+  notesEnabled: PropTypes.bool,
 }
 
 export default memo(SessionView, (prev, next) =>
   prev.session      === next.session      &&
   prev.videoPhase   === next.videoPhase   &&
   prev.framesData   === next.framesData   &&
-  prev.onPauseAsk   === next.onPauseAsk
+  prev.onPauseAsk   === next.onPauseAsk   &&
+  prev.notesEnabled === next.notesEnabled
 )

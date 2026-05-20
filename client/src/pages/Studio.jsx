@@ -298,9 +298,20 @@ export default function Studio({
         conversationId={activeConvId}
         onExit={() => setViewMode('chat')}
         onAskFromLearn={handleLearnAsk}
-        onGenerateFromCanvas={handleLearnGenerate}
+        onGenerateFromCanvas={({ question, sessionId, model, videoEnabled: ve, notesEnabled: ne }) => {
+          if (ne !== undefined) {
+            setNotesEnabled((prev) => {
+              if (prev !== ne) localStorage.setItem(STORAGE_KEYS.NOTES_ENABLED, String(ne))
+              return ne
+            })
+          }
+          handleLearnGenerate({ question, sessionId, model, videoEnabled: ve })
+        }}
         defaultModel={selectedModel}
         defaultVideoEnabled={videoEnabled}
+        notesEnabled={notesEnabled}
+        userNotesOpen={userNotesOpen}
+        onToggleUserNotes={toggleUserNotes}
       />
     )
   }
@@ -408,6 +419,7 @@ export default function Studio({
                   onPauseAsk={handlePauseAsk}
                   onRetryTurn={handleRetryTurn}
                   onRetryGeneration={handleRetryGeneration}
+                  notesEnabled={notesEnabled}
                 />
 
                 {followUpSuggestions.length > 0 && (

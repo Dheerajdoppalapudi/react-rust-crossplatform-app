@@ -23,6 +23,7 @@ const P5Sketch       = lazy(() => import('./entities/P5Sketch'))
 const ChartViewer    = lazy(() => import('./entities/ChartViewer'))
 const PlotlyViewer      = lazy(() => import('./entities/PlotlyViewer'))
 const FunctionPlotter   = lazy(() => import('./entities/FunctionPlotter'))
+const SlideDeck         = lazy(() => import('./entities/SlideDeck'))
 
 // Each entry: { component, getCopyText?, noExpand? }
 // getCopyText(props) → string | null — used by BlockWrapper's copy button
@@ -64,6 +65,7 @@ export const REGISTRY = {
   ds_viewer:        { component: DSViewer },
   plotly:           { component: PlotlyViewer },
   function_plotter: { component: FunctionPlotter },
+  slide_deck:       { component: SlideDeck, noExpand: true },
 }
 
 export function resolveEntity(type) {

@@ -31,7 +31,7 @@ function layoutWithDagre(nodes, edges) {
  *     dagre re-runs. Canvas.jsx's data-sync effect propagates the fresh ref
  *     value to existing nodes without touching their positions.
  */
-export function useFlowData(turns, onAsk, defaultModel, defaultVideoEnabled) {
+export function useFlowData(turns, onAsk, defaultModel, defaultVideoEnabled, defaultNotesEnabled) {
   const onAskRef = useRef(onAsk)
   useEffect(() => { onAskRef.current = onAsk }, [onAsk])
 
@@ -49,7 +49,7 @@ export function useFlowData(turns, onAsk, defaultModel, defaultVideoEnabled) {
       id:       nodeId(turn),
       type:     'sessionNode',
       position: { x: 0, y: 0 },   // dagre fills this in
-      data:     { turn, onAsk: onAskRef.current, defaultModel, defaultVideoEnabled },
+      data:     { turn, onAsk: onAskRef.current, defaultModel, defaultVideoEnabled, defaultNotesEnabled },
     }))
 
     const edges = valid
@@ -63,5 +63,5 @@ export function useFlowData(turns, onAsk, defaultModel, defaultVideoEnabled) {
       }))
 
     return { nodes: layoutWithDagre(nodes, edges), edges }
-  }, [turns, defaultModel, defaultVideoEnabled])
+  }, [turns, defaultModel, defaultVideoEnabled, defaultNotesEnabled])
 }

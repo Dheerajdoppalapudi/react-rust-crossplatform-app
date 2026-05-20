@@ -15,12 +15,12 @@ import { PALETTE } from '../../../theme/tokens.js'
 const nodeTypes = { sessionNode: SessionNode, askNode: AskNode }
 const edgeTypes = { flowEdge: FlowEdge }
 
-export default function Canvas({ turns, onNodeClick, onAsk, defaultModel, defaultVideoEnabled }) {
+export default function Canvas({ turns, onNodeClick, onAsk, defaultModel, defaultVideoEnabled, defaultNotesEnabled }) {
   const theme   = useTheme()
   const isDark  = theme.palette.mode === 'dark'
   const primary = theme.palette.primary.main
 
-  const { nodes: layoutNodes, edges: layoutEdges } = useFlowData(turns, onAsk, defaultModel, defaultVideoEnabled)
+  const { nodes: layoutNodes, edges: layoutEdges } = useFlowData(turns, onAsk, defaultModel, defaultVideoEnabled, defaultNotesEnabled)
 
   const [nodes, setNodes, onNodesChange] = useNodesState(layoutNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
@@ -67,8 +67,7 @@ export default function Canvas({ turns, onNodeClick, onAsk, defaultModel, defaul
 
   const handleNodeClick = useCallback((_, rfNode) => {
     if (rfNode.type === 'askNode') return
-    if (rfNode.data?.turn?.isLoading) return
-    const turn = turns.find((t) => t.id === rfNode.id) || rfNode.data.turn
+    const turn = turns.find((t) => t.id === rfNode.id || t.tempId === rfNode.id) || rfNode.data.turn
     onNodeClick?.(turn)
   }, [turns, onNodeClick])
 

@@ -1,16 +1,18 @@
 import { useState, useCallback } from 'react'
 import { Box, IconButton, Typography, Tooltip, useTheme, Button, CircularProgress } from '@mui/material'
-import ArrowBackIcon from '@mui/icons-material/ArrowBack'
-import MergeIcon from '@mui/icons-material/MergeType'
-import Canvas    from './Canvas'
-import NodeModal from './NodeModal'
+import ArrowBackIcon  from '@mui/icons-material/ArrowBack'
+import MergeIcon      from '@mui/icons-material/MergeType'
+import EditNoteIcon   from '@mui/icons-material/EditNote'
+import Canvas         from './Canvas'
+import NodeModal      from './NodeModal'
 import MergedVideoModal   from './MergedVideoModal'
 import MergeLoadingModal  from './MergeLoadingModal'
+import UserNotesPanel from '../UserNotesPanel/index'
 import { api } from '../../../services/api'
 import { getConversationMediaToken } from '../../../services/mediaToken'
 import { API_BASE } from '../../../constants/api.js'
 
-export default function LearningView({ turns, conversationId, onExit, onAskFromLearn, onGenerateFromCanvas, defaultModel, defaultVideoEnabled }) {
+export default function LearningView({ turns, conversationId, onExit, onAskFromLearn, onGenerateFromCanvas, defaultModel, defaultVideoEnabled, notesEnabled, userNotesOpen, onToggleUserNotes }) {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
 
@@ -22,7 +24,7 @@ export default function LearningView({ turns, conversationId, onExit, onAskFromL
   const [mergedVideoUrl,  setMergedVideoUrl]  = useState(null)
 
   const handleNodeClick = useCallback((node) => {
-    const fresh = turns.find((t) => t.id === node.id) || node
+    const fresh = turns.find((t) => t.id === node.id || t.tempId === node.tempId) || node
     setSelectedNode(fresh)
   }, [turns])
 
@@ -31,8 +33,8 @@ export default function LearningView({ turns, conversationId, onExit, onAskFromL
     onAskFromLearn?.({ question, sessionId, frameIndex, caption })
   }, [onAskFromLearn])
 
-  const handleCanvasAsk = useCallback(({ question, sessionId, model, videoEnabled }) => {
-    onGenerateFromCanvas?.({ question, sessionId, model, videoEnabled })
+  const handleCanvasAsk = useCallback(({ question, sessionId, model, videoEnabled, notesEnabled: askNotesEnabled }) => {
+    onGenerateFromCanvas?.({ question, sessionId, model, videoEnabled, notesEnabled: askNotesEnabled })
   }, [onGenerateFromCanvas])
 
   const handleMerge = useCallback(async () => {
@@ -120,6 +122,28 @@ export default function LearningView({ turns, conversationId, onExit, onAskFromL
             {mergeError}
           </Typography>
         )}
+        <Tooltip title="My Notes" placement="bottom">
+          <IconButton
+            size="small"
+            onClick={onToggleUserNotes}
+            aria-pressed={userNotesOpen}
+            sx={{
+              bgcolor: userNotesOpen
+                ? (isDark ? 'rgba(79,110,255,0.2)' : 'rgba(24,71,214,0.1)')
+                : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.92)'),
+              border: `1px solid ${userNotesOpen
+                ? (isDark ? 'rgba(79,110,255,0.5)' : 'rgba(24,71,214,0.3)')
+                : (isDark ? 'rgba(255,255,255,0.14)' : '#e2e8f0')}`,
+              color: userNotesOpen ? theme.palette.primary.main : theme.palette.text.secondary,
+              backdropFilter: 'blur(10px)',
+              boxShadow: '0 2px 10px rgba(0,0,0,0.14)',
+              '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.14)' : '#fff' },
+              transition: 'all 0.15s',
+            }}
+          >
+            <EditNoteIcon sx={{ fontSize: 16 }} />
+          </IconButton>
+        </Tooltip>
         <Button
           onClick={mergeResult ? () => setShowMergedModal(true) : handleMerge}
           disabled={merging}
@@ -137,13 +161,31 @@ export default function LearningView({ turns, conversationId, onExit, onAskFromL
         </Button>
       </Box>
 
-      <Canvas turns={turns} onNodeClick={handleNodeClick} onAsk={handleCanvasAsk} defaultModel={defaultModel} defaultVideoEnabled={defaultVideoEnabled} />
+      <Canvas turns={turns} onNodeClick={handleNodeClick} onAsk={handleCanvasAsk} defaultModel={defaultModel} defaultVideoEnabled={defaultVideoEnabled} defaultNotesEnabled={notesEnabled} />
+
+      {/* My Notes slide-over — overlays the canvas from the right */}
+      <Box sx={{
+        position: 'absolute', top: 0, right: 0, bottom: 0,
+        width: userNotesOpen ? 440 : 0,
+        overflow: 'hidden',
+        transition: 'width 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+        zIndex: 5,
+        borderLeft: userNotesOpen ? `1px solid ${theme.palette.divider}` : 'none',
+        boxShadow: userNotesOpen
+          ? (isDark ? '-8px 0 32px rgba(0,0,0,0.5)' : '-8px 0 32px rgba(0,0,0,0.1)')
+          : 'none',
+      }}>
+        <Box sx={{ width: 440, height: '100%' }}>
+          <UserNotesPanel conversationId={conversationId} isOpen={userNotesOpen} />
+        </Box>
+      </Box>
 
       {selectedNode && (
         <NodeModal
           node={selectedNode}
           onClose={() => setSelectedNode(null)}
           onAsk={handleAsk}
+          conversationId={conversationId}
         />
       )}
 

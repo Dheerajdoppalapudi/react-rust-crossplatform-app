@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Handle, Position, useReactFlow } from 'reactflow'
-import { Box, Typography, Tooltip, useTheme, CircularProgress } from '@mui/material'
+import { Box, Typography, Tooltip, useTheme } from '@mui/material'
 import MovieOutlinedIcon     from '@mui/icons-material/MovieOutlined'
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline'
 import AddIcon               from '@mui/icons-material/Add'
@@ -10,7 +10,7 @@ import { NODE_W, NODE_H }    from './useFlowData'
 import { BRAND, PALETTE }    from '../../../theme/tokens.js'
 import { isTextTurn, formatIntentType, getFrameCount } from '../studioUtils'
 import { getActiveStageLabel } from './utils'
-import { shimmer, fadeIn }   from '../../../theme/animations'
+import { shimmer, fadeIn, pulse } from '../../../theme/animations'
 
 const THUMB_H = Math.round(NODE_W * 9 / 16)
 const ASK_W   = 340
@@ -85,9 +85,10 @@ export default function SessionNode({ data }) {
             removeGhost()
             data.onAsk?.({ question, sessionId: turn.id, model, videoEnabled })
           },
-          onCancel:           removeGhost,
-          defaultModel:       data.defaultModel,
+          onCancel:            removeGhost,
+          defaultModel:        data.defaultModel,
           defaultVideoEnabled: data.defaultVideoEnabled,
+          defaultNotesEnabled: data.defaultNotesEnabled,
         },
         draggable:  true,
         selectable: false,
@@ -119,26 +120,44 @@ export default function SessionNode({ data }) {
           borderRadius: '10px',
           border:  `1.5px solid ${isDark ? 'rgba(255,255,255,0.09)' : '#e8ecf2'}`,
           bgcolor: isDark ? PALETTE.darkSurface : PALETTE.ivory,
-          overflow: 'hidden',
-          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1.5,
+          overflow: 'hidden', cursor: 'pointer',
           boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.4)' : '0 1px 3px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.08)',
+          animation: `${fadeIn} 0.3s ease-out`,
         }}>
+
+          {/* Skeleton thumbnail */}
           <Box sx={{
-            position: 'absolute', inset: 0,
-            background: isDark
-              ? 'linear-gradient(135deg, rgba(255,255,255,0.02) 25%, rgba(255,255,255,0.06) 50%, rgba(255,255,255,0.02) 75%)'
-              : 'linear-gradient(135deg, rgba(0,0,0,0.02) 25%, rgba(0,0,0,0.05) 50%, rgba(0,0,0,0.02) 75%)',
-            backgroundSize: '200% 200%',
-            animation: `${shimmer} 1.8s ease-in-out infinite`,
-          }} />
-          <CircularProgress size={22} thickness={3} sx={{ color: primary, opacity: 0.7, position: 'relative' }} />
-          <Box sx={{ position: 'relative', textAlign: 'center', px: 2 }}>
-            <Typography sx={{ fontSize: 11, fontWeight: 600, color: primary, opacity: 0.8 }}>
-              {stageLabel}
-            </Typography>
+            width: '100%', height: THUMB_H, position: 'relative', overflow: 'hidden',
+            bgcolor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)',
+          }}>
+            <Box sx={{
+              position: 'absolute', inset: 0,
+              background: isDark
+                ? 'linear-gradient(90deg, transparent 20%, rgba(255,255,255,0.06) 50%, transparent 80%)'
+                : 'linear-gradient(90deg, transparent 20%, rgba(255,255,255,0.7) 50%, transparent 80%)',
+              animation: `${shimmer} 1.6s ease-in-out infinite`,
+            }} />
+          </Box>
+
+          <Box sx={{ height: '1px', bgcolor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.07)' }} />
+
+          {/* Content */}
+          <Box sx={{ px: 1.5, pt: 1, pb: 0.75 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, mb: 0.6 }}>
+              <Box sx={{
+                width: 5, height: 5, borderRadius: '50%', flexShrink: 0,
+                bgcolor: primary, opacity: 0.6,
+                animation: `${pulse} 1.2s ease-in-out infinite`,
+              }} />
+              <Typography sx={{ fontSize: 10.5, fontWeight: 600, color: primary, opacity: 0.7 }}>
+                {stageLabel}
+              </Typography>
+            </Box>
             <Typography sx={{
-              fontSize: 10, color: theme.palette.text.secondary, mt: 0.5,
-              overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+              fontSize: 11.5, fontWeight: 500, lineHeight: 1.4,
+              color: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.28)',
+              overflow: 'hidden', display: '-webkit-box',
+              WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
             }}>
               {turn.prompt || 'Untitled'}
             </Typography>

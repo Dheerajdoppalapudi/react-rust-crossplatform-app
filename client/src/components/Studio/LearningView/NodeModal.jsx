@@ -1,48 +1,19 @@
 import { useState, useEffect } from 'react'
 import {
-  Dialog, Box, Typography, IconButton, TextField,
-  Chip, CircularProgress, Tooltip, useTheme,
+  Dialog, Box, Typography, IconButton,
+  TextField, Chip, CircularProgress, Tooltip, useTheme,
 } from '@mui/material'
 import CloseIcon                  from '@mui/icons-material/Close'
 import SendIcon                   from '@mui/icons-material/Send'
-import NotesOutlinedIcon          from '@mui/icons-material/NotesOutlined'
 import QuestionAnswerOutlinedIcon from '@mui/icons-material/QuestionAnswerOutlined'
-import { useMediaUrl } from '../../../hooks/useMediaUrl'
-import VideoPanel from '../VideoPanel'
-import { api } from '../../../services/api'
-import { parseNotes, formatIntentType } from '../studioUtils'
-
-function NotesList({ lines, loading, emptyText }) {
-  if (loading && !lines.length) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', pt: 2 }}>
-        <CircularProgress size={18} />
-      </Box>
-    )
-  }
-  if (lines.length > 0) {
-    return (
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
-        {lines.map((line, i) => (
-          <Box key={i} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.25 }}>
-            <Box sx={{
-              width: 4, height: 4, borderRadius: '50%', flexShrink: 0,
-              bgcolor: 'primary.main', opacity: 0.5, mt: 0.9,
-            }} />
-            <Typography sx={{ fontSize: 13, color: 'text.secondary', lineHeight: 1.65 }}>
-              {line}
-            </Typography>
-          </Box>
-        ))}
-      </Box>
-    )
-  }
-  return (
-    <Typography sx={{ fontSize: 13, color: 'text.secondary', opacity: 0.45, fontStyle: 'italic' }}>
-      {emptyText}
-    </Typography>
-  )
-}
+import CheckCircleOutlinedIcon    from '@mui/icons-material/CheckCircleOutlined'
+import { useMediaUrl }    from '../../../hooks/useMediaUrl'
+import VideoPanel         from '../VideoPanel'
+import BlockRenderer      from '../../Interactive/BlockRenderer'
+import UserNotesPanel     from '../UserNotesPanel/index'
+import { api }            from '../../../services/api'
+import { formatIntentType } from '../studioUtils'
+import { pulse } from '../../../theme/animations'
 
 function FrameStrip({ sessionId, captions, activeFrame, onSelect, isDark, theme }) {
   const { getFrameUrl } = useMediaUrl(sessionId)
@@ -110,6 +81,66 @@ function FrameStrip({ sessionId, captions, activeFrame, onSelect, isDark, theme 
   )
 }
 
+function LoadingPanel({ node, theme }) {
+  const primary = theme.palette.primary.main
+  const stages  = node.stages || []
+  const activeStage = stages.find((s) => s.status === 'active')
+
+  return (
+    <Box sx={{
+      flex: 1, display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center', gap: 2.5,
+      px: 5, py: 4,
+    }}>
+      <CircularProgress size={20} thickness={2.5} sx={{ color: primary, opacity: 0.55 }} />
+
+      <Box sx={{ textAlign: 'center' }}>
+        <Typography sx={{ fontSize: 13, fontWeight: 600, color: theme.palette.text.primary, mb: 0.5 }}>
+          {activeStage?.label ?? 'Thinking about your question…'}
+        </Typography>
+        <Typography sx={{ fontSize: 12.5, color: theme.palette.text.secondary, lineHeight: 1.55, maxWidth: 340 }}>
+          {node.prompt}
+        </Typography>
+      </Box>
+
+      {stages.length > 0 && (
+        <Box sx={{ width: '100%', maxWidth: 300 }}>
+          {stages.map((stage, i) => {
+            const isDone   = stage.status === 'done'
+            const isActive = stage.status === 'active'
+            return (
+              <Box key={stage.id ?? i} sx={{ display: 'flex', alignItems: 'center', gap: 1.25, py: 0.55 }}>
+                {isDone ? (
+                  <CheckCircleOutlinedIcon sx={{ fontSize: 13, color: '#22c55e', flexShrink: 0 }} />
+                ) : isActive ? (
+                  <Box sx={{
+                    width: 5, height: 5, borderRadius: '50%', flexShrink: 0,
+                    bgcolor: primary, animation: `${pulse} 1.2s ease-in-out infinite`,
+                  }} />
+                ) : (
+                  <Box sx={{ width: 5, height: 5, borderRadius: '50%', flexShrink: 0, bgcolor: theme.palette.divider }} />
+                )}
+                <Typography sx={{
+                  fontSize: 12, fontWeight: isActive ? 500 : 400,
+                  color: isDone ? theme.palette.text.secondary : isActive ? theme.palette.text.primary : theme.palette.text.disabled,
+                  flex: 1,
+                }}>
+                  {stage.label}
+                </Typography>
+                {isDone && stage.duration_s != null && (
+                  <Typography sx={{ fontSize: 10, color: theme.palette.text.disabled }}>
+                    {stage.duration_s}s
+                  </Typography>
+                )}
+              </Box>
+            )
+          })}
+        </Box>
+      )}
+    </Box>
+  )
+}
+
 function VideoGeneratingPlaceholder({ isDark, theme }) {
   return (
     <Box sx={{
@@ -128,7 +159,7 @@ function VideoGeneratingPlaceholder({ isDark, theme }) {
   )
 }
 
-export default function NodeModal({ node, onClose, onAsk }) {
+export default function NodeModal({ node, onClose, onAsk, conversationId }) {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
 
@@ -143,10 +174,8 @@ export default function NodeModal({ node, onClose, onAsk }) {
     setQuestion('')
 
     if (node.framesData) {
-      // Use cached data even when captions is empty (e.g. text-only sessions
-      // have no captions but do have notes — we must not re-fetch in that case).
       setFramesData(node.framesData)
-    } else {
+    } else if (node.render_path !== 'interactive') {
       setFramesData(null)
       setLoadingMeta(true)
       api.getFramesMeta(node.id)
@@ -160,15 +189,15 @@ export default function NodeModal({ node, onClose, onAsk }) {
         })
         .finally(() => setLoadingMeta(false))
     }
-  }, [node?.id, node?.framesData])
+  }, [node?.id, node?.framesData, node?.render_path])
 
   if (!node) return null
 
-  const captions   = framesData?.captions || []
-  const noteLines  = parseNotes(framesData?.notes)
-  const hasCaption = captions.length > 0
-
+  const captions    = framesData?.captions || []
+  const hasCaption  = captions.length > 0
   const hasQuestion = Boolean(question.trim())
+  const isInteractive = node.render_path === 'interactive'
+  const isLoading   = node.isLoading
 
   const handleAsk = () => {
     if (!hasQuestion) return
@@ -191,17 +220,21 @@ export default function NodeModal({ node, onClose, onAsk }) {
       maxWidth={false}
       PaperProps={{
         sx: {
-          width:           '90vw',
-          maxWidth:        1240,
+          width:           '92vw',
+          maxWidth:        1280,
           height:          '88vh',
           m:               0,
-          borderRadius:    '12px',
+          borderRadius:    '16px',
           overflow:        'hidden',
           bgcolor:         isDark ? '#141414' : '#ffffff',
           backgroundImage: 'none',
+          boxShadow:       isDark
+            ? '0 32px 80px rgba(0,0,0,0.7)'
+            : '0 32px 80px rgba(0,0,0,0.18)',
         },
       }}
     >
+      {/* ── Header ── */}
       <Box sx={{
         px: 3, py: 1.75, flexShrink: 0,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -234,42 +267,55 @@ export default function NodeModal({ node, onClose, onAsk }) {
         </IconButton>
       </Box>
 
+      {/* ── Body ── */}
       <Box sx={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
 
+        {/* Left panel — content */}
         <Box sx={{
           flex: '0 0 60%',
           display: 'flex', flexDirection: 'column',
-          p: 2.5, overflow: 'auto',
+          p: isInteractive ? 0 : 2.5,
+          overflow: 'auto',
           borderRight: `1px solid ${theme.palette.divider}`,
           '&::-webkit-scrollbar': { width: 4 },
           '&::-webkit-scrollbar-thumb': { backgroundColor: theme.palette.divider, borderRadius: 2 },
         }}>
-          {node.render_path === 'interactive' ? (
-            // Non-video node: show the prompt + notes content
-            <Box sx={{ flex: 1, overflow: 'auto',
+          {isLoading ? (
+            <LoadingPanel node={node} theme={theme} />
+          ) : isInteractive ? (
+            // Render full interactive blocks (same as main chat)
+            <Box sx={{
+              flex: 1, overflow: 'auto',
+              px: 2.5, py: 2,
               '&::-webkit-scrollbar': { width: 4 },
               '&::-webkit-scrollbar-thumb': { backgroundColor: theme.palette.divider, borderRadius: 2 },
             }}>
-              <Box sx={{
-                mb: 2, px: 2, py: 1.5, borderRadius: '12px',
-                bgcolor: isDark ? 'rgba(255,255,255,0.04)' : '#f1f5f9',
-                border: `1px solid ${theme.palette.divider}`,
-              }}>
-                <Typography sx={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.palette.text.secondary, opacity: 0.55, mb: 0.75 }}>
-                  Prompt
-                </Typography>
-                <Typography sx={{ fontSize: 13.5, color: theme.palette.text.primary, lineHeight: 1.6 }}>
-                  {node.prompt}
-                </Typography>
-              </Box>
-
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1.25 }}>
-                <NotesOutlinedIcon sx={{ fontSize: 13, color: theme.palette.text.secondary }} />
-                <Typography sx={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.palette.text.secondary, opacity: 0.6 }}>
-                  Response
-                </Typography>
-              </Box>
-              <NotesList lines={noteLines} loading={loadingMeta} emptyText="No content for this session." />
+              {(node.blocks ?? []).length > 0 ? (
+                <BlockRenderer
+                  turnId={node.id ?? node.tempId}
+                  title={node.title}
+                  learningObjective={node.learningObjective}
+                  blocks={node.blocks ?? []}
+                  isLoading={false}
+                />
+              ) : (
+                <Box sx={{
+                  mb: 2, px: 2, py: 1.5, borderRadius: '12px',
+                  bgcolor: isDark ? 'rgba(255,255,255,0.04)' : '#f1f5f9',
+                  border: `1px solid ${theme.palette.divider}`,
+                }}>
+                  <Typography sx={{
+                    fontSize: 10, fontWeight: 700, letterSpacing: '0.06em',
+                    textTransform: 'uppercase', color: theme.palette.text.secondary,
+                    opacity: 0.55, mb: 0.75,
+                  }}>
+                    Prompt
+                  </Typography>
+                  <Typography sx={{ fontSize: 13.5, color: theme.palette.text.primary, lineHeight: 1.6 }}>
+                    {node.prompt}
+                  </Typography>
+                </Box>
+              )}
             </Box>
           ) : node.videoPhase === 'generating' ? (
             <VideoGeneratingPlaceholder isDark={isDark} theme={theme} />
@@ -277,7 +323,7 @@ export default function NodeModal({ node, onClose, onAsk }) {
             <VideoPanel sessionId={node.id} videoPhase={node.videoPhase} onPauseAsk={null} />
           )}
 
-          {node.render_path !== 'interactive' && (
+          {!isInteractive && (
             <>
               {loadingMeta && !captions.length && (
                 <Box sx={{ display: 'flex', justifyContent: 'center', pt: 3 }}>
@@ -298,31 +344,22 @@ export default function NodeModal({ node, onClose, onAsk }) {
           )}
         </Box>
 
-        <Box sx={{ flex: '0 0 40%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        {/* Right panel — My Notes + Ask follow-up */}
+        <Box sx={{ flex: '0 0 40%', display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
 
-          <Box sx={{
-            flex: 1, overflowY: 'auto', p: 2.5,
-            '&::-webkit-scrollbar': { width: 4 },
-            '&::-webkit-scrollbar-thumb': { backgroundColor: theme.palette.divider, borderRadius: 2 },
-          }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1.75 }}>
-              <NotesOutlinedIcon sx={{ fontSize: 13, color: theme.palette.text.secondary }} />
-              <Typography sx={{
-                fontSize: 10, fontWeight: 700, letterSpacing: '0.06em',
-                textTransform: 'uppercase',
-                color: theme.palette.text.secondary, opacity: 0.6,
-              }}>
-                Lesson Notes
-              </Typography>
-            </Box>
-
-            <NotesList lines={noteLines} loading={loadingMeta} emptyText="No lesson notes for this session." />
+          {/* My Notes — fills available space */}
+          <Box sx={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+            <UserNotesPanel conversationId={conversationId} isOpen={true} />
           </Box>
 
+          {/* Ask a follow-up — pinned bottom */}
           <Box sx={{
             flexShrink: 0, p: 2.5,
             borderTop: `1px solid ${theme.palette.divider}`,
             bgcolor: isDark ? 'rgba(255,255,255,0.015)' : '#fafafa',
+            opacity: isLoading ? 0.45 : 1,
+            pointerEvents: isLoading ? 'none' : 'auto',
+            transition: 'opacity 0.2s',
           }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1.25 }}>
               <QuestionAnswerOutlinedIcon sx={{ fontSize: 13, color: theme.palette.primary.main }} />
@@ -331,11 +368,11 @@ export default function NodeModal({ node, onClose, onAsk }) {
                 textTransform: 'uppercase',
                 color: theme.palette.primary.main, opacity: 0.85,
               }}>
-                Ask a follow-up
+                {isLoading ? 'Generating…' : 'Ask a follow-up'}
               </Typography>
             </Box>
 
-            {hasCaption && (
+            {hasCaption && !isLoading && (
               <Chip
                 label={`Context: Slide ${activeFrame + 1}`}
                 size="small"
@@ -354,7 +391,8 @@ export default function NodeModal({ node, onClose, onAsk }) {
                 value={question}
                 onChange={(e) => setQuestion(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Ask something about this lesson…"
+                placeholder={isLoading ? 'Available once generation completes…' : 'Ask something about this lesson…'}
+                disabled={isLoading}
                 multiline
                 maxRows={4}
                 size="small"
@@ -371,13 +409,13 @@ export default function NodeModal({ node, onClose, onAsk }) {
                 <span>
                   <IconButton
                     onClick={handleAsk}
-                    disabled={!hasQuestion}
+                    disabled={!hasQuestion || isLoading}
                     size="small"
                     sx={{
                       width: 38, height: 38, flexShrink: 0,
-                      bgcolor: hasQuestion ? theme.palette.primary.main : 'transparent',
-                      color: hasQuestion ? '#fff' : theme.palette.text.disabled,
-                      border: `1.5px solid ${hasQuestion ? theme.palette.primary.main : theme.palette.divider}`,
+                      bgcolor: hasQuestion && !isLoading ? theme.palette.primary.main : 'transparent',
+                      color: hasQuestion && !isLoading ? '#fff' : theme.palette.text.disabled,
+                      border: `1.5px solid ${hasQuestion && !isLoading ? theme.palette.primary.main : theme.palette.divider}`,
                       borderRadius: '10px',
                       transition: 'all 0.15s',
                       '&:hover': { bgcolor: theme.palette.primary.dark, color: '#fff' },
