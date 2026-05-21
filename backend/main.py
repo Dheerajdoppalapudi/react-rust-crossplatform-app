@@ -35,7 +35,7 @@ from core.config import ANTHROPIC_API_KEY, CORS_ORIGINS, OPENAI_API_KEY
 from core.database import init_db, get_db
 from core.limiter import limiter
 from core.responses import success
-from routers import auth, conversations, generate, sessions, upload, video
+from routers import auth, conversations, export, generate, sessions, upload, video
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +102,7 @@ app.include_router(conversations.router)
 app.include_router(sessions.router)
 app.include_router(video.router)
 app.include_router(upload.router)
+app.include_router(export.router)
 
 # ── Exception handlers ────────────────────────────────────────────────────────
 # All error responses follow the same envelope: { "status": "error", "error": "..." }

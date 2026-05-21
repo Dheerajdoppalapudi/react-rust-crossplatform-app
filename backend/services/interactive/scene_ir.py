@@ -67,7 +67,7 @@ class SceneBlock(BaseModel):
                 "ds_viewer":        ["type", "nodes"],
                 "plotly":           ["data"],
                 "function_plotter": [],   # validated below: needs expr or functions
-                "slide_deck":       ["slides"],
+                "slide_deck":       ["spec"],
             }
             missing = [
                 k for k in required.get(self.entity_type or "", [])

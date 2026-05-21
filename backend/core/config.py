@@ -34,7 +34,7 @@ OPENAI_API_KEY: str    = os.getenv("OPENAI_API_KEY", "")
 
 # ── LLM models ────────────────────────────────────────────────────────────────
 OPENAI_MODEL: str  = os.getenv("OPENAI_MODEL",  "gpt-4.1")
-CLAUDE_MODEL: str  = os.getenv("CLAUDE_MODEL",  "claude-sonnet-4-6")
+CLAUDE_MODEL: str  = os.getenv("CLAUDE_MODEL",  "claude-haiku-4-5-20251001")
 # Cheap/fast model used only for intent classification (~300 tokens, simple task).
 # Always uses Haiku regardless of the user's chosen model.
 CLASSIFY_MODEL: str = os.getenv("CLASSIFY_MODEL", "claude-haiku-4-5-20251001")

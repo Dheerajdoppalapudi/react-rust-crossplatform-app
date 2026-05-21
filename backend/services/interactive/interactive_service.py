@@ -31,7 +31,7 @@ from dataclasses import dataclass, field
 from typing import AsyncGenerator
 
 from core.config import SCENE_PLANNER_MAX_TOKENS, SOURCES_SNIPPET_MAX_CHARS
-from services.frame_generation.planner import _extract_json, request_llm_service
+from services.frame_generation.planner import _extract_json, request_llm_service, _log, _accumulate_tokens
 from services.interactive.scene_ir import SceneIR
 from services.llm_service import LLMService, OpenAIProvider, default_llm_service
 
@@ -124,6 +124,13 @@ def _wrap_in_sandbox(raw_html: str) -> str:
     )
 
 
+_CODEGEN_MAX_TOKENS: dict[str, int] = {
+    "canvas_codegen_slides": 8000,   # full HTML presentation with 8-10 slides
+    "canvas_codegen_p5":     6000,
+    "canvas_codegen":        6000,
+}
+
+
 async def _run_codegen_with_prompt(
     prompt_file: str,
     spec: str,
@@ -137,12 +144,22 @@ async def _run_codegen_with_prompt(
         .replace("{{USER_PROMPT}}", user_prompt)
     )
     svc = svc or default_llm_service
+    model = getattr(svc.provider, "model", "unknown")
+    label = prompt_file.replace(".md", "")
+    logger.info("LLM call  prompt=%s  model=%s  chars=%d  cache=no", label, model, len(prompt))
+    max_tokens = _CODEGEN_MAX_TOKENS.get(label, 4000)
     raw = await asyncio.to_thread(
-        svc.make_single_prompt_request, prompt, "", None, False, max_tokens=4000
+        svc.make_single_prompt_request, prompt, "", None, False, max_tokens=max_tokens
     )
-    result, _ = raw if isinstance(raw, tuple) else (raw, {})
+    result, usage = raw if isinstance(raw, tuple) else (raw, {})
     if result is None:
         raise RuntimeError("Codegen LLM returned None")
+    _accumulate_tokens(usage or {})
+    logger.info("LLM done  prompt=%s  model=%s  tokens=%d  cache_read=%d  cache_create=%d",
+                label, model, (usage or {}).get("total_tokens", 0),
+                (usage or {}).get("cache_read_input_tokens", 0),
+                (usage or {}).get("cache_creation_input_tokens", 0))
+    _log({"event": "llm_call", "prompt_name": label, "usage": usage or {}})
     result = result.strip()
     if result.startswith("```"):
         result = result.split("\n", 1)[-1]
@@ -156,6 +173,10 @@ async def _run_codegen(spec: str, user_prompt: str, svc: LLMService = None) -> s
 
 async def _run_p5_codegen(spec: str, user_prompt: str, svc: LLMService = None) -> str:
     return await _run_codegen_with_prompt("canvas_codegen_p5.md", spec, user_prompt, svc=svc)
+
+
+async def _run_slide_codegen(spec: str, user_prompt: str, svc: LLMService = None) -> str:
+    return await _run_codegen_with_prompt("canvas_codegen_slides.md", spec, user_prompt, svc=svc)
 
 
 async def _select_entities(
@@ -177,10 +198,19 @@ async def _select_entities(
     user_msg = f"{context_block}Domain: {domain}\n\nQuestion: {original_message}"
 
     try:
-        raw, _ = await asyncio.to_thread(
+        _model = getattr(default_llm_service.provider, "model", "unknown")
+        logger.info("LLM call  prompt=entity_selector  model=%s  chars=%d  cache=no",
+                    _model, len(selector_prompt) + len(user_msg))
+        raw, _usage = await asyncio.to_thread(
             default_llm_service.make_system_user_request,
             selector_prompt, user_msg, max_tokens=800
         )
+        _accumulate_tokens(_usage or {})
+        logger.info("LLM done  prompt=entity_selector  model=%s  tokens=%d  cache_read=%d  cache_create=%d",
+                    _model, (_usage or {}).get("total_tokens", 0),
+                    (_usage or {}).get("cache_read_input_tokens", 0),
+                    (_usage or {}).get("cache_creation_input_tokens", 0))
+        _log({"event": "llm_call", "prompt_name": "entity_selector", "usage": _usage or {}})
         if raw is None:
             return SelectionResult(enriched_prompt=original_message)
 
@@ -231,9 +261,18 @@ async def _plan_scene(
     user_msg = f"{context_block}{sources_block}USER QUESTION: {enriched_prompt}"
 
     svc = svc or default_llm_service
-    raw, _ = await asyncio.to_thread(
+    _model = getattr(svc.provider, "model", "unknown")
+    logger.info("LLM call  prompt=scene_planner  model=%s  chars=%d  cache=no",
+                _model, len(system_prompt) + len(user_msg))
+    raw, _usage = await asyncio.to_thread(
         svc.make_system_user_request, system_prompt, user_msg, max_tokens=SCENE_PLANNER_MAX_TOKENS
     )
+    _accumulate_tokens(_usage or {})
+    logger.info("LLM done  prompt=scene_planner  model=%s  tokens=%d  cache_read=%d  cache_create=%d",
+                _model, (_usage or {}).get("total_tokens", 0),
+                (_usage or {}).get("cache_read_input_tokens", 0),
+                (_usage or {}).get("cache_creation_input_tokens", 0))
+    _log({"event": "llm_call", "prompt_name": "scene_planner", "usage": _usage or {}})
     if raw is None:
         raise RuntimeError("Scene planner LLM returned None")
 
@@ -304,14 +343,18 @@ async def run_interactive_pipeline(
 
     # Stage 4: Emit blocks — codegen entities wait for generation, others emit instantly
     for block in scene.blocks:
-        if block.type == "entity" and block.entity_type in ("freeform_html", "p5_sketch"):
+        if block.type == "entity" and block.entity_type in ("freeform_html", "p5_sketch", "slide_deck"):
             spec = block.props.get("spec", "an interactive widget")
             try:
                 if block.entity_type == "p5_sketch":
                     raw_html = await _run_p5_codegen(spec, selection.enriched_prompt, svc=downstream_svc)
+                    block.html = _wrap_in_sandbox(raw_html)
+                elif block.entity_type == "slide_deck":
+                    raw_html = await _run_slide_codegen(spec, selection.enriched_prompt, svc=downstream_svc)
+                    block.html = raw_html  # SlideDeck component handles its own iframe sandbox
                 else:
                     raw_html = await _run_codegen(spec, selection.enriched_prompt, svc=downstream_svc)
-                block.html = _wrap_in_sandbox(raw_html)
+                    block.html = _wrap_in_sandbox(raw_html)
             except Exception as exc:
                 logger.error("Codegen failed for block %s: %s", block.id, exc)
                 block.html = _wrap_in_sandbox(
