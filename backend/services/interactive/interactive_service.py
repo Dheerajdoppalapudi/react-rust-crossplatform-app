@@ -27,6 +27,7 @@ import html
 import json
 import logging
 import os
+import time
 from dataclasses import dataclass, field
 from typing import AsyncGenerator
 
@@ -317,21 +318,24 @@ async def run_interactive_pipeline(
                 session_id, domain, len(sources))
 
     # Stage 1: Enrich prompt + select entities + recommend model.
-    # Entity selector receives the enriched_prompt (richer spec) for better widget selection.
     entity_input = enriched_prompt or original_message
-    yield {"type": "stage", "stage": "designing", "label": "Selecting widgets…"}
+    _t0 = time.monotonic()
+    yield {"type": "stage", "stage": "widgets", "label": "Selecting widgets…"}
     selection = await _select_entities(entity_input, domain, conversation_context)
+    yield {"type": "stage_done", "stage": "widgets", "duration_s": round(time.monotonic() - _t0, 1)}
 
     # Honour per-request model override; fall back to entity selector recommendation
     user_forced_svc = request_llm_service.get()
     downstream_svc  = user_forced_svc if user_forced_svc else _get_llm_service(selection.model)
 
     # Stage 2: Plan scene IR — enriched prompt + sources for grounded citations
-    yield {"type": "stage", "stage": "designing", "label": "Planning lesson structure…"}
+    _t0 = time.monotonic()
+    yield {"type": "stage", "stage": "planning", "label": "Planning lesson structure…"}
     scene = await _plan_scene(
         selection.enriched_prompt, domain, conversation_context,
         selection.entities, sources, svc=downstream_svc,
     )
+    yield {"type": "stage_done", "stage": "planning", "duration_s": round(time.monotonic() - _t0, 1)}
 
     # Stage 3: Emit title + follow_ups immediately
     yield {
@@ -341,10 +345,19 @@ async def run_interactive_pipeline(
         "learning_objective": scene.learning_objective,
     }
 
-    # Stage 4: Emit blocks — codegen entities wait for generation, others emit instantly
+    _CODEGEN_LABELS = {
+        "slide_deck":    "Generating presentation slides…",
+        "p5_sketch":     "Rendering animation…",
+        "freeform_html": "Building interactive widget…",
+    }
+
+    # Stage 4: Emit blocks — codegen entities emit a stage event while waiting
     for block in scene.blocks:
         if block.type == "entity" and block.entity_type in ("freeform_html", "p5_sketch", "slide_deck"):
-            spec = block.props.get("spec", "an interactive widget")
+            spec      = block.props.get("spec", "an interactive widget")
+            stage_id  = f"building_{block.id}"
+            _t0 = time.monotonic()
+            yield {"type": "stage", "stage": stage_id, "label": _CODEGEN_LABELS.get(block.entity_type, "Building widget…")}
             try:
                 if block.entity_type == "p5_sketch":
                     raw_html = await _run_p5_codegen(spec, selection.enriched_prompt, svc=downstream_svc)
@@ -360,6 +373,7 @@ async def run_interactive_pipeline(
                 block.html = _wrap_in_sandbox(
                     "<p style='color:#f03e3e;font-family:system-ui'>Widget generation failed.</p>"
                 )
+            yield {"type": "stage_done", "stage": stage_id, "duration_s": round(time.monotonic() - _t0, 1)}
         yield {"type": "block", "block": block.dict()}
 
     # Stage 5: Persist and finish

@@ -305,7 +305,9 @@ function ZenithSpinner() {
 // ── Single stage row ──────────────────────────────────────────────────────────
 
 function StageRow({ stage, sources, isLast, compact, isDark, beatTitles, completedBeats }) {
-  const stageConfig   = STAGE_REGISTRY[stage.id]
+  // Prefix-match building_<blockId> → 'building' registry entry
+  const registryKey   = stage.id.startsWith('building_') ? 'building' : stage.id
+  const stageConfig   = STAGE_REGISTRY[registryKey]
   const IconComponent = stageConfig?.Icon ?? FALLBACK_STAGE_ICON
   const isActive  = stage.status === 'active'
   const isDone    = stage.status === 'done'

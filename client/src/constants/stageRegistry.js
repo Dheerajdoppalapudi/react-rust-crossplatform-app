@@ -9,6 +9,7 @@ import MovieCreationOutlinedIcon    from '@mui/icons-material/MovieCreationOutli
 import BurstModeOutlinedIcon        from '@mui/icons-material/BurstModeOutlined'
 import PhotoFilterOutlinedIcon      from '@mui/icons-material/PhotoFilterOutlined'
 import SlideshowOutlinedIcon        from '@mui/icons-material/SlideshowOutlined'
+import AutoAwesomeOutlinedIcon      from '@mui/icons-material/AutoAwesomeOutlined'
 import RadioButtonUncheckedIcon     from '@mui/icons-material/RadioButtonUnchecked'
 
 // Registry of known stage IDs → visual configuration.
@@ -21,21 +22,24 @@ import RadioButtonUncheckedIcon     from '@mui/icons-material/RadioButtonUncheck
 //   undefined         — no skeleton
 //
 // hasSourceItems: true → stage sub-panel shows sources from turn.sources
+//
+// "building" is used as a PREFIX match for building_<blockId> codegen stages.
 export const STAGE_REGISTRY = {
   thinking:          { Icon: LightbulbOutlinedIcon,      defaultLabel: 'Thinking…' },
   decomposing:       { Icon: LightbulbOutlinedIcon,      defaultLabel: 'Decomposing…' },
-  searching:         { Icon: TravelExploreOutlinedIcon,  defaultLabel: 'Searching…',        hasSourceItems: true },
-  reading:           { Icon: ArticleOutlinedIcon,        defaultLabel: 'Reading sources…',  hasSourceItems: true },
+  searching:         { Icon: TravelExploreOutlinedIcon,  defaultLabel: 'Searching…',         hasSourceItems: true },
+  reading:           { Icon: ArticleOutlinedIcon,        defaultLabel: 'Reading sources…',   hasSourceItems: true },
   synthesising:      { Icon: AutoFixHighOutlinedIcon,    defaultLabel: 'Synthesising…' },
+  widgets:           { Icon: AutoAwesomeOutlinedIcon,    defaultLabel: 'Selecting widgets…' },
   planning:          { Icon: AccountTreeOutlinedIcon,    defaultLabel: 'Planning…' },
-  designing:         { Icon: DashboardOutlinedIcon,      defaultLabel: 'Designing…',        skeleton: 'blocks' },
+  designing:         { Icon: DashboardOutlinedIcon,      defaultLabel: 'Designing…' },
+  building:          { Icon: AutoFixHighOutlinedIcon,    defaultLabel: 'Building…' },
   generating_frames: { Icon: GridViewOutlinedIcon,       defaultLabel: 'Generating frames…', skeleton: 'frames_or_beats' },
-  generating:        { Icon: GridViewOutlinedIcon,       defaultLabel: 'Generating…',       skeleton: 'frames_or_beats' },
-  rendering:         { Icon: PhotoFilterOutlinedIcon,    defaultLabel: 'Rendering…',        skeleton: 'frames_or_beats' },
-  frames:            { Icon: BurstModeOutlinedIcon,      defaultLabel: 'Preparing frames…', skeleton: 'frames_or_beats' },
-  video:             { Icon: MovieCreationOutlinedIcon,  defaultLabel: 'Building video…',   skeleton: 'video' },
+  generating:        { Icon: GridViewOutlinedIcon,       defaultLabel: 'Generating…',        skeleton: 'frames_or_beats' },
+  rendering:         { Icon: PhotoFilterOutlinedIcon,    defaultLabel: 'Rendering…',         skeleton: 'frames_or_beats' },
+  frames:            { Icon: BurstModeOutlinedIcon,      defaultLabel: 'Preparing frames…',  skeleton: 'frames_or_beats' },
+  video:             { Icon: MovieCreationOutlinedIcon,  defaultLabel: 'Building video…',    skeleton: 'video' },
   assembling:        { Icon: SlideshowOutlinedIcon,      defaultLabel: 'Assembling video…' },
-  // Video stream 2 stages
   export_frames:     { Icon: BurstModeOutlinedIcon,      defaultLabel: 'Exporting frames…' },
   tts:               { Icon: MovieCreationOutlinedIcon,  defaultLabel: 'Generating audio…' },
 }

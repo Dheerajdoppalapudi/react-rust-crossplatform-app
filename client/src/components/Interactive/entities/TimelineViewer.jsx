@@ -1,5 +1,5 @@
 import { useMemo, useState, useRef, useCallback } from 'react'
-import { Box, Typography, Chip, Tooltip, IconButton, useTheme } from '@mui/material'
+import { Box, Typography, Tooltip, IconButton, useTheme } from '@mui/material'
 import { motion, AnimatePresence } from 'framer-motion'
 import ZoomInIcon    from '@mui/icons-material/ZoomIn'
 import ZoomOutIcon   from '@mui/icons-material/ZoomOut'
@@ -100,22 +100,13 @@ function SpineDot({ color }) {
 
 // ── VerticalTimeline ──────────────────────────────────────────────────────────
 
-function VerticalTimeline({ events, compact, zoom = 1, eraColor = null }) {
-  const spineColor = eraColor ? `${eraColor}55` : 'divider'
-
+function VerticalTimeline({ events, compact, zoom = 1 }) {
   return (
-    <Box sx={{
-      position: 'relative', px: 2, py: 1,
-      ...(eraColor ? {
-        backgroundColor: `${eraColor}08`,
-        borderRadius: `${RADIUS.md}px`,
-        mx: -1, px: 3,
-      } : {}),
-    }}>
+    <Box sx={{ position: 'relative', px: 2, py: 1 }}>
       <Box sx={{
         position: 'absolute', left: '50%', top: 0, bottom: 0,
         width: 2, transform: 'translateX(-50%)',
-        backgroundColor: spineColor,
+        backgroundColor: 'divider',
       }} />
       {events.map((event, i) => {
         const side = i % 2 === 0 ? 'left' : 'right'
@@ -133,7 +124,7 @@ function VerticalTimeline({ events, compact, zoom = 1, eraColor = null }) {
             }}>
               <EventCard event={event} side={side} orientation="vertical" index={i} compact={compact} zoom={zoom} />
             </Box>
-            <SpineDot color={event.color ?? eraColor ?? undefined} />
+            <SpineDot color={event.color ?? undefined} />
             <Box sx={{ flex: 1 }} />
           </Box>
         )
@@ -144,26 +135,18 @@ function VerticalTimeline({ events, compact, zoom = 1, eraColor = null }) {
 
 // ── HorizontalTimeline ────────────────────────────────────────────────────────
 
-function HorizontalTimeline({ events, compact, zoom = 1, eraColor = null }) {
-  const cardWidth  = (compact ? 140 : 220) * zoom
-  const spineColor = eraColor ? `${eraColor}55` : 'divider'
+function HorizontalTimeline({ events, compact, zoom = 1 }) {
+  const cardWidth = (compact ? 140 : 220) * zoom
 
   return (
-    <Box sx={{
-      pb: 1,
-      ...(eraColor ? {
-        backgroundColor: `${eraColor}08`,
-        borderRadius: `${RADIUS.sm}px`,
-        px: 1, pt: 0.5,
-      } : {}),
-    }}>
+    <Box sx={{ pb: 1 }}>
       <Box sx={{
         position: 'relative', display: 'flex', alignItems: 'center',
         minWidth: events.length * cardWidth, py: 2,
       }}>
         <Box sx={{
           position: 'absolute', top: '50%', left: 0, right: 0,
-          height: 2, backgroundColor: spineColor, transform: 'translateY(-50%)',
+          height: 2, backgroundColor: 'divider', transform: 'translateY(-50%)',
         }} />
         {events.map((event, i) => {
           const side = i % 2 === 0 ? 'top' : 'bottom'
@@ -177,7 +160,7 @@ function HorizontalTimeline({ events, compact, zoom = 1, eraColor = null }) {
                   <EventCard event={event} side="top" orientation="horizontal" index={i} compact={compact} zoom={zoom} />
                 </Box>
               )}
-              <SpineDot color={event.color ?? eraColor ?? undefined} />
+              <SpineDot color={event.color ?? undefined} />
               {side === 'bottom' && (
                 <Box sx={{ mt: 1 }}>
                   <EventCard event={event} side="bottom" orientation="horizontal" index={i} compact={compact} zoom={zoom} />
@@ -194,59 +177,15 @@ function HorizontalTimeline({ events, compact, zoom = 1, eraColor = null }) {
   )
 }
 
-// ── CategoryHeader ────────────────────────────────────────────────────────────
-
-function CategoryHeader({ label, isDark }) {
-  return (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, my: 2 }}>
-      <Box sx={{ flex: 1, height: 1, backgroundColor: 'divider' }} />
-      <Chip
-        label={label}
-        size="small"
-        sx={{
-          fontSize: TYPOGRAPHY.sizes.caption,
-          fontWeight: TYPOGRAPHY.weights.semibold,
-          backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)',
-          color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.45)',
-        }}
-      />
-      <Box sx={{ flex: 1, height: 1, backgroundColor: 'divider' }} />
-    </Box>
-  )
-}
-
-// ── EraHeader ─────────────────────────────────────────────────────────────────
-
-function EraHeader({ label, color }) {
-  return (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, my: 1.5 }}>
-      <Box sx={{ flex: 1, height: 2, borderRadius: 1, backgroundColor: `${color}44` }} />
-      <Chip
-        label={label}
-        size="small"
-        sx={{
-          fontSize: TYPOGRAPHY.sizes.caption,
-          fontWeight: TYPOGRAPHY.weights.semibold,
-          backgroundColor: `${color}18`,
-          color: color,
-          border: `1px solid ${color}44`,
-        }}
-      />
-      <Box sx={{ flex: 1, height: 2, borderRadius: 1, backgroundColor: `${color}44` }} />
-    </Box>
-  )
-}
 
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function TimelineViewer({
   entityId,
-  events       = [],
-  orientation  = 'vertical',
-  stepReveal   = false,
-  groupBy,
-  eras,           // [{label, key, color}] — era period shading
-  compact      = false,
+  events      = [],
+  orientation = 'vertical',
+  stepReveal  = false,
+  compact     = false,
   caption,
 }) {
   const theme      = useTheme()
@@ -262,49 +201,6 @@ export default function TimelineViewer({
     if (!stepReveal) return events
     return events.slice(0, stepIndex + 1)
   }, [events, stepReveal, stepIndex])
-
-  // Era lookup map
-  const eraMap = useMemo(() => {
-    if (!eras?.length) return {}
-    return Object.fromEntries(eras.map(e => [e.key, e]))
-  }, [eras])
-
-  // Group events into sections
-  const sections = useMemo(() => {
-    // Era grouping: group by event.era field, ordered by the eras prop array
-    if (eras?.length) {
-      const buckets = {}
-      for (const era of eras) buckets[era.key] = []
-      buckets['__other__'] = []
-
-      for (const ev of visibleEvents) {
-        const key = ev.era ?? '__other__'
-        if (!buckets[key]) buckets[key] = []
-        buckets[key].push(ev)
-      }
-
-      const result = eras
-        .filter(era => buckets[era.key]?.length > 0)
-        .map(era => ({ label: era.label, events: buckets[era.key], eraColor: era.color }))
-
-      if (buckets['__other__'].length > 0) {
-        result.push({ label: 'Other', events: buckets['__other__'], eraColor: null })
-      }
-      return result
-    }
-
-    // Standard groupBy
-    if (!groupBy) return [{ label: null, events: visibleEvents, eraColor: null }]
-
-    const groups = {}
-    const order  = []
-    for (const ev of visibleEvents) {
-      const key = ev[groupBy] ?? 'Other'
-      if (!groups[key]) { groups[key] = []; order.push(key) }
-      groups[key].push(ev)
-    }
-    return order.map(k => ({ label: k, events: groups[k], eraColor: null }))
-  }, [visibleEvents, groupBy, eras])
 
   // Ctrl/Cmd + scroll to zoom
   const handleWheel = useCallback((e) => {
@@ -383,20 +279,10 @@ export default function TimelineViewer({
           }}
         >
           <AnimatePresence>
-            {sections.map((section, si) => (
-              <Box key={si}>
-                {section.label && section.eraColor
-                  ? <EraHeader label={section.label} color={section.eraColor} />
-                  : section.label
-                    ? <CategoryHeader label={section.label} isDark={isDark} />
-                    : null
-                }
-                {orientation === 'vertical'
-                  ? <VerticalTimeline   events={section.events} compact={compact} zoom={zoom} eraColor={section.eraColor} />
-                  : <HorizontalTimeline events={section.events} compact={compact} zoom={zoom} eraColor={section.eraColor} />
-                }
-              </Box>
-            ))}
+            {orientation === 'vertical'
+              ? <VerticalTimeline   events={visibleEvents} compact={compact} zoom={zoom} />
+              : <HorizontalTimeline events={visibleEvents} compact={compact} zoom={zoom} />
+            }
           </AnimatePresence>
         </Box>
       </Box>

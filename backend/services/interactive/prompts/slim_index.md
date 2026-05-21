@@ -13,7 +13,7 @@ You MAY use any entity listed here — if you pick one not detailed above, const
 | `graph_canvas` | Node-edge graphs, trees, DAGs, dependency graphs, network topologies | `nodes[]`, `edges[]` |
 | `molecule_viewer` | 3D molecular structures, chemical bonds, drug molecules, proteins | `format`, `data` |
 | `map_viewer` | Geographic content, locations, routes, historical spread, regional comparisons | `center` ([lat, lng]) |
-| `timeline` | Chronological events, history, roadmaps, biographies, discoveries | `events[]` ({date, title, description}) |
+| `timeline` | Chronological events, history, roadmaps, biographies, discoveries | `events[]` ({date, title, description, color?, icon?}) |
 | `freeform_html` | Bespoke Canvas 2D widget when no pre-built type fits — escape hatch, 3s latency | `spec` (detailed plain-English widget description) |
 | `table_viewer` | Comparisons, complexity tables, feature matrices, benchmark results — ANY domain | `columns[]` ({key, label}), `rows[]` |
 | `terminal_output` | CLI commands + output, git walkthroughs, build steps, debugging sessions | `blocks[]` ({type: command\|output\|comment, content}) |
