@@ -99,7 +99,7 @@ def upsert_sources(conversation_id: str, sources: list[dict]) -> None:
         return
 
     texts = [
-        f"{s.get('title', '')} {s.get('content', '') or s.get('snippet', '')}"
+        f"{s.get('title', '')} {s.get('snippet', '')}"
         for s in sources
     ]
     embeddings = _embed(texts)
@@ -125,13 +125,21 @@ def upsert_sources(conversation_id: str, sources: list[dict]) -> None:
         logger.warning("chromadb_upsert_failed", error=str(exc))
 
 
-def retrieve_sources(conversation_id: str, query: str, top_k: int = 8) -> list[dict]:
+def retrieve_sources(
+    conversation_id: str,
+    query: str,
+    top_k: int = 8,
+    distance_threshold: float = 0.5,
+) -> list[dict]:
     """
-    Retrieve the top-K semantically relevant sources for a query from the
-    conversation's ChromaDB collection.
+    Retrieve semantically relevant sources for a query from the conversation's
+    ChromaDB collection.
 
-    Returns a list of source dicts (url, title, snippet, domain, score),
-    or empty list if ChromaDB is unavailable or the collection doesn't exist yet.
+    Only returns results with cosine distance < distance_threshold (0 = identical,
+    1 = orthogonal). Results beyond the threshold are discarded so irrelevant
+    sources from prior turns never pollute a different-topic follow-up.
+
+    Returns empty list if ChromaDB is unavailable or the collection doesn't exist.
     """
     client = _get_client()
     if not client:
@@ -148,8 +156,13 @@ def retrieve_sources(conversation_id: str, query: str, top_k: int = 8) -> list[d
             n_results=min(top_k, col.count()),
             include=["metadatas", "distances"],
         )
+        metadatas = (results.get("metadatas") or [[]])[0]
+        distances = (results.get("distances") or [[]])[0]
+
         sources = []
-        for meta in (results.get("metadatas") or [[]])[0]:
+        for meta, dist in zip(metadatas, distances):
+            if dist > distance_threshold:
+                continue
             sources.append({
                 "url":     meta.get("url", ""),
                 "title":   meta.get("title", ""),
@@ -157,7 +170,10 @@ def retrieve_sources(conversation_id: str, query: str, top_k: int = 8) -> list[d
                 "domain":  meta.get("domain", ""),
                 "score":   float(meta.get("score", 0.5)),
             })
-        logger.info("vector_store_retrieve", conv=conversation_id[:8], query=query[:60], found=len(sources))
+
+        logger.info("vector_store_retrieve",
+                    conv=conversation_id[:8], query=query[:60],
+                    found=len(sources), threshold=distance_threshold)
         return sources
     except Exception as exc:
         logger.debug("chromadb_retrieve_skipped", error=str(exc))

@@ -21,12 +21,11 @@ def source_summary(s: SearchResult) -> dict:
 
 
 def source_full(s: SearchResult) -> dict:
-    """Full dict persisted to DB — includes content for follow-up reuse."""
+    """Full dict persisted to DB and fed to LLM/ChromaDB."""
     return {
         "title":          s.title,
         "url":            s.url,
         "snippet":        s.snippet,
-        "content":        s.content,
         "domain":         s.domain,
         "score":          s.score,
         "published_date": s.published_date,

@@ -79,7 +79,7 @@ from services.generation_service import (
 from services.llm_service import LLMService, OpenAIProvider, ClaudeProvider
 from services.research.file_extractor import extract_urls_from_text, extract_text
 from services.research.search_provider import SearchResult, tavily
-from services.research.source_processor import rank_and_deduplicate, truncate_content
+from services.research.source_processor import rank_and_deduplicate
 from services.research.research_service import source_summary, source_full
 from services.research.vector_store import upsert_sources, retrieve_sources
 from dependencies.auth import get_current_user
@@ -284,8 +284,8 @@ async def _generate_stream(p: dict):
                 parent_session_id=parent_session_id,
             ) if parent_session_id else ""
 
-        # ── 2. Load prior synthesis_text for follow-up context ────────────────
-        prior_synthesis = _load_prior_synthesis(conversation_id, FOLLOWUP_CONTEXT_TURNS, current_user.id)
+        # ── 2. Load prior synthesis_text from ancestor chain (branch-aware) ──
+        prior_synthesis = _load_prior_synthesis(parent_session_id, FOLLOWUP_CONTEXT_TURNS)
 
         # ── 3. Thinking stage + plan_and_classify ─────────────────────────────
         think_evt = {"type": "stage", "stage": "thinking", "label": "Thinking about your question…"}
@@ -306,14 +306,26 @@ async def _generate_stream(p: dict):
         yield _sse(think_done)
 
         # ── 4. Search phase (conditional) ─────────────────────────────────────
-        sources:      list[dict] = []
-        sources_full: list[dict] = []
+        sources:          list[dict] = []
+        sources_full:     list[dict] = []   # top-N for LLM
+        sources_all:      list[dict] = []   # all results for ChromaDB
 
         should_search = (research_mode == "deep_research") or intent.get("needs_search", False)
+
+        # For instant follow-ups, try ChromaDB before hitting Tavily
+        if should_search and parent_session_id and research_mode == "instant":
+            cached = await asyncio.to_thread(
+                retrieve_sources, conversation_id, message, FOLLOWUP_TOP_K_SOURCES
+            )
+            if len(cached) >= 3:
+                sources      = cached
+                sources_full = cached
+                should_search = False
+                logger.info("chromadb_cache_hit", conv=conversation_id[:8], n=len(cached))
+
         if should_search:
             file_paths = _resolve_file_ids(uploaded_file_ids, current_user.id)
             extra_urls = extract_urls_from_text(message)
-            clean_message = _strip_urls(message)
 
             async for event in _search_phase(
                 intent=intent,
@@ -327,7 +339,8 @@ async def _generate_stream(p: dict):
                     yield _sse(await heartbeat_queue.get())
                 if event["type"] == "_sources_ready":
                     sources      = event["sources"]
-                    sources_full = event["sources_full"]
+                    sources_full = event["sources_for_llm"]
+                    sources_all  = event["sources_all"]
                 else:
                     _apply_stage_log(event)
                     yield _sse(event)
@@ -447,9 +460,9 @@ async def _generate_stream(p: dict):
             if s.get("status") == "active":
                 s["status"] = "done"
 
-        # Upsert sources to ChromaDB for follow-up retrieval
-        if sources_full:
-            await asyncio.to_thread(upsert_sources, conversation_id, sources_full)
+        # Upsert ALL sources to ChromaDB (not just top-N) for richer follow-up retrieval
+        if sources_all:
+            await asyncio.to_thread(upsert_sources, conversation_id, sources_all)
 
         update_session(
             session_id,
@@ -520,12 +533,12 @@ async def _search_phase(
     Unified search pipeline for instant (light) and deep_research (full) modes.
 
     Yields SSE events and one internal sentinel:
-      {type: '_sources_ready', sources: [...], sources_full: [...]}
+      {type: '_sources_ready', sources, sources_for_llm, sources_all}
 
-    sources      — summaries of ALL found results (for UI display and DB storage)
-    sources_full — top-N with truncated content (for LLM and ChromaDB)
+    sources          — summaries of ALL found results (for UI display and DB storage)
+    sources_for_llm  — top-N for LLM injection (scene planner / synthesiser)
+    sources_all      — all results for ChromaDB embedding
 
-    All raw content is saved to output_dir/sources_raw.json before truncation.
     The caller forwards all non-internal events to the client.
     """
     search_queries = intent.get("search_queries", [])
@@ -614,74 +627,36 @@ async def _search_phase(
     ranked    = rank_and_deduplicate(all_results, DEEP_SEARCH_SOURCES)
     all_final = file_sources + url_sources + ranked
 
-    # Top-N for LLM — only these get content-truncated and fed to the scene planner
+    # Top-N fed to the LLM; all sources embedded in ChromaDB for follow-up retrieval
     final = all_final[:DEEP_SOURCES_IN_ANSWER]
 
-    if final:
-        n_read = len(final)
-        yield {"type": "stage", "stage": "reading", "label": f"Reading {n_read} sources…"}
+    if all_final:
+        yield {"type": "stage", "stage": "reading", "label": f"Reading {len(all_final)} sources…"}
         t_read = time.time()
-
-        # Disk I/O + truncation both run inside the reading stage so duration is meaningful
-        _save_sources_raw(all_final, output_dir)
-
-        for s in final:
-            s.content = truncate_content(s.content or s.snippet)
-
         yield {"type": "stage_done", "stage": "reading", "duration_s": round(time.time() - t_read, 2)}
-    else:
-        _save_sources_raw(all_final, output_dir)
 
     yield {
-        "type":         "_sources_ready",
-        # All found — shown in UI sources panel and stored in DB
-        "sources":      [source_summary(s) for s in all_final],
-        # Top-N truncated — fed to LLM and embedded in ChromaDB
-        "sources_full": [source_full(s)    for s in final],
+        "type":            "_sources_ready",
+        "sources":         [source_summary(s) for s in all_final],   # UI display + DB
+        "sources_for_llm": [source_full(s)    for s in final],        # top-N for LLM
+        "sources_all":     [source_full(s)    for s in all_final],    # all N for ChromaDB
     }
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _save_sources_raw(sources, output_dir: str) -> None:
-    """Persist full extracted source content to disk before truncation."""
-    try:
-        import os
-        os.makedirs(output_dir, exist_ok=True)
-        data = [
-            {
-                "title":   s.title,
-                "url":     s.url,
-                "domain":  s.domain,
-                "score":   s.score,
-                "snippet": s.snippet,
-                "content": s.content,
-            }
-            for s in sources
-        ]
-        with open(f"{output_dir}/sources_raw.json", "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-    except Exception as exc:
-        logger.warning("sources_raw_write_failed", output_dir=output_dir, error=str(exc))
 
-
-def _load_prior_synthesis(conversation_id: str, limit: int, user_id: str) -> str:
-    """Load the last N synthesis_text values from prior turns for follow-up context."""
-    if not conversation_id:
+def _load_prior_synthesis(parent_session_id: Optional[str], limit: int) -> str:
+    """Load synthesis_text from the ancestor chain — branch-aware."""
+    if not parent_session_id:
         return ""
     try:
-        with get_db() as conn:
-            rows = conn.execute(
-                "SELECT synthesis_text FROM sessions "
-                "WHERE conversation_id = ? AND user_id = ? AND status = 'done' "
-                "AND synthesis_text IS NOT NULL "
-                "ORDER BY turn_index DESC LIMIT ?",
-                (conversation_id, user_id, limit),
-            ).fetchall()
-        texts = [r["synthesis_text"] for r in reversed(rows) if r["synthesis_text"]]
+        from services.generation_service import _collect_ancestor_chain
+        chain = _collect_ancestor_chain(parent_session_id, limit)
+        texts = [r["synthesis_text"] for r in chain if r.get("synthesis_text")]
         return "\n\n---\n\n".join(texts) if texts else ""
     except Exception as exc:
-        logger.warning("load_prior_synthesis_failed", conv=conversation_id, error=str(exc))
+        logger.warning("load_prior_synthesis_failed", parent=parent_session_id, error=str(exc))
         return ""
 
 

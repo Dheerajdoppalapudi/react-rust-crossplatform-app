@@ -56,19 +56,19 @@ class TavilyProvider:
                     self._client.search,
                     query=query,
                     max_results=max_results,
-                    include_raw_content=True,
-                    search_depth="advanced",
+                    search_depth="basic",
                 ),
                 timeout=timeout,
             )
             results = []
             for r in response.get("results", []):
                 domain = urlparse(r.get("url", "")).netloc.lstrip("www.")
+                snippet = r.get("content", "")
                 results.append(SearchResult(
                     title=r.get("title", ""),
                     url=r.get("url", ""),
-                    snippet=r.get("content", ""),
-                    content=r.get("raw_content", "") or r.get("content", ""),
+                    snippet=snippet,
+                    content=snippet,   # same as snippet — no raw scraping
                     domain=domain,
                     score=r.get("score", 0.0),
                     published_date=r.get("published_date"),

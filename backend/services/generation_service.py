@@ -247,7 +247,7 @@ def _collect_ancestor_chain(
     with get_db() as conn:
         while current_id and len(chain) < limit:
             row = conn.execute(
-                "SELECT id, prompt, turn_index, output_dir, parent_session_id "
+                "SELECT id, prompt, turn_index, output_dir, parent_session_id, synthesis_text "
                 "FROM sessions WHERE id = ? AND status = 'done'",
                 (current_id,),
             ).fetchone()
@@ -290,7 +290,9 @@ def build_interactive_context(
                 scene = json.load(f)
 
             lines.append(f"  Title: {scene.get('title', '')}")
-            lines.append(f"  Intent: {scene.get('intent', '')}")
+            lo = scene.get("learning_objective", "")
+            if lo:
+                lines.append(f"  Learning objective: {lo}")
 
             for block in scene.get("blocks", []):
                 if block.get("type") == "text" and block.get("content"):
