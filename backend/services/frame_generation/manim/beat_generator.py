@@ -12,7 +12,7 @@ Failed beats are logged and skipped (mp4_path=None); no retries in the beat path
 
 import ast
 import asyncio
-import logging
+import structlog
 import os
 import shutil
 import subprocess
@@ -48,7 +48,7 @@ _FFMPEG_EXE: Optional[str] = _get_ffmpeg_exe()
 
 from .template_filler import fill_template
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 _PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
 _CODEGEN_PROMPT_TEMPLATE: str = (
@@ -97,31 +97,26 @@ def _render_beat_sync(
             timeout=BEAT_RENDER_TIMEOUT_S,
         )
         if result.returncode != 0:
-            logger.error(
-                "beat_render_failed beat=%d\nSTDERR:\n%s",
-                beat_index, result.stderr[-600:],
-            )
+            logger.error("beat_render_failed", beat=beat_index, stderr=result.stderr[-600:])
             return None, result.stderr
 
         mp4s = list(Path(media_dir).rglob("*.mp4"))
         if not mp4s:
-            logger.error(
-                "beat_render_no_mp4 beat=%d media_dir=%s", beat_index, media_dir
-            )
+            logger.error("beat_render_no_mp4", beat=beat_index, media_dir=media_dir)
             return None, result.stderr
 
         best = str(max(mp4s, key=lambda p: p.stat().st_mtime))
-        logger.info("beat_rendered beat=%d path=%s", beat_index, best)
+        logger.info("beat_rendered", beat=beat_index, path=best)
         return best, ""
 
     except subprocess.TimeoutExpired:
-        logger.error("beat_render_timeout beat=%d timeout_s=%d", beat_index, BEAT_RENDER_TIMEOUT_S)
+        logger.error("beat_render_timeout", beat=beat_index, timeout_s=BEAT_RENDER_TIMEOUT_S)
         return None, "TimeoutExpired"
     except FileNotFoundError:
-        logger.error("beat_render_manim_missing — run: pip install manim")
+        logger.error("beat_render_manim_missing")
         return None, "FileNotFoundError: manim CLI missing"
     except Exception as exc:
-        logger.error("beat_render_unexpected beat=%d error=%s", beat_index, exc, exc_info=True)
+        logger.error("beat_render_unexpected", beat=beat_index, error=str(exc), exc_info=True)
         return None, str(exc)
 
 
@@ -212,7 +207,7 @@ async def _generate_one_beat(beat: BeatPlan, output_dir: str) -> BeatResult:
 
         valid, syn_err = _is_valid_syntax(code)
         if not valid:
-            logger.warning("beat_syntax_error_attempt1 beat=%d err=%s — retrying", beat.index, syn_err)
+            logger.warning("beat_syntax_error_attempt1", beat=beat.index, err=syn_err)
             _log({"event": "beat_retry", "index": beat.index, "reason": f"syntax: {syn_err}"})
             retry_template = (
                 f"⚠️ RETRY — previous attempt had a syntax error: {syn_err}\n"
@@ -221,7 +216,7 @@ async def _generate_one_beat(beat: BeatPlan, output_dir: str) -> BeatResult:
             code = await asyncio.to_thread(_codegen, beat.description, retry_template)
             valid, syn_err2 = _is_valid_syntax(code)
             if not valid:
-                logger.error("beat_syntax_error_attempt2 beat=%d err=%s — skipping", beat.index, syn_err2)
+                logger.error("beat_syntax_error_attempt2", beat=beat.index, err=syn_err2)
                 _log({"event": "beat_failed", "index": beat.index, "reason": "syntax_after_retry"})
                 return BeatResult(beat_index=beat.index, mp4_path=None,
                                   caption=beat.title, keywords=beat.keywords,
@@ -243,10 +238,7 @@ async def _generate_one_beat(beat: BeatPlan, output_dir: str) -> BeatResult:
         # 5. Render failed — classify error and retry with targeted hint
         error_cat = _classify_render_error(stderr)
         bad_name  = _extract_bad_name(stderr)
-        logger.warning(
-            "beat_render_failed_attempt1 beat=%d category=%s%s — retrying",
-            beat.index, error_cat, f" bad={bad_name!r}" if bad_name else "",
-        )
+        logger.warning("beat_render_failed_attempt1", beat=beat.index, category=error_cat, bad=bad_name or None)
         _log({"event": "beat_retry", "index": beat.index,
               "reason": error_cat, "stderr": stderr[-300:]})
 
@@ -255,7 +247,7 @@ async def _generate_one_beat(beat: BeatPlan, output_dir: str) -> BeatResult:
 
         valid2, syn_err3 = _is_valid_syntax(code2)
         if not valid2:
-            logger.error("beat_syntax_error_retry beat=%d err=%s — skipping", beat.index, syn_err3)
+            logger.error("beat_syntax_error_retry", beat=beat.index, err=syn_err3)
             _log({"event": "beat_failed", "index": beat.index, "reason": "syntax_on_error_retry"})
             return BeatResult(beat_index=beat.index, mp4_path=None,
                               caption=beat.title, keywords=beat.keywords,
@@ -267,10 +259,10 @@ async def _generate_one_beat(beat: BeatPlan, output_dir: str) -> BeatResult:
         )
 
         if mp4_2:
-            logger.info("beat_recovered_on_retry beat=%d category=%s", beat.index, error_cat)
+            logger.info("beat_recovered_on_retry", beat=beat.index, category=error_cat)
             cache_store(beat, mp4_2)
         else:
-            logger.error("beat_failed_both_attempts beat=%d category=%s", beat.index, error_cat)
+            logger.error("beat_failed_both_attempts", beat=beat.index, category=error_cat)
             _log({"event": "beat_failed", "index": beat.index, "reason": "render_after_retry"})
 
         return BeatResult(beat_index=beat.index, mp4_path=mp4_2,
@@ -334,7 +326,7 @@ async def _add_audio_to_one_beat(
         backend = _openai_tts_generate if use_openai else _gtts_generate
         ok = await asyncio.to_thread(backend, result.narration, audio_path)
         if not ok:
-            logger.warning("beat_tts_failed beat=%d — keeping silent", result.beat_index)
+            logger.warning("beat_tts_failed", beat=result.beat_index)
             audio_path = None  # type: ignore[assignment]
 
     effective_audio = audio_path if (audio_path and os.path.exists(audio_path)) else None
@@ -348,11 +340,10 @@ async def _add_audio_to_one_beat(
             result.caption,
             mixed_path,
         )
-        logger.info("beat_audio_done beat=%d", result.beat_index)
+        logger.info("beat_audio_done", beat=result.beat_index)
         return mixed_path
     except Exception as exc:
-        logger.warning("beat_mix_failed beat=%d error=%s — keeping silent",
-                       result.beat_index, exc)
+        logger.warning("beat_mix_failed", beat=result.beat_index, error=str(exc))
         return silent_mp4
 
 
@@ -384,7 +375,7 @@ async def add_audio_to_beats(
     paths: list[str] = []
     for r, outcome in zip(successful, mixed):
         if isinstance(outcome, Exception):
-            logger.warning("beat_audio_exception beat=%d error=%s", r.beat_index, outcome)
+            logger.warning("beat_audio_exception", beat=r.beat_index, error=str(outcome))
             paths.append(r.mp4_path)  # fallback to silent
         else:
             paths.append(outcome)
@@ -401,12 +392,12 @@ async def assemble_beats(beat_mp4s: list[str], output_path: str) -> Optional[str
     Returns output_path on success, None on failure.
     """
     if not beat_mp4s:
-        logger.error("assemble_beats no mp4s to concat")
+        logger.error("assemble_beats_no_mp4s")
         return None
 
     ffmpeg = _FFMPEG_EXE
     if not ffmpeg:
-        logger.error("assemble_beats ffmpeg not found — install ffmpeg or pip install imageio-ffmpeg")
+        logger.error("assemble_beats_ffmpeg_not_found")
         return None
 
     concat_list = output_path.replace(".mp4", "_list.txt")
@@ -435,13 +426,13 @@ async def assemble_beats(beat_mp4s: list[str], output_path: str) -> Optional[str
     try:
         result = await asyncio.to_thread(_run)
         if result.returncode != 0:
-            logger.error("assemble_beats ffmpeg failed\nSTDERR:\n%s", result.stderr[-400:])
+            logger.error("assemble_beats_ffmpeg_failed", stderr=result.stderr[-400:])
             return None
-        logger.info("assemble_beats done  output=%s", output_path)
+        logger.info("assemble_beats_done", output=output_path)
         return output_path
     except subprocess.TimeoutExpired:
-        logger.error("assemble_beats ffmpeg timeout")
+        logger.error("assemble_beats_ffmpeg_timeout")
         return None
     except Exception as exc:
-        logger.error("assemble_beats unexpected error=%s", exc, exc_info=True)
+        logger.error("assemble_beats_unexpected_error", error=str(exc), exc_info=True)
         return None

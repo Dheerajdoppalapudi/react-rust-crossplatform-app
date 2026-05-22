@@ -459,14 +459,19 @@ return success({"key": "value"})
 ## Logging
 
 ```python
-import logging
-logger = logging.getLogger(__name__)
+import structlog
+logger = structlog.get_logger(__name__)
 
-# Use structured key=value pairs — never f-strings
-logger.info("session_complete  session_id=%s  duration_s=%.1f  tokens=%d", sid, t, n)
-logger.warning("tavily_timeout  query=%r  timeout_s=%.1f", query[:80], timeout)
-logger.error("llm_failed  error=%s", exc, exc_info=True)
+# Use kwargs — every key becomes a real JSON field, queryable in CloudWatch/Datadog
+logger.info("session_complete", session_id=sid, duration_s=round(t, 1), tokens=n)
+logger.warning("tavily_timeout", query=query[:80], timeout_s=timeout)
+logger.error("llm_failed", error=str(exc), exc_info=True)
 ```
+
+- **Never** use `logging.getLogger()` in application code — always `structlog.get_logger()`.
+- **Never** use format strings (`%s`, f-strings) in log calls — pass kwargs so each key is a structured field.
+- Request-scoped context (e.g. `request_id`) is bound once in middleware via `structlog.contextvars.bind_contextvars()` and auto-included in every log line for that request — no need to pass it explicitly.
+- `exc_info=True` works unchanged — structlog's stdlib bridge forwards it to the formatter.
 
 In production (`ENV=production`): structlog outputs JSON lines — queryable in CloudWatch.
 In development: coloured human-readable console via structlog ConsoleRenderer.

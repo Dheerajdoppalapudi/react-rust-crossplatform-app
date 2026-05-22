@@ -2,11 +2,11 @@
 Extract plain text from uploaded documents and detect URLs in user messages.
 """
 
-import logging
+import structlog
 import re
 from pathlib import Path
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 _URL_RE = re.compile(r'https?://[^\s<>"\']+')
 
@@ -23,7 +23,7 @@ def extract_text(file_path: str) -> str:
     """
     path = Path(file_path)
     if not path.exists():
-        logger.warning("file_extractor: path does not exist: %s", file_path)
+        logger.warning("file_extractor_missing", path=file_path)
         return ""
 
     ext = path.suffix.lower()
@@ -34,10 +34,10 @@ def extract_text(file_path: str) -> str:
             return _extract_pptx(file_path)
         if ext in (".txt", ".md", ".markdown"):
             return path.read_text(encoding="utf-8", errors="ignore")
-        logger.warning("file_extractor: unsupported extension %s", ext)
+        logger.warning("file_extractor_unsupported", ext=ext)
         return ""
     except Exception as e:
-        logger.error("file_extractor: failed to extract %s: %s", file_path, e)
+        logger.error("file_extractor_failed", path=file_path, error=str(e))
         return ""
 
 

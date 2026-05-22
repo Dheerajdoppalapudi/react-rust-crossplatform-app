@@ -19,7 +19,7 @@ from core.logging_config import setup_logging
 
 setup_logging()
 
-import logging
+import structlog
 import uuid
 
 from contextlib import asynccontextmanager
@@ -37,7 +37,7 @@ from core.limiter import limiter
 from core.responses import success
 from routers import auth, conversations, export, generate, sessions, upload, video
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 # ── Lifespan ──────────────────────────────────────────────────────────────────
@@ -63,7 +63,7 @@ try:
     from prometheus_client import make_asgi_app as _make_metrics_app
     _metrics_app = _make_metrics_app()
     app.mount("/metrics", _metrics_app)
-    logger.info("prometheus_metrics_mounted  path=/metrics")
+    logger.info("prometheus_metrics_mounted", path="/metrics")
 except ImportError:
     logger.warning("prometheus-client not installed — /metrics endpoint unavailable")
 
@@ -86,8 +86,11 @@ async def request_id_middleware(request: Request, call_next):
     The ID is added to the response header so it can be correlated in client logs.
     """
     request_id = request.headers.get("X-Request-ID") or uuid.uuid4().hex
-    # Store on request state so route handlers / dependencies can read it.
     request.state.request_id = request_id
+    # Bind to structlog contextvars so every log line in this request
+    # automatically includes request_id without explicit passing.
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(request_id=request_id)
 
     response = await call_next(request)
     response.headers["X-Request-ID"] = request_id
@@ -130,12 +133,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    logger.error(
-        "unhandled_exception  path=%s  request_id=%s",
-        request.url.path,
-        getattr(request.state, "request_id", "unknown"),
-        exc_info=True,
-    )
+    logger.error("unhandled_exception", path=request.url.path, exc_info=True)
     return JSONResponse({"status": "error", "error": "Internal server error"}, status_code=500)
 
 

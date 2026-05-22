@@ -7,7 +7,7 @@ Fixes applied:
           cannot enumerate or access each other's uploads.
 """
 
-import logging
+import structlog
 import os
 import uuid
 
@@ -19,7 +19,7 @@ from core.responses import success
 from dependencies.auth import get_current_user
 from schemas.sessions import UploadResponse, ChatWithFilesResponse
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 router = APIRouter()
 
@@ -54,10 +54,7 @@ async def upload_files(
         filename = f"{uuid.uuid4().hex}{ext}"
         filepath = upload_dir / filename
         filepath.write_bytes(content)
-        logger.info(
-            "file_uploaded  user=%s  filename=%r  size=%d",
-            current_user.id, file.filename, len(content),
-        )
+        logger.info("file_uploaded", user=current_user.id, filename=file.filename, size=len(content))
         saved.append({
             "original_name": file.filename,
             "saved_as":      filename,
@@ -85,10 +82,7 @@ async def chat_with_files(
         ext      = os.path.splitext(file.filename or "")[1]
         filename = f"{uuid.uuid4().hex}{ext}"
         (upload_dir / filename).write_bytes(content)
-        logger.info(
-            "file_uploaded  user=%s  filename=%r  size=%d",
-            current_user.id, file.filename, len(content),
-        )
+        logger.info("file_uploaded", user=current_user.id, filename=file.filename, size=len(content))
         saved.append({
             "original_name": file.filename,
             "saved_as":      filename,

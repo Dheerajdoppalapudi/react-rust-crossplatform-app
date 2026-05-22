@@ -2,13 +2,13 @@
 Source ranking, deduplication, and token budget enforcement.
 """
 
-import logging
+import structlog
 from urllib.parse import urlparse
 
 from core.config import DEEP_MAX_TOKENS_SOURCE
 from services.research.search_provider import SearchResult
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 # Domains that receive a quality score boost
 _HIGH_AUTHORITY_DOMAINS = frozenset({

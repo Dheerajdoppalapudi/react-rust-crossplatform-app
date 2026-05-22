@@ -7,14 +7,14 @@ every beat. Subsequent code-gen calls are pure Manim API translation.
 """
 
 import asyncio
-import logging
+import structlog
 from pathlib import Path
 
 from services.llm_service import LLMService, OpenAIProvider
 from services.frame_generation.planner import call_llm, _extract_json, _log
 from .beat_types import BeatScript
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 _PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
 _PROMPT_TEMPLATE: str = (_PROMPTS_DIR / "planning_beats.md").read_text(encoding="utf-8")

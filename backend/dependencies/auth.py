@@ -8,7 +8,7 @@ This token expires in MEDIA_TOKEN_EXPIRE_MINUTES (default 5 min) so even if
 logged in server access logs it expires before it can be exploited.
 """
 
-import logging
+import structlog
 import time
 from typing import Optional
 
@@ -20,7 +20,7 @@ from core.config import JWT_ALGORITHM, JWT_SECRET_KEY, MEDIA_TOKEN_EXPIRE_MINUTE
 from core.database import get_user_by_id
 from core.db_models import User
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 _bearer = HTTPBearer(auto_error=False)
 

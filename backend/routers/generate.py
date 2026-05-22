@@ -33,7 +33,7 @@ SSE event schema (all modes share the same envelope):
 
 import asyncio
 import json
-import logging
+import structlog
 import time
 import uuid
 from pathlib import Path
@@ -84,7 +84,7 @@ from services.research.research_service import source_summary, source_full
 from services.research.vector_store import upsert_sources, retrieve_sources
 from dependencies.auth import get_current_user
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 router = APIRouter()
 
@@ -100,7 +100,7 @@ def _write_activity_log(output_dir: str, lifecycle_log: list) -> None:
         with open(f"{output_dir}/activity_log.json", "w") as f:
             json.dump(lifecycle_log, f, indent=2)
     except Exception as exc:
-        logger.warning("activity_log_write_failed  output_dir=%s  error=%s", output_dir, exc)
+        logger.warning("activity_log_write_failed", output_dir=output_dir, error=str(exc))
 
 
 @router.post("/api/generate")
@@ -431,10 +431,14 @@ async def _generate_stream(p: dict):
 
         _log({"event": "request_complete", "duration_ms": duration_ms, "session_id": session_id})
         logger.info(
-            "generate_complete  session=%s  render_path=%s  research=%s  video=%s  "
-            "duration_ms=%d  llm_calls=%d  tokens=%d",
-            session_id, result_payload.get("render_path"), research_mode, video_enabled,
-            duration_ms, api_call_count, final_usage.get("total_tokens", 0),
+            "generate_complete",
+            session=session_id,
+            render_path=result_payload.get("render_path"),
+            research=research_mode,
+            video=video_enabled,
+            duration_ms=duration_ms,
+            llm_calls=api_call_count,
+            tokens=final_usage.get("total_tokens", 0),
         )
 
         await asyncio.to_thread(_write_activity_log, output_dir, lifecycle_log)
@@ -484,12 +488,12 @@ async def _generate_stream(p: dict):
         yield _sse(done_event)
 
     except asyncio.CancelledError:
-        logger.info("generate_cancelled  session=%s", session_id)
+        logger.info("generate_cancelled", session=session_id)
         update_session(session_id, status="error")
         raise
 
     except Exception as exc:
-        logger.error("generate_failed  session=%s  error=%s", session_id, exc, exc_info=True)
+        logger.error("generate_failed", session=session_id, error=str(exc), exc_info=True)
         _log({"event": "error", "error": str(exc)})
         await asyncio.to_thread(_write_activity_log, output_dir, lifecycle_log)
         update_session(session_id, status="error")
@@ -658,7 +662,7 @@ def _save_sources_raw(sources, output_dir: str) -> None:
         with open(f"{output_dir}/sources_raw.json", "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
     except Exception as exc:
-        logger.warning("sources_raw_write_failed  output_dir=%s  error=%s", output_dir, exc)
+        logger.warning("sources_raw_write_failed", output_dir=output_dir, error=str(exc))
 
 
 def _load_prior_synthesis(conversation_id: str, limit: int, user_id: str) -> str:
@@ -677,7 +681,7 @@ def _load_prior_synthesis(conversation_id: str, limit: int, user_id: str) -> str
         texts = [r["synthesis_text"] for r in reversed(rows) if r["synthesis_text"]]
         return "\n\n---\n\n".join(texts) if texts else ""
     except Exception as exc:
-        logger.warning("load_prior_synthesis_failed  conv=%s  error=%s", conversation_id, exc)
+        logger.warning("load_prior_synthesis_failed", conv=conversation_id, error=str(exc))
         return ""
 
 

@@ -15,7 +15,7 @@ intent_type is "math". Manim must be installed: pip install manim
 """
 
 import asyncio
-import logging
+import structlog
 import os
 import re
 import subprocess
@@ -25,7 +25,7 @@ from typing import Optional, Tuple
 
 from services.frame_generation.planner import GenerationPlan, FramePlan, call_llm
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -145,7 +145,7 @@ def _sanitize_manim_code(code: str) -> Tuple[str, list]:
         fixes.append("added missing background_color")
 
     if fixes:
-        logger.info("Sanitized Manim code  fixes=%s", fixes)
+        logger.info("manim_code_sanitized", fixes=fixes)
 
     return code, fixes
 
@@ -357,7 +357,7 @@ def _render_frame(code: str, frame_index: int, output_dir: str) -> Tuple[Optiona
         "GeneratedScene",
     ]
 
-    logger.debug("Rendering Manim frame %d  dir=%s", frame_index, frame_dir)
+    logger.debug("manim_render_start", frame=frame_index, dir=frame_dir)
     try:
         result = subprocess.run(
             cmd,
@@ -367,30 +367,27 @@ def _render_frame(code: str, frame_index: int, output_dir: str) -> Tuple[Optiona
         )
 
         if result.returncode != 0:
-            logger.error(
-                "Manim render failed  frame=%d\nSTDERR:\n%s",
-                frame_index, result.stderr[-800:],
-            )
+            logger.error("manim_render_failed", frame=frame_index, stderr=result.stderr[-800:])
             return None, result.stderr
 
         mp4s = list(Path(media_dir).rglob("*.mp4"))
         if not mp4s:
-            logger.error("Manim render completed but no .mp4 found  frame=%d  media_dir=%s", frame_index, media_dir)
+            logger.error("manim_render_no_mp4", frame=frame_index, media_dir=media_dir)
             return None, result.stderr
 
         # Pick the most recently written .mp4
         best = str(max(mp4s, key=lambda p: p.stat().st_mtime))
-        logger.info("Manim frame %d rendered → %s", frame_index, best)
+        logger.info("manim_frame_rendered", frame=frame_index, path=best)
         return best, ""
 
     except subprocess.TimeoutExpired:
-        logger.error("Manim render timed out (180 s)  frame=%d", frame_index)
+        logger.error("manim_render_timeout", frame=frame_index, timeout_s=180)
         return None, "TimeoutExpired"
     except FileNotFoundError:
-        logger.error("'manim' CLI not found — run: pip install manim")
+        logger.error("manim_cli_not_found")
         return None, "FileNotFoundError: manim CLI missing"
     except Exception as e:
-        logger.error("Manim frame %d unexpected error: %s", frame_index, e, exc_info=True)
+        logger.error("manim_render_unexpected_error", frame=frame_index, error=str(e), exc_info=True)
         return None, str(e)
 
 
@@ -410,30 +407,26 @@ async def _generate_one_manim_frame(
     code = _extract_code(raw)
     code, fixes = _sanitize_manim_code(code)
     if fixes:
-        logger.info("Frame %d sanitized: %s", frame_index, fixes)
+        logger.info("manim_frame_sanitized", frame=frame_index, fixes=fixes)
 
     mp4, stderr = await asyncio.to_thread(_render_frame, code, frame_index, output_dir)
     if mp4 is not None:
         return mp4
 
-    # Classify the error and extract the offending name for a targeted retry
     error_category = _classify_render_error(stderr)
     bad_name = _extract_bad_name(stderr)
-    logger.warning(
-        "Frame %d render failed (category=%s%s) — retrying with targeted prompt",
-        frame_index, error_category, f", bad={bad_name!r}" if bad_name else "",
-    )
+    logger.warning("manim_frame_render_failed_retrying", frame=frame_index, category=error_category, bad=bad_name or None)
 
     # Fast path for constructor-kwarg errors: strip the bad kwarg from the
     # existing code and re-render without spending an LLM call.
     if error_category == "constructor_kwargs" and bad_name:
         stripped = re.sub(rf',?\s*{re.escape(bad_name)}\s*=\s*[^,)\n]+', "", code)
         if stripped != code:
-            logger.info("Frame %d: stripping bad kwarg %r — fast re-render", frame_index, bad_name)
+            logger.info("manim_kwarg_strip_fast_rerender", frame=frame_index, bad_name=bad_name)
             fast_dir = output_dir + "_kwfix"
             mp4_fast, _ = await asyncio.to_thread(_render_frame, stripped, frame_index, fast_dir)
             if mp4_fast is not None:
-                logger.info("Frame %d recovered via kwarg-strip (no LLM retry)", frame_index)
+                logger.info("manim_frame_recovered_kwarg_strip", frame=frame_index)
                 return mp4_fast
             code = stripped  # carry the partial fix into the full LLM retry
 
@@ -442,14 +435,14 @@ async def _generate_one_manim_frame(
     code2 = _extract_code(raw2)
     code2, fixes2 = _sanitize_manim_code(code2)
     if fixes2:
-        logger.info("Frame %d retry sanitized: %s", frame_index, fixes2)
+        logger.info("manim_frame_retry_sanitized", frame=frame_index, fixes=fixes2)
 
     retry_dir = output_dir + "_retry"
     mp4_2, _ = await asyncio.to_thread(_render_frame, code2, frame_index, retry_dir)
     if mp4_2 is not None:
-        logger.info("Frame %d recovered on retry (category=%s)", frame_index, error_category)
+        logger.info("manim_frame_recovered_retry", frame=frame_index, category=error_category)
     else:
-        logger.error("Frame %d failed on both attempts (category=%s)", frame_index, error_category)
+        logger.error("manim_frame_failed_both_attempts", frame=frame_index, category=error_category)
     return mp4_2
 
 
@@ -484,11 +477,11 @@ async def generate_manim_frames(
     paths: list[Optional[str]] = []
     for i, result in enumerate(results):
         if isinstance(result, Exception):
-            logger.error("Manim frame %d raised exception: %s", i, result, exc_info=result)
+            logger.error("manim_frame_exception", frame=i, error=str(result), exc_info=True)
             paths.append(None)
         else:
             paths.append(result)
 
     ok = sum(1 for p in paths if p)
-    logger.info("Manim generation complete  ok=%d/%d", ok, len(paths))
+    logger.info("manim_generation_complete", ok=ok, total=len(paths))
     return paths

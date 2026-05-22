@@ -30,14 +30,14 @@ Requires:
 
 import asyncio
 import json
-import logging
+import structlog
 import math
 import os
 import re
 import subprocess
 from typing import Optional
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 # ── Optional dependency guards ────────────────────────────────────────────────
 
@@ -113,9 +113,9 @@ def _sanitize_svg(svg: str) -> str:
             repaired = _lxml_etree.tostring(tree, encoding="unicode", xml_declaration=False)
             if repaired and repaired.strip().startswith("<"):
                 svg = repaired
-                logger.debug("svg_sanitizer: lxml repair applied")
+                logger.debug("svg_sanitizer_lxml_repair_applied")
         except Exception as e:
-            logger.debug("svg_sanitizer: lxml repair failed (%s) — using pre-lxml output", e)
+            logger.debug("svg_sanitizer_lxml_repair_failed", error=str(e))
 
     return svg
 
@@ -213,7 +213,7 @@ def _render_frame(svg_text: str, frame_index: int, output_dir: str) -> tuple[Opt
         )
         return png_path, None
     except Exception as e:
-        logger.error("svg_generator frame %d render error: %s", frame_index, e)
+        logger.error("svg_render_error", frame=frame_index, error=str(e))
         return None, str(e)
 
 
@@ -503,13 +503,10 @@ async def _render_animated_frame(
         html = _build_animation_html(clean_svg, reveal_order, animation_spec, duration_seconds)
         await _playwright_render(html, duration_seconds, tmp_dir, clean_svg)
         _png_seq_to_mp4(tmp_dir, output_mp4)
-        logger.info("svg_generator animated frame %d → %s (%.1fs)", frame_index, output_mp4, duration_seconds)
+        logger.info("svg_animated_frame_done", frame=frame_index, output=output_mp4, duration_s=round(duration_seconds, 1))
         return output_mp4, None
     except Exception as e:
-        logger.warning(
-            "svg_generator animated render failed (frame %d): %s — falling back to static PNG",
-            frame_index, e,
-        )
+        logger.warning("svg_animated_render_failed_fallback", frame=frame_index, error=str(e))
         return _render_frame(clean_svg, frame_index, output_dir)
 
 
@@ -544,7 +541,7 @@ async def _generate_one_svg_frame(
     svg_text = _extract_svg(raw)
 
     if not svg_text.lower().startswith("<svg"):
-        logger.warning("svg_generator frame %d: no valid SVG in LLM response — retrying", frame_index)
+        logger.warning("svg_no_valid_svg_retrying", frame=frame_index)
         raw = await asyncio.to_thread(
             _generate_svg_code_retry, frame, plan,
             failure_reason="Your response did not contain valid SVG markup. "
@@ -553,7 +550,7 @@ async def _generate_one_svg_frame(
         )
         svg_text = _extract_svg(raw)
         if not svg_text.lower().startswith("<svg"):
-            logger.warning("svg_generator frame %d: retry also failed to produce valid SVG — skipping", frame_index)
+            logger.warning("svg_retry_no_valid_svg_skipping", frame=frame_index)
             return None
 
     # Decide render path
@@ -576,7 +573,7 @@ async def _generate_one_svg_frame(
         )
 
     if out_path is None:
-        logger.warning("svg_generator frame %d: render failed — retrying with correction", frame_index)
+        logger.warning("svg_render_failed_retrying", frame=frame_index)
         raw = await asyncio.to_thread(
             _generate_svg_code_retry, frame, plan,
             failure_reason=(
@@ -590,7 +587,7 @@ async def _generate_one_svg_frame(
         )
         svg_text = _extract_svg(raw)
         if not svg_text.lower().startswith("<svg"):
-            logger.warning("svg_generator frame %d: retry produced no valid SVG — skipping", frame_index)
+            logger.warning("svg_retry_no_valid_svg_skipping_2", frame=frame_index)
             return None
 
         if use_animation:
@@ -657,7 +654,7 @@ async def generate_svg_frames(
     paths: list[Optional[str]] = [first]
     for i, result in enumerate(rest_results, start=1):
         if isinstance(result, Exception):
-            logger.error("svg_generator frame %d exception: %s", i, result)
+            logger.error("svg_frame_exception", frame=i, error=str(result))
             paths.append(None)
         else:
             paths.append(result)

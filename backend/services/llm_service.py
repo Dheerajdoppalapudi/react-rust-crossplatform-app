@@ -23,13 +23,13 @@ Prompt caching (Anthropic only):
 """
 
 import json
-import logging
+import structlog
 import re
 import time
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 # How many times to retry on rate-limit / overload before giving up
 _MAX_RETRIES = 3
@@ -127,18 +127,15 @@ class OpenAIProvider(LLMProvider):
 
             except RateLimitError as e:
                 if attempt == _MAX_RETRIES - 1:
-                    logger.error("OpenAIProvider rate limit — all %d retries exhausted: %s", _MAX_RETRIES, e)
+                    logger.error("openai_rate_limit_exhausted", retries=_MAX_RETRIES, error=str(e))
                     return None, {}
                 match = _WAIT_RE.search(str(e))
                 wait = (float(match.group(1)) + 0.5) if match else (5.0 * (attempt + 1))
-                logger.warning(
-                    "OpenAIProvider rate limit — waiting %.1fs then retry %d/%d",
-                    wait, attempt + 1, _MAX_RETRIES - 1,
-                )
+                logger.warning("openai_rate_limit_retry", wait_s=round(wait, 1), attempt=attempt + 1, max_retries=_MAX_RETRIES - 1)
                 time.sleep(wait)
 
             except Exception as e:
-                logger.error("OpenAIProvider request failed: %s", e)
+                logger.error("openai_request_failed", error=str(e))
                 return None, {}
 
         return None, {}
@@ -173,10 +170,10 @@ class ClaudeProvider(LLMProvider):
 
         cache_active = bool(cache_prefix) and PROMPT_CACHE_ENABLED
         logger.debug(
-            "ClaudeProvider  model=%s  prompt_cache=%s  cache_prefix_chars=%d",
-            self.model,
-            "enabled" if cache_active else "disabled",
-            len(cache_prefix),
+            "claude_provider_call",
+            model=self.model,
+            prompt_cache="enabled" if cache_active else "disabled",
+            cache_prefix_chars=len(cache_prefix),
         )
 
         client = _get_anthropic_client()
@@ -245,7 +242,7 @@ class ClaudeProvider(LLMProvider):
                         if block.type == "tool_use":
                             return json.dumps(block.input), usage_dict
                     # Fallback: no tool_use block found (should not happen with tool_choice forced)
-                    logger.warning("ClaudeProvider: tool_schema set but no tool_use block in response")
+                    logger.warning("claude_no_tool_use_block")
                     return response.content[0].text, usage_dict
 
                 return response.content[0].text, usage_dict
@@ -254,10 +251,7 @@ class ClaudeProvider(LLMProvider):
                 import anthropic as _anthropic
                 if isinstance(e, _anthropic.RateLimitError):
                     if attempt == _MAX_RETRIES - 1:
-                        logger.error(
-                            "ClaudeProvider rate limit — all %d retries exhausted: %s",
-                            _MAX_RETRIES, e,
-                        )
+                        logger.error("claude_rate_limit_exhausted", retries=_MAX_RETRIES, error=str(e))
                         return None, {}
                     try:
                         wait = float(
@@ -265,38 +259,27 @@ class ClaudeProvider(LLMProvider):
                         )
                     except Exception:
                         wait = 5.0 * (attempt + 1)
-                    logger.warning(
-                        "ClaudeProvider rate limit — waiting %.1fs then retry %d/%d",
-                        wait, attempt + 1, _MAX_RETRIES - 1,
-                    )
+                    logger.warning("claude_rate_limit_retry", wait_s=round(wait, 1), attempt=attempt + 1, max_retries=_MAX_RETRIES - 1)
                     time.sleep(wait)
                     continue
 
                 if isinstance(e, _anthropic.APIStatusError):
                     if e.status_code == 529:
                         if attempt == _MAX_RETRIES - 1:
-                            logger.error(
-                                "ClaudeProvider overloaded — all %d retries exhausted",
-                                _MAX_RETRIES,
-                            )
+                            logger.error("claude_overloaded_exhausted", retries=_MAX_RETRIES)
                             return None, {}
                         wait = 10.0 * (attempt + 1)
-                        logger.warning(
-                            "ClaudeProvider overloaded (529) — waiting %.1fs then retry %d/%d",
-                            wait, attempt + 1, _MAX_RETRIES - 1,
-                        )
+                        logger.warning("claude_overloaded_retry", wait_s=round(wait, 1), attempt=attempt + 1, max_retries=_MAX_RETRIES - 1)
                         time.sleep(wait)
                     else:
-                        logger.error(
-                            "ClaudeProvider API error  status=%d  error=%s", e.status_code, e
-                        )
+                        logger.error("claude_api_error", status=e.status_code, error=str(e))
                         return None, {}
                 else:
-                    logger.error("ClaudeProvider request failed: %s", e)
+                    logger.error("claude_request_failed", error=str(e))
                     return None, {}
 
             except Exception as e:
-                logger.error("ClaudeProvider request failed: %s", e)
+                logger.error("claude_request_failed", error=str(e))
                 return None, {}
 
         return None, {}
@@ -384,10 +367,10 @@ default_llm_service = LLMService(provider=OpenAIProvider(model="gpt-4.1"))
 def _log_startup() -> None:
     from core.config import PROMPT_CACHE_ENABLED, CLAUDE_MODEL, CLASSIFY_MODEL
     logger.info(
-        "LLMService ready  default_model=%s  classify_model=%s  prompt_cache=%s",
-        CLAUDE_MODEL,
-        CLASSIFY_MODEL,
-        "ENABLED" if PROMPT_CACHE_ENABLED else "DISABLED",
+        "llm_service_ready",
+        default_model=CLAUDE_MODEL,
+        classify_model=CLASSIFY_MODEL,
+        prompt_cache="ENABLED" if PROMPT_CACHE_ENABLED else "DISABLED",
     )
 
 _log_startup()

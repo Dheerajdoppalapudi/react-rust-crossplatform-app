@@ -10,7 +10,7 @@ Fixes applied:
             via version gating rather than bare except-pass.
 """
 
-import logging
+import structlog
 import sqlite3
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -20,7 +20,7 @@ from typing import Optional
 from core.config import DB_PATH, OUTPUTS_DIR, REFRESH_TOKEN_EXPIRE_DAYS
 from core.db_models import User
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 # ── Allowed columns for update_session (CRIT-5) ───────────────────────────────
@@ -78,7 +78,7 @@ def _apply_migration(conn: sqlite3.Connection, version: int, sql: str) -> None:
     """Run sql and record the version. Idempotent — skipped if already applied."""
     conn.execute(sql)
     conn.execute("INSERT INTO schema_version (version) VALUES (?)", (version,))
-    logger.info("schema_migration_applied  version=%d", version)
+    logger.info("schema_migration_applied", version=version)
 
 
 # ── Schema + migrations ───────────────────────────────────────────────────────
@@ -234,7 +234,7 @@ def init_db() -> None:
         )
 
         conn.commit()
-    logger.info("database_initialised  path=%s", DB_PATH)
+    logger.info("database_initialised", path=str(DB_PATH))
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

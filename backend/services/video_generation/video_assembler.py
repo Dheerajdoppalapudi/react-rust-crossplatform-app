@@ -23,7 +23,7 @@ Final output: 1920×1080, 24 fps, H.264 + AAC.
 Requires: ffmpeg in system PATH  (already required by MoviePy)
 """
 
-import logging
+import structlog
 import os
 import shutil
 import subprocess
@@ -32,7 +32,7 @@ from typing import Optional
 
 from services.video_generation.tts_service import estimate_duration
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 VIDEO_W    = 1920
 VIDEO_H    = 1080
@@ -328,7 +328,7 @@ def assemble(
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
     temp_dir = tempfile.mkdtemp(prefix="video_assemble_")
-    logger.info("Assembly temp dir: %s", temp_dir)
+    logger.info("video_assemble_start", temp_dir=temp_dir)
 
     try:
         # ── Step 1: build one clip per frame (sequential) ────────────────────
@@ -337,16 +337,16 @@ def assemble(
             zip(frame_paths, audio_paths, narration_texts, captions)
         ):
             if not fp or not os.path.exists(fp):
-                logger.warning("Frame %d path missing — skipping", i)
+                logger.warning("video_assemble_frame_missing", frame=i)
                 continue
             clip_out     = os.path.join(temp_dir, f"clip_{i:03d}.mp4")
             fallback_dur = estimate_duration(nr)
             try:
                 if fp.lower().endswith(".mp4"):
-                    logger.debug("Building video clip %d  path=%s", i, fp)
+                    logger.debug("video_assemble_video_clip", frame=i, path=fp)
                     _build_video_clip(fp, ap, fallback_dur, cap, clip_out)
                 else:
-                    logger.debug("Building image clip %d  path=%s", i, fp)
+                    logger.debug("video_assemble_image_clip", frame=i, path=fp)
                     audio_dur = (
                         _probe_duration(ap)
                         if ap and os.path.exists(ap)
@@ -355,7 +355,7 @@ def assemble(
                     _build_png_clip(fp, ap, audio_dur or fallback_dur, clip_out)
                 clip_paths.append(clip_out)
             except Exception:
-                logger.error("Failed to build clip %d — skipping", i, exc_info=True)
+                logger.error("video_assemble_clip_failed", frame=i, exc_info=True)
 
         if not clip_paths:
             raise ValueError("All frames failed — no clips to concat")
@@ -370,14 +370,14 @@ def assemble(
         # ── Step 3: stream-copy concat (no re-encode) ─────────────────────────
         # All clips share the same codec/resolution/fps so -c copy is safe.
         # This step takes < 1s regardless of video length.
-        logger.info("Concatenating %d clips → %s", len(clip_paths), output_path)
+        logger.info("video_assemble_concat", clips=len(clip_paths), output=output_path)
         _ffmpeg([
             "-f", "concat", "-safe", "0", "-i", concat_list,
             "-c", "copy",
             output_path,
         ])
 
-        logger.info("Assembly complete  output=%s", output_path)
+        logger.info("video_assemble_done", output=output_path)
 
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)

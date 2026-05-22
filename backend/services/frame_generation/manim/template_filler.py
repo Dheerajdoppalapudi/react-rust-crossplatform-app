@@ -3,12 +3,12 @@ Fills structural beat templates with content from BeatPlan.content dict.
 Returns Python code string ready to render — no LLM call needed.
 """
 
-import logging
+import structlog
 from pathlib import Path
 
 from .beat_types import BeatPlan
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
 
@@ -91,10 +91,8 @@ def fill_template(beat: BeatPlan) -> str | None:
             return _fill_concept_reveal(beat)
         if beat.template_type == "comparison_split":
             return _fill_comparison_split(beat)
-        logger.warning("template_filler unknown_type type=%s beat_index=%d",
-                       beat.template_type, beat.index)
+        logger.warning("template_filler_unknown_type", type=beat.template_type, beat_index=beat.index)
         return None
     except Exception as exc:
-        logger.error("template_filler fill_failed beat_index=%d error=%s",
-                     beat.index, exc, exc_info=True)
+        logger.error("template_filler_fill_failed", beat_index=beat.index, error=str(exc), exc_info=True)
         return None

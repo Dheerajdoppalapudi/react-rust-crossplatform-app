@@ -5,7 +5,7 @@ Uses Playwright to screenshot each slide (navigating via #btn-next),
 then assembles the screenshots into a python-pptx file (16:9 widescreen).
 """
 
-import logging
+import structlog
 import os
 import tempfile
 from io import BytesIO
@@ -14,7 +14,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 router = APIRouter()
 
@@ -35,7 +35,7 @@ async def export_to_pptx(payload: PptxExportRequest, request: Request):
     try:
         pptx_bytes = await _render_pptx(payload.html, payload.title)
     except Exception as exc:
-        logger.error("PPTX export failed: %s", exc, exc_info=True)
+        logger.error("pptx_export_failed", error=str(exc), exc_info=True)
         raise HTTPException(status_code=500, detail=f"PPTX generation failed: {exc}")
 
     safe = "".join(c for c in payload.title if c.isalnum() or c in " _-")[:50].strip()

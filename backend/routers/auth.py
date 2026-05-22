@@ -2,7 +2,7 @@
 Auth router — Google OAuth, token refresh, logout, and /me.
 """
 
-import logging
+import structlog
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -34,7 +34,7 @@ from core.db_models import User
 from core.responses import success
 from dependencies.auth import get_current_user
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -102,7 +102,7 @@ def _get_google_user_info(access_token: str) -> dict:
         with urllib.request.urlopen(req, timeout=10) as resp:
             return _json.loads(resp.read())
     except Exception as exc:
-        logger.warning("Google userinfo request failed: %s", exc)
+        logger.warning("google_userinfo_failed", error=str(exc))
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired Google access token",
@@ -135,7 +135,7 @@ def login_with_google(request: Request, body: GoogleLoginRequest, response: Resp
     refresh_token = create_refresh_token(user.id)
     _set_refresh_cookie(response, refresh_token)
 
-    logger.info("User logged in  user_id=%s  email=%s", user.id, user.email)
+    logger.info("user_login", user_id=user.id, email=user.email)
     return success({
         "access_token": access_token,
         "user": {
@@ -204,7 +204,7 @@ def logout(
     if refresh_token:
         delete_refresh_token(refresh_token)
     _clear_refresh_cookie(response)
-    logger.info("User logged out  user_id=%s", current_user.id)
+    logger.info("user_logout", user_id=current_user.id)
     return success({"message": "Logged out"})
 
 
@@ -247,7 +247,7 @@ def register(request: Request, body: RegisterRequest, response: Response):
     refresh_token = create_refresh_token(user.id)
     _set_refresh_cookie(response, refresh_token)
 
-    logger.info("User registered  user_id=%s  email=%s", user.id, user.email)
+    logger.info("user_register", user_id=user.id, email=user.email)
     return success({
         "access_token": access_token,
         "user": {
@@ -293,7 +293,7 @@ def login_with_password(request: Request, body: PasswordLoginRequest, response: 
     refresh_token = create_refresh_token(existing.id)
     _set_refresh_cookie(response, refresh_token)
 
-    logger.info("User logged in (password)  user_id=%s  email=%s", existing.id, existing.email)
+    logger.info("user_login_password", user_id=existing.id, email=existing.email)
     return success({
         "access_token": access_token,
         "user": {

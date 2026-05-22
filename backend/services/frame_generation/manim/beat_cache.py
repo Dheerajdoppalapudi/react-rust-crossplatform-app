@@ -11,14 +11,14 @@ No TTL — invalidate manually: rm -rf outputs/beat_cache/
 
 import hashlib
 import json
-import logging
+import structlog
 import shutil
 from pathlib import Path
 
 from core.config import BEAT_CACHE_DIR
 from .beat_types import BeatPlan
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 def _key(beat: BeatPlan) -> str:
@@ -38,7 +38,7 @@ def get(beat: BeatPlan) -> str | None:
     key = _key(beat)
     p = _cache_path(key)
     if p.exists():
-        logger.info("beat_cache hit  key=%s  beat_index=%d", key[:12], beat.index)
+        logger.info("beat_cache_hit", key=key[:12], beat_index=beat.index)
         return str(p)
     return None
 
@@ -49,5 +49,5 @@ def store(beat: BeatPlan, src_mp4: str) -> str:
     dest = _cache_path(key)
     dest.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(src_mp4, dest)
-    logger.info("beat_cache stored  key=%s  beat_index=%d", key[:12], beat.index)
+    logger.info("beat_cache_stored", key=key[:12], beat_index=beat.index)
     return str(dest)

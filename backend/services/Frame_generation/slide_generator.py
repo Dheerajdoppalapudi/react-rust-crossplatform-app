@@ -34,11 +34,11 @@ Public API:
 """
 
 import hashlib
-import logging
+import structlog
 import os
 import re
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 try:
     from PIL import Image, ImageDraw, ImageFont
@@ -480,7 +480,7 @@ def generate_chapter_intro(number, title, subtitle, accent_color, out_path, styl
 
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     img.save(out_path, "PNG")
-    logger.info("Chapter intro  style=%d  path=%s", style, out_path)
+    logger.info("slide_chapter_intro", style=style, path=out_path)
     return out_path
 
 
@@ -608,7 +608,7 @@ def generate_text_slide_standard(heading, bullets, accent_color, out_path, style
 
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     img.save(out_path, "PNG")
-    logger.info("Text slide (standard)  style=%d  path=%s", style, out_path)
+    logger.info("slide_text_standard", style=style, path=out_path)
     return out_path
 
 
@@ -804,7 +804,7 @@ def generate_text_slide_split(heading, left_panel, right_panel, accent_color, ou
 
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     img.save(out_path, "PNG")
-    logger.info("Text slide (split)  style=%d  path=%s", style, out_path)
+    logger.info("slide_text_split", style=style, path=out_path)
     return out_path
 
 

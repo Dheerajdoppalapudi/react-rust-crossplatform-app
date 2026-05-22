@@ -8,7 +8,7 @@ Fixes applied:
   CRIT-6: ffmpeg stderr is logged server-side only; client receives a generic message.
 """
 
-import logging
+import structlog
 import os
 import subprocess
 import tempfile
@@ -39,7 +39,7 @@ from schemas.sessions import (
     MergeResponse,
 )
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 router = APIRouter()
 
@@ -228,10 +228,7 @@ def merge_conversation_videos(conversation_id: str, current_user: User = Depends
     except subprocess.CalledProcessError as e:
         # CRIT-6: log stderr server-side only; never expose it to the client.
         stderr = e.stderr.decode(errors="replace") if e.stderr else str(e)
-        logger.error(
-            "ffmpeg_merge_failed  conversation=%s  stderr=%s",
-            conversation_id, stderr,
-        )
+        logger.error("ffmpeg_merge_failed", conversation=conversation_id, stderr=stderr)
         raise HTTPException(status_code=500, detail="Video merge failed. Please try again.")
     finally:
         if os.path.exists(concat_file):
@@ -244,10 +241,7 @@ def merge_conversation_videos(conversation_id: str, current_user: User = Depends
         )
         conn.commit()
 
-    logger.info(
-        "merge_complete  conversation=%s  sessions=%d  output=%s",
-        conversation_id, len(video_paths), output_path,
-    )
+    logger.info("merge_complete", conversation=conversation_id, sessions=len(video_paths), output=output_path)
     # M-1: Serialize through MergeResponse schema.
     merge = MergeResponse(
         merged_video_url=f"/api/conversations/{conversation_id}/merged_video",

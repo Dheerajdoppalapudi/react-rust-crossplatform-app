@@ -20,13 +20,13 @@ The video assembler uses word-count-based timing as a fallback for None entries.
 """
 
 import asyncio
-import logging
+import structlog
 import os
 import re
 import time
 from typing import Optional
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -79,10 +79,10 @@ def _gtts_generate(text: str, out_path: str) -> bool:
         tts.save(out_path)
         return True
     except ImportError:
-        logger.error("gtts not installed — run: pip install gtts")
+        logger.error("gtts_not_installed")
         return False
     except Exception as e:
-        logger.error("gTTS error: %s", e, exc_info=True)
+        logger.error("gtts_error", error=str(e), exc_info=True)
         return False
 
 
@@ -105,7 +105,7 @@ def _openai_tts_generate(text: str, out_path: str) -> bool:
     try:
         from openai import OpenAI, RateLimitError  # type: ignore
     except ImportError:
-        logger.error("openai not installed — run: pip install openai")
+        logger.error("openai_not_installed")
         return False
 
     client = OpenAI(timeout=30.0)
@@ -124,19 +124,20 @@ def _openai_tts_generate(text: str, out_path: str) -> bool:
             delay = _TTS_RETRY_BASE_DELAY * (2 ** attempt)
             if attempt < _TTS_MAX_RETRIES - 1:
                 logger.warning(
-                    "OpenAI TTS rate limit on attempt %d/%d — retrying in %.1fs  error=%s",
-                    attempt + 1, _TTS_MAX_RETRIES, delay, e,
+                    "openai_tts_rate_limit_retry",
+                    attempt=attempt + 1, max_retries=_TTS_MAX_RETRIES,
+                    wait_s=round(delay, 1), error=str(e),
                 )
                 time.sleep(delay)
             else:
                 logger.error(
-                    "OpenAI TTS rate limit after %d attempts — giving up  error=%s",
-                    _TTS_MAX_RETRIES, e,
+                    "openai_tts_rate_limit_exhausted",
+                    max_retries=_TTS_MAX_RETRIES, error=str(e),
                 )
                 return False
 
         except Exception as e:
-            logger.error("OpenAI TTS error: %s", e, exc_info=True)
+            logger.error("openai_tts_error", error=str(e), exc_info=True)
             return False
 
     return False  # unreachable, but satisfies type checker
@@ -183,17 +184,17 @@ def generate_audio(
             continue
 
         if not text:
-            logger.warning("Frame %d: empty narration text — skipping audio", i)
+            logger.warning("tts_empty_narration", frame=i)
             paths.append(None)
             continue
 
-        logger.debug("Generating audio for frame %d  chars=%d  path=%s", i, len(text), out_path)
+        logger.debug("tts_generating", frame=i, chars=len(text), path=out_path)
         success = backend(text, out_path)
         paths.append(out_path if success else None)
         if not success:
-            logger.warning("Frame %d: TTS failed — video will use estimated duration", i)
+            logger.warning("tts_failed", frame=i)
         else:
-            logger.debug("Audio generated  frame=%d  path=%s", i, out_path)
+            logger.debug("tts_done", frame=i, path=out_path)
 
     return paths
 
@@ -243,16 +244,16 @@ async def generate_audio_parallel(
             # Already cached from a previous run — skip the API call
             results[i] = out_path
         elif not text:
-            logger.warning("Frame %d: empty narration — skipping audio", i)
+            logger.warning("tts_empty_narration", frame=i)
             results[i] = None
         else:
-            logger.debug("TTS frame %d  chars=%d", i, len(text))
+            logger.debug("tts_generating", frame=i, chars=len(text))
             # Run the blocking HTTP call in a thread so other frames
             # can proceed concurrently on the event loop
             ok = await asyncio.to_thread(backend, text, out_path)
             results[i] = out_path if ok else None
             if not ok:
-                logger.warning("Frame %d: TTS failed — video will use estimated duration", i)
+                logger.warning("tts_failed", frame=i)
 
         # Signal the SSE stream that this frame is done
         if progress_queue is not None:

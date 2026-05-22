@@ -13,13 +13,13 @@ _vocab_plan_to_generation_plan():
 
 import asyncio
 import json
-import logging
+import structlog
 import os
 import re
 import time
 from contextvars import ContextVar
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 from typing import List, Union
 
 from pydantic import BaseModel, field_validator
@@ -197,10 +197,7 @@ def call_llm(
     label = prompt_name or "unknown"
     svc = override_service or request_llm_service.get() or default_llm_service
     model = getattr(svc.provider, "model", "unknown")
-    logger.info(
-        "LLM call  prompt=%s  model=%s  chars=%d  cache=%s",
-        label, model, len(prompt), "yes" if cache_prefix else "no",
-    )
+    logger.info("llm_call", prompt=label, model=model, chars=len(prompt), cache="yes" if cache_prefix else "no")
     result, usage = svc.make_single_prompt_request(
         prompt,
         cache_prefix=cache_prefix,
@@ -214,10 +211,7 @@ def call_llm(
     total_tokens = (usage or {}).get("total_tokens", 0)
     cache_read   = (usage or {}).get("cache_read_input_tokens", 0)
     cache_create = (usage or {}).get("cache_creation_input_tokens", 0)
-    logger.info(
-        "LLM done  prompt=%s  model=%s  tokens=%d  cache_read=%d  cache_create=%d",
-        label, model, total_tokens, cache_read, cache_create,
-    )
+    logger.info("llm_done", prompt=label, model=model, tokens=total_tokens, cache_read=cache_read, cache_create=cache_create)
     _log({
         "event": "llm_call",
         "prompt_name": label,
@@ -322,10 +316,7 @@ def _repair_truncated_json(text: str, error_pos: int) -> dict:
         raise ValueError("No JSON object found after repair attempt")
 
     obj, _ = decoder.raw_decode(repaired, start)
-    logger.warning(
-        "json_truncation_repaired  original_len=%d  repaired_len=%d",
-        len(text), len(repaired),
-    )
+    logger.warning("json_truncation_repaired", original_len=len(text), repaired_len=len(repaired))
     return obj
 
 
@@ -687,7 +678,7 @@ async def generate_all_frames(
     slims = []
     for i, result in enumerate(results):
         if isinstance(result, Exception):
-            logger.error("planner frame %d failed: %s", i, result)
+            logger.error("planner_frame_failed", frame=i, error=str(result))
             slims.append({"elements": []})
         else:
             slims.append(result)

@@ -6,14 +6,14 @@ Citation format: inline [1], [2], [3] matching the source index in the evidence 
 """
 
 import asyncio
-import logging
+import structlog
 from typing import AsyncGenerator, Optional
 
 from services.research.search_provider import SearchResult
 from services.research.source_processor import build_evidence_table
 from services.llm_service import LLMService
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 _SYSTEM_PROMPT = """You are a research synthesiser for an AI educational app used by students.
 
@@ -54,7 +54,7 @@ async def stream(
             yield token
         return
     except Exception as e:
-        logger.warning("Streaming synthesis failed (%s) — falling back to single call", e)
+        logger.warning("synthesis_stream_failed_fallback", error=str(e))
 
     # Fallback: single blocking call
     try:
@@ -67,7 +67,7 @@ async def stream(
         if raw:
             yield raw
     except Exception as e:
-        logger.error("Synthesis fallback also failed: %s", e)
+        logger.error("synthesis_fallback_failed", error=str(e))
         yield "Unable to synthesise an answer at this time. Please try again."
 
 

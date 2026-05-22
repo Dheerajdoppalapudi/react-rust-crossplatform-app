@@ -11,13 +11,13 @@ without vector retrieval.
 """
 
 import hashlib
-import logging
+import structlog
 import threading
 from typing import Optional
 
 from core.config import CHROMADB_PATH, EMBEDDING_MODEL
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 _client        = None
 _openai_client = None
@@ -39,7 +39,7 @@ def _get_client():
             CHROMADB_PATH.mkdir(parents=True, exist_ok=True)
             _client = chromadb.PersistentClient(path=str(CHROMADB_PATH))
         except Exception as exc:
-            logger.warning("ChromaDB unavailable: %s", exc)
+            logger.warning("chromadb_unavailable", error=str(exc))
     return _client
 
 
@@ -54,7 +54,7 @@ def _get_openai():
             from openai import OpenAI
             _openai_client = OpenAI()
         except Exception as exc:
-            logger.warning("OpenAI client unavailable for embeddings: %s", exc)
+            logger.warning("openai_embeddings_unavailable", error=str(exc))
     return _openai_client
 
 
@@ -70,7 +70,7 @@ def _embed(texts: list[str]) -> Optional[list[list[float]]]:
         )
         return [item.embedding for item in resp.data]
     except Exception as exc:
-        logger.warning("Embedding call failed: %s", exc)
+        logger.warning("embedding_failed", error=str(exc))
         return None
 
 
@@ -120,9 +120,9 @@ def upsert_sources(conversation_id: str, sources: list[dict]) -> None:
             for s in sources
         ]
         col.upsert(ids=ids, embeddings=embeddings, metadatas=metadatas)
-        logger.info("vector_store_upsert  conv=%s  n=%d", conversation_id[:8], len(sources))
+        logger.info("vector_store_upsert", conv=conversation_id[:8], n=len(sources))
     except Exception as exc:
-        logger.warning("ChromaDB upsert failed: %s", exc)
+        logger.warning("chromadb_upsert_failed", error=str(exc))
 
 
 def retrieve_sources(conversation_id: str, query: str, top_k: int = 8) -> list[dict]:
@@ -157,9 +157,8 @@ def retrieve_sources(conversation_id: str, query: str, top_k: int = 8) -> list[d
                 "domain":  meta.get("domain", ""),
                 "score":   float(meta.get("score", 0.5)),
             })
-        logger.info("vector_store_retrieve  conv=%s  query=%r  found=%d",
-                    conversation_id[:8], query[:60], len(sources))
+        logger.info("vector_store_retrieve", conv=conversation_id[:8], query=query[:60], found=len(sources))
         return sources
     except Exception as exc:
-        logger.debug("ChromaDB retrieve skipped: %s", exc)
+        logger.debug("chromadb_retrieve_skipped", error=str(exc))
         return []

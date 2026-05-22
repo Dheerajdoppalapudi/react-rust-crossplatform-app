@@ -3,14 +3,14 @@ Shared utilities used across routers and services.
 """
 
 import json
-import logging
+import structlog
 from pathlib import Path
 
 from fastapi import HTTPException
 
 from core.config import MAX_FRAMES_JSON_BYTES, OUTPUTS_DIR
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 def safe_resolve(
@@ -30,10 +30,7 @@ def safe_resolve(
     resolved = Path(db_path).resolve()
     base_resolved = Path(base).resolve()
     if not str(resolved).startswith(str(base_resolved) + "/") and resolved != base_resolved:
-        logger.warning(
-            "path_traversal_blocked  label=%s  raw=%r  resolved=%s",
-            label, db_path, resolved,
-        )
+        logger.warning("path_traversal_blocked", label=label, raw=db_path, resolved=str(resolved))
         raise HTTPException(status_code=403, detail="Access denied")
     return resolved
 

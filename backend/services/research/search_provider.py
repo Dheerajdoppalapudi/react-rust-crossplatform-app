@@ -6,14 +6,14 @@ Swap out TavilyProvider for a different class to change providers.
 """
 
 import asyncio
-import logging
+import structlog
 from dataclasses import dataclass, field
 from typing import Optional
 from urllib.parse import urlparse
 
 from core.config import TAVILY_API_KEY
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 @dataclass
@@ -40,14 +40,14 @@ class TavilyProvider:
                 from tavily import TavilyClient
                 self._client = TavilyClient(api_key=TAVILY_API_KEY)
             except Exception as e:
-                logger.warning("Tavily client init failed: %s", e)
+                logger.warning("tavily_init_failed", error=str(e))
 
     def _available(self) -> bool:
         return self._client is not None
 
     async def search(self, query: str, max_results: int = 5, timeout: float = 20.0) -> list[SearchResult]:
         if not self._available():
-            logger.warning("Tavily not configured — returning empty search results")
+            logger.warning("tavily_not_configured")
             return []
 
         try:
@@ -75,10 +75,10 @@ class TavilyProvider:
                 ))
             return results
         except asyncio.TimeoutError:
-            logger.warning("Tavily search timed out after %.1fs  query=%r", timeout, query[:80])
+            logger.warning("tavily_search_timeout", timeout_s=timeout, query=query[:80])
             return []
         except Exception as e:
-            logger.error("Tavily search failed for query %r: %s", query[:80], e)
+            logger.error("tavily_search_failed", query=query[:80], error=str(e))
             return []
 
     async def extract(self, url: str, timeout: float = 20.0) -> str:
@@ -95,10 +95,10 @@ class TavilyProvider:
                 return results[0].get("raw_content", "")
             return ""
         except asyncio.TimeoutError:
-            logger.warning("Tavily extract timed out after %.1fs  url=%s", timeout, url)
+            logger.warning("tavily_extract_timeout", timeout_s=timeout, url=url)
             return ""
         except Exception as e:
-            logger.error("Tavily extract failed for %s: %s", url, e)
+            logger.error("tavily_extract_failed", url=url, error=str(e))
             return ""
 
 

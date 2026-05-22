@@ -15,7 +15,7 @@ Fixes applied:
 
 import asyncio
 import json
-import logging
+import structlog
 import time
 from typing import Optional
 
@@ -32,7 +32,7 @@ from services.video_generation.frame_exporter import export_frames
 from services.video_generation.tts_service import parse_narration, generate_audio_parallel
 from services.video_generation.video_assembler import assemble, moviepy_available
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 router = APIRouter()
 
@@ -181,7 +181,7 @@ async def generate_video(
     if row["video_path"]:
         existing = safe_resolve(row["video_path"])
         if existing.exists():
-            logger.info("video_cached  session=%s", session_id)
+            logger.info("video_cached", session=session_id)
 
             async def _cached_stream():
                 yield _sse({
@@ -214,14 +214,8 @@ async def generate_video(
             #   - generate_audio_parallel calls TTS API (network bound)
             # Neither depends on the other, so starting both at once
             # reduces the combined wall-clock time to max(export, tts).
-            logger.info(
-                "video_stage_export_start  session=%s  frames=%d",
-                session_id, len(captions),
-            )
-            logger.info(
-                "video_stage_tts_start  session=%s  backend=%s  frames=%d",
-                session_id, tts_backend, total_frames,
-            )
+            logger.info("video_stage_export_start", session=session_id, frames=len(captions))
+            logger.info("video_stage_tts_start", session=session_id, backend=tts_backend, frames=total_frames)
             yield _sse({
                 "type": "stage", "stage": "export_frames",
                 "label": "Exporting frames…", "elapsed_s": elapsed(),
@@ -248,10 +242,7 @@ async def generate_video(
             # Await export first (usually faster — ~3s vs ~20s for TTS)
             normalized_pngs = await export_task
             d1 = round(time.time() - t1, 1)
-            logger.info(
-                "video_stage_export_done  session=%s  exported=%d  duration=%.1fs",
-                session_id, len(normalized_pngs), d1,
-            )
+            logger.info("video_stage_export_done", session=session_id, exported=len(normalized_pngs), duration_s=d1)
             yield _sse({
                 "type": "stage_done", "stage": "export_frames",
                 "count": len(normalized_pngs), "duration_s": d1, "elapsed_s": elapsed(),
@@ -276,10 +267,7 @@ async def generate_video(
             audio_paths = await tts_task
             d2 = round(time.time() - t2, 1)
             audio_ok = sum(1 for p in audio_paths if p)
-            logger.info(
-                "video_stage_tts_done  session=%s  generated=%d/%d  duration=%.1fs",
-                session_id, audio_ok, total_frames, d2,
-            )
+            logger.info("video_stage_tts_done", session=session_id, generated=audio_ok, total=total_frames, duration_s=d2)
             yield _sse({
                 "type": "stage_done", "stage": "tts",
                 "generated": audio_ok, "total": total_frames,
@@ -287,10 +275,7 @@ async def generate_video(
             })
 
             # Stage 3: assemble — heartbeat every 20s to prevent nginx proxy_read_timeout
-            logger.info(
-                "video_stage_assemble_start  session=%s  output=%s",
-                session_id, video_path,
-            )
+            logger.info("video_stage_assemble_start", session=session_id, output=video_path)
             yield _sse({
                 "type": "stage", "stage": "assembling",
                 "label": "Assembling video…", "elapsed_s": elapsed(),
@@ -298,7 +283,7 @@ async def generate_video(
 
             session_lock = _session_locks.setdefault(session_id, asyncio.Lock())
             if session_lock.locked():
-                logger.warning("assembly_duplicate_blocked  session=%s", session_id)
+                logger.warning("assembly_duplicate_blocked", session=session_id)
                 yield _sse({
                     "type":    "error",
                     "message": "Video assembly already in progress — please wait.",
@@ -326,20 +311,14 @@ async def generate_video(
                 await assemble_task
 
             d3 = round(time.time() - t3, 1)
-            logger.info(
-                "video_stage_assemble_done  session=%s  path=%s  duration=%.1fs",
-                session_id, video_path, d3,
-            )
+            logger.info("video_stage_assemble_done", session=session_id, path=video_path, duration_s=d3)
 
             yield _sse({"type": "stage_done", "stage": "assembling", "duration_s": d3})
 
             update_session(session_id, video_path=video_path)
 
             total = elapsed()
-            logger.info(
-                "video_generation_done  session=%s  frames=%d  tts=%s  total=%.1fs",
-                session_id, len(normalized_pngs), tts_backend, total,
-            )
+            logger.info("video_generation_done", session=session_id, frames=len(normalized_pngs), tts=tts_backend, total_s=total)
             yield _sse({
                 "type":        "done",
                 "session_id":  session_id,
@@ -353,10 +332,7 @@ async def generate_video(
         except asyncio.CancelledError:
             # Client disconnected — cancel every background task so ffmpeg and
             # TTS calls don't keep running after the stream is gone.
-            logger.info(
-                "video_sse_cancelled  session=%s  elapsed=%.1fs",
-                session_id, elapsed(),
-            )
+            logger.info("video_sse_cancelled", session=session_id, elapsed_s=elapsed())
             for task in _active_tasks:
                 if not task.done():
                     task.cancel()
@@ -364,10 +340,7 @@ async def generate_video(
 
         except Exception:
             # CRIT-6: log full details server-side; send generic message to client.
-            logger.error(
-                "video_generation_failed  session=%s  elapsed=%.1fs",
-                session_id, elapsed(), exc_info=True,
-            )
+            logger.error("video_generation_failed", session=session_id, elapsed_s=elapsed(), exc_info=True)
             yield _sse({
                 "type":      "error",
                 "message":   "Video generation failed. Please try again.",

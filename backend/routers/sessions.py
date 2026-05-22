@@ -8,7 +8,7 @@ Fixes applied:
 """
 
 import json
-import logging
+import structlog
 from pathlib import Path
 from typing import Optional
 
@@ -25,7 +25,7 @@ from schemas.sessions import SessionSummary, SessionOutputResponse
 
 _bearer = HTTPBearer(auto_error=False)
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 router = APIRouter()
 

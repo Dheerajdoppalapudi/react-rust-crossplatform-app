@@ -11,7 +11,7 @@ This module owns:
 
 import asyncio
 import json
-import logging
+import structlog
 import os
 import time
 from pathlib import Path
@@ -37,7 +37,7 @@ from services.frame_generation.manim.beat_generator import BeatGenerator, assemb
 from services.frame_generation.svg.svg_generator import generate_svg_frames, svg_available
 from services.frame_generation.slide_generator import generate_slide, generate_summary_slide
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 _PROMPTS_DIR = Path(__file__).parent / "frame_generation" / "prompts"
 
@@ -95,7 +95,7 @@ def _interleave_slides(
         try:
             generate_slide(spec, slide_path)
         except Exception as e:
-            logger.error("slide_generator failed for slide %d: %s", i, e, exc_info=True)
+            logger.error("slide_generator_failed", slide=i, error=str(e), exc_info=True)
             continue
         slide_narration = spec.get("narration", "")
         slide_caption   = spec.get("title") or spec.get("heading") or "Slide"
@@ -144,7 +144,7 @@ def _append_summary_slide(
     try:
         generate_summary_slide(bullets=bullets, accent_color=accent_color, out_path=summary_path)
     except Exception as e:
-        logger.error("summary slide generation failed: %s", e, exc_info=True)
+        logger.error("summary_slide_failed", error=str(e), exc_info=True)
         return all_images, all_captions, all_narrations
 
     summary_narration = "To summarize what we covered: " + " ".join(bullets[:3])
@@ -592,7 +592,7 @@ async def _run_frame_generation(
         raise RuntimeError("SVG renderer (cairosvg) is not installed.")
 
     if plan.intent_type in MANIM_INTENT_TYPES:
-        logger.warning("Manim not available — falling back to SVG  session=%s", session_id)
+        logger.warning("manim_unavailable_fallback_svg", session=session_id)
 
     _log({"event": "stage_start", "stage": "frame_generation", "path": "svg"})
     svg_dir    = os.path.join(output_dir, "svg")

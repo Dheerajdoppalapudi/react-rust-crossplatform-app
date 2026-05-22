@@ -25,7 +25,7 @@ Adding a new entity type:
 import asyncio
 import html
 import json
-import logging
+import structlog
 import os
 import time
 from dataclasses import dataclass, field
@@ -36,7 +36,7 @@ from services.frame_generation.planner import _extract_json, request_llm_service
 from services.interactive.scene_ir import SceneIR
 from services.llm_service import LLMService, OpenAIProvider, default_llm_service
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 _PROMPTS_DIR = os.path.join(os.path.dirname(__file__), "prompts")
 
@@ -147,7 +147,7 @@ async def _run_codegen_with_prompt(
     svc = svc or default_llm_service
     model = getattr(svc.provider, "model", "unknown")
     label = prompt_file.replace(".md", "")
-    logger.info("LLM call  prompt=%s  model=%s  chars=%d  cache=no", label, model, len(prompt))
+    logger.info("llm_call", prompt=label, model=model, chars=len(prompt), cache="no")
     max_tokens = _CODEGEN_MAX_TOKENS.get(label, 4000)
     raw = await asyncio.to_thread(
         svc.make_single_prompt_request, prompt, "", None, False, max_tokens=max_tokens
@@ -156,10 +156,10 @@ async def _run_codegen_with_prompt(
     if result is None:
         raise RuntimeError("Codegen LLM returned None")
     _accumulate_tokens(usage or {})
-    logger.info("LLM done  prompt=%s  model=%s  tokens=%d  cache_read=%d  cache_create=%d",
-                label, model, (usage or {}).get("total_tokens", 0),
-                (usage or {}).get("cache_read_input_tokens", 0),
-                (usage or {}).get("cache_creation_input_tokens", 0))
+    logger.info("llm_done", prompt=label, model=model,
+                tokens=(usage or {}).get("total_tokens", 0),
+                cache_read=(usage or {}).get("cache_read_input_tokens", 0),
+                cache_create=(usage or {}).get("cache_creation_input_tokens", 0))
     _log({"event": "llm_call", "prompt_name": label, "usage": usage or {}})
     result = result.strip()
     if result.startswith("```"):
@@ -200,17 +200,17 @@ async def _select_entities(
 
     try:
         _model = getattr(default_llm_service.provider, "model", "unknown")
-        logger.info("LLM call  prompt=entity_selector  model=%s  chars=%d  cache=no",
-                    _model, len(selector_prompt) + len(user_msg))
+        logger.info("llm_call", prompt="entity_selector", model=_model,
+                    chars=len(selector_prompt) + len(user_msg), cache="no")
         raw, _usage = await asyncio.to_thread(
             default_llm_service.make_system_user_request,
             selector_prompt, user_msg, max_tokens=800
         )
         _accumulate_tokens(_usage or {})
-        logger.info("LLM done  prompt=entity_selector  model=%s  tokens=%d  cache_read=%d  cache_create=%d",
-                    _model, (_usage or {}).get("total_tokens", 0),
-                    (_usage or {}).get("cache_read_input_tokens", 0),
-                    (_usage or {}).get("cache_creation_input_tokens", 0))
+        logger.info("llm_done", prompt="entity_selector", model=_model,
+                    tokens=(_usage or {}).get("total_tokens", 0),
+                    cache_read=(_usage or {}).get("cache_read_input_tokens", 0),
+                    cache_create=(_usage or {}).get("cache_creation_input_tokens", 0))
         _log({"event": "llm_call", "prompt_name": "entity_selector", "usage": _usage or {}})
         if raw is None:
             return SelectionResult(enriched_prompt=original_message)
@@ -226,12 +226,11 @@ async def _select_entities(
         if "code_walkthrough" in entities and "step_controls" not in entities:
             entities.append("step_controls")
 
-        logger.info("entity_selector  enriched=%r  entities=%s  model=%s",
-                    enriched[:80], entities, model)
+        logger.info("entity_selected", enriched=enriched[:80], entities=entities, model=model)
         return SelectionResult(enriched_prompt=enriched, entities=entities, model=model)
 
     except Exception as exc:
-        logger.warning("entity_selector failed (%s) — falling back", exc)
+        logger.warning("entity_selector_failed_fallback", error=str(exc))
         return SelectionResult(enriched_prompt=original_message)
 
 
@@ -263,16 +262,16 @@ async def _plan_scene(
 
     svc = svc or default_llm_service
     _model = getattr(svc.provider, "model", "unknown")
-    logger.info("LLM call  prompt=scene_planner  model=%s  chars=%d  cache=no",
-                _model, len(system_prompt) + len(user_msg))
+    logger.info("llm_call", prompt="scene_planner", model=_model,
+                chars=len(system_prompt) + len(user_msg), cache="no")
     raw, _usage = await asyncio.to_thread(
         svc.make_system_user_request, system_prompt, user_msg, max_tokens=SCENE_PLANNER_MAX_TOKENS
     )
     _accumulate_tokens(_usage or {})
-    logger.info("LLM done  prompt=scene_planner  model=%s  tokens=%d  cache_read=%d  cache_create=%d",
-                _model, (_usage or {}).get("total_tokens", 0),
-                (_usage or {}).get("cache_read_input_tokens", 0),
-                (_usage or {}).get("cache_creation_input_tokens", 0))
+    logger.info("llm_done", prompt="scene_planner", model=_model,
+                tokens=(_usage or {}).get("total_tokens", 0),
+                cache_read=(_usage or {}).get("cache_read_input_tokens", 0),
+                cache_create=(_usage or {}).get("cache_creation_input_tokens", 0))
     _log({"event": "llm_call", "prompt_name": "scene_planner", "usage": _usage or {}})
     if raw is None:
         raise RuntimeError("Scene planner LLM returned None")
@@ -283,7 +282,7 @@ async def _plan_scene(
     try:
         return SceneIR(**data)
     except Exception as exc:
-        logger.error("Scene IR validation failed: %s | raw=%s", exc, raw[:500])
+        logger.error("scene_ir_validation_failed", error=str(exc), raw=raw[:500])
         raise
 
 
@@ -314,8 +313,7 @@ async def run_interactive_pipeline(
     """
     sources = sources or []
 
-    logger.info("interactive_pipeline  session=%s  domain=%s  sources=%d",
-                session_id, domain, len(sources))
+    logger.info("interactive_pipeline_start", session=session_id, domain=domain, sources=len(sources))
 
     # Stage 1: Enrich prompt + select entities + recommend model.
     entity_input = enriched_prompt or original_message
@@ -369,7 +367,7 @@ async def run_interactive_pipeline(
                     raw_html = await _run_codegen(spec, selection.enriched_prompt, svc=downstream_svc)
                     block.html = _wrap_in_sandbox(raw_html)
             except Exception as exc:
-                logger.error("Codegen failed for block %s: %s", block.id, exc)
+                logger.error("codegen_failed", block=block.id, error=str(exc))
                 block.html = _wrap_in_sandbox(
                     "<p style='color:#f03e3e;font-family:system-ui'>Widget generation failed.</p>"
                 )
@@ -380,6 +378,6 @@ async def run_interactive_pipeline(
     try:
         _save_scene_ir(scene, output_dir)
     except Exception as exc:
-        logger.warning("Could not save scene_ir.json: %s", exc)
+        logger.warning("scene_ir_save_failed", error=str(exc))
 
     yield {"type": "done", "session_id": session_id}
