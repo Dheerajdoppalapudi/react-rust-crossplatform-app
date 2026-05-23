@@ -288,7 +288,10 @@ async def _generate_stream(p: dict):
         prior_synthesis = _load_prior_synthesis(parent_session_id, FOLLOWUP_CONTEXT_TURNS)
 
         # ── 3. Thinking stage + plan_and_classify ─────────────────────────────
-        think_evt = {"type": "stage", "stage": "thinking", "label": "Thinking about your question…"}
+        short_q = message.strip()
+        if len(short_q) > 60:
+            short_q = short_q[:60].rsplit(' ', 1)[0] + '…'
+        think_evt = {"type": "stage", "stage": "thinking", "label": f"Thinking about {short_q}"}
         _apply_stage_log(think_evt)
         yield _sse(think_evt)
         t_think = time.time()

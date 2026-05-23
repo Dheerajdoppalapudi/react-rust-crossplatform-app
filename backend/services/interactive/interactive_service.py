@@ -27,6 +27,7 @@ import html
 import json
 import structlog
 import os
+import random
 import time
 from dataclasses import dataclass, field
 from typing import AsyncGenerator
@@ -37,6 +38,35 @@ from services.interactive.scene_ir import SceneIR
 from services.llm_service import LLMService, OpenAIProvider, default_llm_service
 
 logger = structlog.get_logger(__name__)
+
+_WIDGET_TEMPLATES = [
+    "Picking the best way to explain {topic}…",
+    "Choosing the right visuals for {topic}…",
+    "Figuring out how to show {topic}…",
+    "Deciding how to present {topic}…",
+    "Finding the best widgets for {topic}…",
+    "Thinking about what makes {topic} click…",
+    "Mapping {topic} to the right visuals…",
+    "Working out the best way to teach {topic}…",
+]
+
+_PLANNING_TEMPLATES = [
+    "Laying out your lesson on {topic}…",
+    "Structuring the explanation of {topic}…",
+    "Organizing the content around {topic}…",
+    "Building out a lesson on {topic}…",
+    "Putting the pieces together for {topic}…",
+    "Crafting a lesson structure for {topic}…",
+    "Shaping how {topic} will flow…",
+    "Arranging everything you need to understand {topic}…",
+]
+
+
+def _short_topic(text: str, max_len: int = 45) -> str:
+    t = text.strip()
+    if len(t) > max_len:
+        t = t[:max_len].rsplit(' ', 1)[0] + '…'
+    return t
 
 _PROMPTS_DIR = os.path.join(os.path.dirname(__file__), "prompts")
 
@@ -317,23 +347,28 @@ async def run_interactive_pipeline(
 
     # Stage 1: Enrich prompt + select entities + recommend model.
     entity_input = enriched_prompt or original_message
+    topic = _short_topic(entity_input)
     _t0 = time.monotonic()
-    yield {"type": "stage", "stage": "widgets", "label": "Selecting widgets…"}
+    yield {"type": "stage", "stage": "widgets", "label": random.choice(_WIDGET_TEMPLATES).format(topic=topic)}
     selection = await _select_entities(entity_input, domain, conversation_context)
     yield {"type": "stage_done", "stage": "widgets", "duration_s": round(time.monotonic() - _t0, 1)}
+    yield {"type": "entities_selected", "entities": selection.entities}
 
     # Honour per-request model override; fall back to entity selector recommendation
     user_forced_svc = request_llm_service.get()
     downstream_svc  = user_forced_svc if user_forced_svc else _get_llm_service(selection.model)
 
     # Stage 2: Plan scene IR — enriched prompt + sources for grounded citations
+    plan_topic = _short_topic(selection.enriched_prompt.split('.')[0])
     _t0 = time.monotonic()
-    yield {"type": "stage", "stage": "planning", "label": "Planning lesson structure…"}
+    yield {"type": "stage", "stage": "planning", "label": random.choice(_PLANNING_TEMPLATES).format(topic=plan_topic)}
     scene = await _plan_scene(
         selection.enriched_prompt, domain, conversation_context,
         selection.entities, sources, svc=downstream_svc,
     )
     yield {"type": "stage_done", "stage": "planning", "duration_s": round(time.monotonic() - _t0, 1)}
+    entity_blocks = [b for b in scene.blocks if b.type == "entity"]
+    yield {"type": "blocks_planned", "count": len(entity_blocks), "block_types": [b.entity_type for b in entity_blocks]}
 
     # Stage 3: Emit title + follow_ups immediately
     yield {
@@ -355,7 +390,7 @@ async def run_interactive_pipeline(
             spec      = block.props.get("spec", "an interactive widget")
             stage_id  = f"building_{block.id}"
             _t0 = time.monotonic()
-            yield {"type": "stage", "stage": stage_id, "label": _CODEGEN_LABELS.get(block.entity_type, "Building widget…")}
+            yield {"type": "stage", "stage": stage_id, "label": _CODEGEN_LABELS.get(block.entity_type, "Building widget…"), "entity_type": block.entity_type}
             try:
                 if block.entity_type == "p5_sketch":
                     raw_html = await _run_p5_codegen(spec, selection.enriched_prompt, svc=downstream_svc)

@@ -125,11 +125,13 @@ const TurnView = memo(function TurnView({ turn, onPauseAsk, onRetryTurn, onRetry
             )
           ) : (
             <LoadingView stages={turn.stages} sources={turn.sources ?? []} compact synthesisText={turn.synthesisText}
-              beatTitles={turn.beatTitles} completedBeats={turn.completedBeats} />
+              beatTitles={turn.beatTitles} completedBeats={turn.completedBeats}
+              selectedEntities={turn.selectedEntities ?? []} blockCount={turn.blockCount ?? 0} blockTypes={turn.blockTypes ?? []} />
           )
         ) : turn.isLoading ? (
           <LoadingView stages={turn.stages} sources={turn.sources ?? []} compact synthesisText={turn.synthesisText}
-            beatTitles={turn.beatTitles} completedBeats={turn.completedBeats} />
+            beatTitles={turn.beatTitles} completedBeats={turn.completedBeats}
+            selectedEntities={turn.selectedEntities ?? []} blockCount={turn.blockCount ?? 0} blockTypes={turn.blockTypes ?? []} />
         ) : turn.videoPhase === 'error' && !turn.id ? (
           <Box sx={{
             py: 2.5, px: 3, borderRadius: '12px',

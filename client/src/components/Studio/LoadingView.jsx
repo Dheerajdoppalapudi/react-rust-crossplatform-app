@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Box, Typography, Collapse, useTheme } from '@mui/material'
 import MovieCreationOutlinedIcon    from '@mui/icons-material/MovieCreationOutlined'
 import SearchOutlinedIcon           from '@mui/icons-material/SearchOutlined'
@@ -7,7 +7,7 @@ import KeyboardArrowDownIcon        from '@mui/icons-material/KeyboardArrowDown'
 import KeyboardArrowUpIcon          from '@mui/icons-material/KeyboardArrowUp'
 import RadioButtonUncheckedIcon     from '@mui/icons-material/RadioButtonUnchecked'
 import ChevronRightIcon             from '@mui/icons-material/ChevronRight'
-import { fadeIn, shimmer, textShimmer, zenithSpin } from '../../theme/animations'
+import { fadeIn, shimmer, textShimmer, zenithSpin, softPulse } from '../../theme/animations'
 import ZenithLogo from '../common/ZenithLogo'
 import { STAGE_REGISTRY, FALLBACK_STAGE_ICON } from '../../constants/stageRegistry'
 import { BRAND } from '../../theme/tokens.js'
@@ -19,7 +19,22 @@ const MAX_SHOWN_SOURCES = 5
 const FRAME_COUNT       = 5
 const FRAME_INDICES     = Array.from({ length: FRAME_COUNT }, (_, i) => i)
 
-// ── Skeleton helpers (visual generation stages) ───────────────────────────────
+const ENTITY_LABELS = {
+  slide_deck:       'Slides',
+  p5_sketch:        'Animation',
+  freeform_html:    'Widget',
+  quiz_card:        'Quiz',
+  timeline:         'Timeline',
+  chart:            'Chart',
+  mermaid:          'Diagram',
+  map:              'Map',
+  step_controls:    'Steps',
+  code_walkthrough: 'Code',
+  markdown_text:    'Text',
+  flashcard_set:    'Flashcards',
+}
+
+// ── Skeleton helpers ──────────────────────────────────────────────────────────
 
 function shimmerBg(isDark) { return isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }
 function skeletonBg(isDark) { return isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)' }
@@ -34,7 +49,6 @@ function ShimmerOverlay({ isDark, delay = 0 }) {
     }} />
   )
 }
-
 
 function FrameSkeletonCards({ isDark }) {
   return (
@@ -61,8 +75,63 @@ function FrameSkeletonCards({ isDark }) {
   )
 }
 
+// ── Widget-specific skeletons ─────────────────────────────────────────────────
 
-// ── Beat progress list (beat pipeline only) ───────────────────────────────────
+function SlideSkeletonCard({ isDark }) {
+  const slides = [0, 1, 2]
+  return (
+    <Box sx={{ display: 'flex', gap: 0.75, mt: 1.5, mb: 0.5, alignItems: 'flex-end' }}>
+      {slides.map((i) => (
+        <Box key={i} sx={{
+          flex: i === 0 ? '0 0 120px' : '0 0 76px',
+          height: i === 0 ? 72 : 48,
+          borderRadius: '6px',
+          backgroundColor: skeletonBg(isDark),
+          overflow: 'hidden', position: 'relative',
+          animation: `${fadeIn} 0.4s ease both`,
+          animationDelay: `${i * 0.12}s`,
+          border: `1px solid ${isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)'}`,
+        }}>
+          <ShimmerOverlay isDark={isDark} delay={i * 0.2} />
+          {i === 0 && (
+            <Box sx={{ position: 'absolute', inset: 0, p: 0.75, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+              <Box sx={{ height: 5, width: '72%', borderRadius: '3px', backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)' }} />
+              <Box sx={{ height: 3.5, width: '90%', borderRadius: '2px', backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)' }} />
+              <Box sx={{ height: 3.5, width: '60%', borderRadius: '2px', backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)' }} />
+            </Box>
+          )}
+        </Box>
+      ))}
+    </Box>
+  )
+}
+
+function P5SkeletonCard({ isDark }) {
+  const bars = [0.55, 0.88, 0.5, 1, 0.72, 0.85, 0.45, 0.68, 0.58, 0.92]
+  return (
+    <Box sx={{
+      width: '100%', maxWidth: 240, height: 88, borderRadius: '8px',
+      backgroundColor: skeletonBg(isDark), overflow: 'hidden', position: 'relative',
+      mt: 1.5, mb: 0.5, animation: `${fadeIn} 0.4s ease both`,
+      border: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)'}`,
+    }}>
+      <ShimmerOverlay isDark={isDark} />
+      <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: '2.5px', px: 2, pb: '14%' }}>
+        {bars.map((h, i) => (
+          <Box key={i} sx={{
+            flex: 1, borderRadius: '2px 2px 0 0',
+            backgroundColor: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.14)',
+            height: `${h * 60}%`,
+            animation: `${softPulse} ${1.4 + i * 0.09}s ease-in-out infinite`,
+            animationDelay: `${i * 0.06}s`,
+          }} />
+        ))}
+      </Box>
+    </Box>
+  )
+}
+
+// ── Beat progress list ────────────────────────────────────────────────────────
 
 function BeatRow({ title, isDone, isActive, isDark }) {
   const Icon      = isDone ? CheckCircleOutlineIcon : RadioButtonUncheckedIcon
@@ -288,6 +357,111 @@ function SourceItem({ source, idx, isDark }) {
   )
 }
 
+// ── Entity chips bar ──────────────────────────────────────────────────────────
+
+function EntityChipsBar({ entities, isDark }) {
+  if (!entities?.length) return null
+  return (
+    <Box sx={{
+      display: 'flex', flexWrap: 'wrap', gap: 0.5,
+      mb: 1.25, ml: 3.5,
+    }}>
+      {entities.map((entity, i) => (
+        <Box key={entity} sx={{
+          px: 1, py: 0.3,
+          borderRadius: '99px',
+          fontSize: 10.5,
+          fontWeight: 600,
+          letterSpacing: '0.025em',
+          color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.42)',
+          backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.04)',
+          border: `1px solid ${isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.07)'}`,
+          animation: `${fadeIn} 0.4s ease both`,
+          animationDelay: `${i * 0.07}s`,
+          userSelect: 'none',
+        }}>
+          {ENTITY_LABELS[entity] ?? entity}
+        </Box>
+      ))}
+    </Box>
+  )
+}
+
+// ── Elapsed timer (mounts when building stage becomes active) ─────────────────
+
+function ElapsedTimer({ isDark }) {
+  const [secs, setSecs] = useState(0)
+  useEffect(() => {
+    const id = setInterval(() => setSecs(s => s + 1), 1000)
+    return () => clearInterval(id)
+  }, [])
+  return (
+    <Typography sx={{
+      fontSize: 11, flexShrink: 0,
+      color: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.20)',
+      fontVariantNumeric: 'tabular-nums',
+      minWidth: 24, textAlign: 'right',
+    }}>
+      {secs}s
+    </Typography>
+  )
+}
+
+// ── Typewriter label ──────────────────────────────────────────────────────────
+
+function TypewriterLabel({ label, isDark, isActive }) {
+  // Non-active stages start with the full label to avoid flash of empty text
+  const [displayed, setDisplayed] = useState(() => isActive ? '' : label)
+  const prevLabelRef = useRef(isActive ? '' : label)
+
+  useEffect(() => {
+    if (!isActive) {
+      setDisplayed(label)
+      prevLabelRef.current = label
+      return
+    }
+    // Only run typewriter when label actually changes while active
+    if (label === prevLabelRef.current) return
+    prevLabelRef.current = label
+    setDisplayed('')
+    let i = 0
+    const id = setInterval(() => {
+      i++
+      setDisplayed(label.slice(0, i))
+      if (i >= label.length) clearInterval(id)
+    }, 18)
+    return () => clearInterval(id)
+  }, [label, isActive])
+
+  return (
+    <Typography sx={{
+      flex: 1, minWidth: 0,
+      fontSize: 13.5, fontWeight: 400,
+      lineHeight: 1.4,
+      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+      ...(isActive ? {
+        backgroundImage: `linear-gradient(90deg,
+          ${isDark ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.22)'} 35%,
+          ${isDark ? 'rgba(255,255,255,0.90)' : 'rgba(0,0,0,0.76)'} 50%,
+          ${isDark ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.22)'} 65%)`,
+        backgroundSize: '300% 100%',
+        backgroundClip: 'text',
+        WebkitBackgroundClip: 'text',
+        color: 'transparent',
+        animation: `${textShimmer} 1.6s linear infinite`,
+        transition: 'none',
+      } : {
+        color: isDark
+          ? (label === displayed ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.88)')
+          : (label === displayed ? 'rgba(0,0,0,0.30)'       : 'rgba(0,0,0,0.82)'),
+        transition: 'color 0.3s',
+      }),
+    }}>
+      {isActive ? displayed || label : label}
+    </Typography>
+  )
+}
+
 // ── Zenith logo spinner ───────────────────────────────────────────────────────
 
 function ZenithSpinner() {
@@ -304,8 +478,7 @@ function ZenithSpinner() {
 
 // ── Single stage row ──────────────────────────────────────────────────────────
 
-function StageRow({ stage, sources, isLast, compact, isDark, beatTitles, completedBeats }) {
-  // Prefix-match building_<blockId> → 'building' registry entry
+function StageRow({ stage, sources, isLast, compact, isDark, beatTitles, completedBeats, blockCount }) {
   const registryKey   = stage.id.startsWith('building_') ? 'building' : stage.id
   const stageConfig   = STAGE_REGISTRY[registryKey]
   const IconComponent = stageConfig?.Icon ?? FALLBACK_STAGE_ICON
@@ -313,15 +486,16 @@ function StageRow({ stage, sources, isLast, compact, isDark, beatTitles, complet
   const isDone    = stage.status === 'done'
   const isPending = stage.status === 'pending'
 
-  const iconColor = isActive  ? (isDark ? 'rgba(255,255,255,0.68)' : 'rgba(0,0,0,0.58)')
+  const isBuildingStage = registryKey === 'building'
+
+  const iconColor = isActive  ? (isDark ? 'rgba(255,255,255,0.72)' : 'rgba(0,0,0,0.62)')
                   : isDone    ? (isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.18)')
                               : (isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)')
 
-  const textColor = isActive  ? (isDark ? 'rgba(255,255,255,0.88)' : 'rgba(0,0,0,0.82)')
-                  : isDone    ? (isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.30)')
-                              : (isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.14)')
-
-  const lineColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)'
+  // Connector line brightens when stage completes
+  const lineColor = isDone
+    ? (isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.11)')
+    : (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)')
 
   const queries      = stage.queries ?? []
   const stageSources = stageConfig?.hasSourceItems ? sources : []
@@ -329,6 +503,7 @@ function StageRow({ stage, sources, isLast, compact, isDark, beatTitles, complet
 
   const [expanded, setExpanded] = useState(stage.status !== 'done')
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (stage.status === 'done') setExpanded(false)
   }, [stage.status])
 
@@ -340,6 +515,12 @@ function StageRow({ stage, sources, isLast, compact, isDark, beatTitles, complet
   const showFrameSkeleton = skeletonType === 'frames_or_beats' && isActive && !hasBeatData
   const showVideoSkeleton = skeletonType === 'video' && isActive
   const showBlockSkeleton = skeletonType === 'blocks' && isActive
+
+  // Widget-specific skeletons for building_* stages
+  const entityType = stage.entity_type
+  const showSlidesSkeleton  = isBuildingStage && isActive && entityType === 'slide_deck'
+  const showP5Skeleton      = isBuildingStage && isActive && entityType === 'p5_sketch'
+  const showGenericSkeleton = isBuildingStage && isActive && !showSlidesSkeleton && !showP5Skeleton
 
   return (
     <Box sx={{
@@ -353,11 +534,22 @@ function StageRow({ stage, sources, isLast, compact, isDark, beatTitles, complet
           width: 28, height: compact ? 28 : 32,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           flexShrink: 0,
+          // Icon pulse/glow when active
+          ...(isActive ? {
+            '& svg': {
+              filter: `drop-shadow(0 0 4px ${isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.28)'})`,
+              animation: `${softPulse} 2.2s ease-in-out infinite`,
+            }
+          } : {}),
         }}>
-          <IconComponent sx={{ fontSize: 15, color: iconColor }} />
+          <IconComponent sx={{ fontSize: 15, color: iconColor, transition: 'color 0.3s' }} />
         </Box>
         {!isLast && (
-          <Box sx={{ width: '1px', flex: 1, minHeight: 10, backgroundColor: lineColor }} />
+          <Box sx={{
+            width: '1px', flex: 1, minHeight: 10,
+            backgroundColor: lineColor,
+            transition: 'background-color 0.6s ease',
+          }} />
         )}
       </Box>
 
@@ -374,29 +566,10 @@ function StageRow({ stage, sources, isLast, compact, isDark, beatTitles, complet
             transition: 'opacity 0.15s',
           }}
         >
-          <Typography sx={{
-            flex: 1, minWidth: 0,
-            fontSize: 13.5, fontWeight: 400,
-            lineHeight: 1.4,
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            ...(isActive ? {
-              backgroundImage: `linear-gradient(90deg,
-                ${isDark ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.22)'} 35%,
-                ${isDark ? 'rgba(255,255,255,0.90)' : 'rgba(0,0,0,0.76)'} 50%,
-                ${isDark ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.22)'} 65%)`,
-              backgroundSize: '300% 100%',
-              backgroundClip: 'text',
-              WebkitBackgroundClip: 'text',
-              color: 'transparent',
-              animation: `${textShimmer} 1.6s linear infinite`,
-              transition: 'none',
-            } : {
-              color: textColor,
-              transition: 'color 0.3s',
-            }),
-          }}>
-            {stage.label}
-          </Typography>
+          <TypewriterLabel label={stage.label} isDark={isDark} isActive={isActive} />
+
+          {/* Elapsed timer for active building stages */}
+          {isActive && isBuildingStage && <ElapsedTimer isDark={isDark} />}
 
           {showBeatList && completedBeats != null && beatTitles?.length > 0 && (
             <Typography sx={{
@@ -413,6 +586,7 @@ function StageRow({ stage, sources, isLast, compact, isDark, beatTitles, complet
               fontSize: 11, flexShrink: 0,
               color: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)',
               mr: hasSubItems ? 0.25 : 0,
+              fontVariantNumeric: 'tabular-nums',
             }}>
               {stage.duration_s}s
             </Typography>
@@ -435,13 +609,27 @@ function StageRow({ stage, sources, isLast, compact, isDark, beatTitles, complet
           ) : null}
         </Box>
 
-        {/* Skeleton previews (live only) */}
+        {/* Block count sub-label for planning stage */}
+        {stage.id === 'planning' && isDone && blockCount > 0 && (
+          <Typography sx={{
+            fontSize: 11, mt: 0.15, mb: 0.25,
+            color: isDark ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.26)',
+            animation: `${fadeIn} 0.4s ease both`,
+          }}>
+            {blockCount} block{blockCount !== 1 ? 's' : ''} planned
+          </Typography>
+        )}
+
+        {/* Skeleton previews */}
         {showBeatList      && <BeatProgressList beatTitles={beatTitles} completedBeats={completedBeats} isDark={isDark} />}
         {showFrameSkeleton && <FrameSkeletonCards isDark={isDark} />}
         {showVideoSkeleton && <VideoSkeletonCard isDark={isDark} />}
         {showBlockSkeleton && <BlockSkeletonPreview isDark={isDark} />}
+        {showSlidesSkeleton  && <SlideSkeletonCard isDark={isDark} />}
+        {showP5Skeleton      && <P5SkeletonCard isDark={isDark} />}
+        {showGenericSkeleton && <BlockSkeletonPreview isDark={isDark} />}
 
-        {/* Research sub-items (live only) */}
+        {/* Research sub-items */}
         {hasSubItems && (
           <Collapse in={expanded} timeout={180}>
             <Box sx={{ mt: 0.5, mb: 0.75, pl: 1.25, borderLeft: `1.5px solid ${lineColor}`, ml: 0.25, overflow: 'hidden' }}>
@@ -473,28 +661,31 @@ function StageRow({ stage, sources, isLast, compact, isDark, beatTitles, complet
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function LoadingView({
-  stages         = null,
-  stage          = null,
-  compact        = false,
-  synthesisText  = '',
-  sources        = [],
-  defaultOpen    = true,
-  beatTitles     = null,
-  completedBeats = null,
+  stages           = null,
+  stage            = null,
+  compact          = false,
+  synthesisText    = '',
+  sources          = [],
+  defaultOpen      = true,
+  beatTitles       = null,
+  completedBeats   = null,
+  selectedEntities = [],
+  blockCount       = 0,
 }) {
   const theme     = useTheme()
   const isDark    = theme.palette.mode === 'dark'
 
-  const displayStages = stages?.length
-    ? stages
-    : [{ id: stage ?? 'planning', label: 'Planning…', status: 'active' }]
+  // 'designing' is a generate.py wrapper that spans the entire interactive pipeline —
+  // now redundant since widgets/planning/building_* sub-stages provide granular feedback.
+  const displayStages = (stages?.length ? stages.filter(s => s.id !== 'designing') : null)
+    ?? [{ id: stage ?? 'planning', label: 'Planning…', status: 'active' }]
 
   const allDone   = displayStages.length >= 2 && displayStages.every(s => s.status === 'done')
   const doneCount = displayStages.filter(s => s.status === 'done').length
   const [masterOpen, setMasterOpen] = useState(defaultOpen)
 
-  const subduedColor   = isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.28)'
-  const synthColor     = isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.52)'
+  const subduedColor = isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.28)'
+  const synthColor   = isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.52)'
 
   return (
     <Box
@@ -520,8 +711,7 @@ export default function LoadingView({
           sx={{
             display: 'flex', alignItems: 'center', gap: 0.75,
             mb: masterOpen ? 1.5 : 0,
-            cursor: 'pointer',
-            userSelect: 'none',
+            cursor: 'pointer', userSelect: 'none',
             '&:hover': { opacity: 0.75 },
             transition: 'opacity 0.15s',
           }}
@@ -550,12 +740,16 @@ export default function LoadingView({
               isDark={isDark}
               beatTitles={beatTitles}
               completedBeats={completedBeats}
+              blockCount={blockCount}
             />
           ))}
         </Box>
+
+        {/* Entity chips — reveal after widgets stage completes */}
+        <EntityChipsBar entities={selectedEntities} isDark={isDark} />
       </Collapse>
 
-      {/* Zenith spinner — visible while any stage is active */}
+      {/* Zenith spinner */}
       {!allDone && displayStages.some(s => s.status === 'active') && (
         <ZenithSpinner />
       )}
