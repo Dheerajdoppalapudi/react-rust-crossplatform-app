@@ -24,7 +24,6 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { relativeTime } from '../Studio/constants'
 import { useAuth } from '../../contexts/AuthContext'
 import { BRAND, PALETTE } from '../../theme/tokens.js'
-import { fadeIn, fadeOut } from '../../theme/animations.js'
 
 const DRAWER_OPEN   = 260
 const DRAWER_CLOSED = 56
@@ -56,7 +55,7 @@ function groupConversations(conversations) {
 }
 
 // ─── Logo / collapse toggle (owns its own hover state so Sidebar never re-renders on hover) ──
-const LogoButton = ({ accent, onToggle }) => {
+const LogoButton = ({ onToggle }) => {
   const theme   = useTheme()
   const isDark  = theme.palette.mode === 'dark'
   const [hovered, setHovered] = useState(false)
@@ -84,89 +83,56 @@ const LogoButton = ({ accent, onToggle }) => {
   )
 }
 
-// ─── Collapsed icon button ────────────────────────────────────────────────────
-const CollapsedBtn = ({ label, icon, onClick, isActive, accent, isDark }) => {
-  const theme    = useTheme()
-  const activeBg = isDark ? 'rgba(75,114,255,0.12)' : 'rgba(24,71,214,0.07)'
-  const hoverBg  = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)'
-
-  return (
-    <Tooltip title={label} placement="right" arrow>
-      <ListItem disablePadding sx={{ mb: 0.25 }}>
-        <ListItemButton
-          onClick={(e) => { e.stopPropagation(); onClick?.() }}
-          sx={{
-            borderRadius: '7px', minHeight: 34, px: 0,
-            justifyContent: 'center',
-            bgcolor: isActive ? activeBg : 'transparent',
-            '&:hover': { bgcolor: isActive ? activeBg : hoverBg },
-            transition: 'background 0.15s',
-            mx: 0.75,
-          }}
-        >
-          <ListItemIcon sx={{
-            minWidth: 0, justifyContent: 'center',
-            color: isActive ? accent : theme.palette.text.secondary,
-          }}>
-            {icon}
-          </ListItemIcon>
-        </ListItemButton>
-      </ListItem>
-    </Tooltip>
-  )
-}
-
-// ─── Single nav item ──────────────────────────────────────────────────────────
+// ─── Single nav item — icon always visible, text fades via CSS ───────────────
 const NavItem = ({ item, open, isActive, onClick }) => {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
   const accent = theme.palette.primary.main
-
-  if (!open) {
-    return (
-      <CollapsedBtn
-        label={item.label} icon={item.icon}
-        onClick={onClick} isActive={isActive}
-        accent={accent} isDark={isDark}
-      />
-    )
-  }
-
   const activeBg = isDark ? 'rgba(79,110,255,0.12)'  : 'rgba(0,26,255,0.07)'
   const hoverBg  = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)'
 
   return (
-    <ListItem disablePadding sx={{ px: 0.75, mb: 0.15 }}>
-      <ListItemButton
-        onClick={onClick}
-        sx={{
-          borderRadius: '7px', minHeight: 34, px: 1,
-          bgcolor: isActive ? activeBg : 'transparent',
-          '&:hover': { bgcolor: isActive ? activeBg : hoverBg },
-          transition: 'background 0.15s',
-        }}
-      >
-        <ListItemIcon sx={{
-          minWidth: 0, mr: 1.25, justifyContent: 'center',
-          color: isActive ? accent : theme.palette.text.secondary,
-        }}>
-          {item.icon}
-        </ListItemIcon>
-        <ListItemText
-          primary={item.label}
+    <Tooltip title={open ? '' : item.label} placement="right" arrow>
+      <ListItem disablePadding sx={{ mb: 0.25 }}>
+        <ListItemButton
+          onClick={(e) => { e.stopPropagation(); onClick?.() }}
           sx={{
-            '& .MuiTypography-root': {
-              fontSize: 12.5,
-              fontWeight: isActive ? 600 : 400,
-              color: isActive ? accent : theme.palette.text.primary,
-            },
+            borderRadius: '7px', minHeight: 34, px: 0, mx: 0.75,
+            overflow: 'hidden',
+            bgcolor: isActive ? activeBg : 'transparent',
+            '&:hover': { bgcolor: isActive ? activeBg : hoverBg },
+            transition: 'background 0.15s',
           }}
-        />
-        {isActive && (
-          <Box sx={{ width: 4, height: 4, borderRadius: '50%', bgcolor: accent, flexShrink: 0, ml: 0.5 }} />
-        )}
-      </ListItemButton>
-    </ListItem>
+        >
+          {/* Icon always in a fixed-width column — never moves */}
+          <Box sx={{
+            width: 38, minWidth: 38, flexShrink: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: isActive ? accent : theme.palette.text.secondary,
+          }}>
+            {item.icon}
+          </Box>
+
+          {/* Text fades via CSS — no unmount/remount */}
+          <Box sx={{
+            flex: 1, display: 'flex', alignItems: 'center', gap: 0.5,
+            overflow: 'hidden', whiteSpace: 'nowrap',
+            opacity: open ? 1 : 0,
+            transition: 'opacity 0.18s ease',
+          }}>
+            <Typography sx={{
+              fontSize: 12.5, fontWeight: isActive ? 600 : 400,
+              color: isActive ? accent : theme.palette.text.primary,
+            }}>
+              {item.label}
+            </Typography>
+            {isActive && (
+              <Box sx={{ width: 4, height: 4, borderRadius: '50%', bgcolor: accent, flexShrink: 0 }} />
+            )}
+          </Box>
+        </ListItemButton>
+      </ListItem>
+    </Tooltip>
   )
 }
 
@@ -423,28 +389,15 @@ const Sidebar = ({
   const navigate = useNavigate()
   const location = useLocation()
   const isDark   = theme.palette.mode === 'dark'
-  const accent   = theme.palette.primary.main
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
   const { user, logout } = useAuth()
 
-  const [open, setOpen]           = useState(false)
-  const [isClosing, setIsClosing] = useState(false)
-  const [search, setSearch]       = useState('')
-  const [renamingConv, setRenamingConv]     = useState(null)
-  const searchRef    = useRef(null)
-  const closeTimer   = useRef(null)
+  const [open, setOpen]       = useState(false)
+  const [search, setSearch]   = useState('')
+  const [renamingConv, setRenamingConv] = useState(null)
+  const searchRef = useRef(null)
 
   const toggleOpen = useCallback(() => setOpen(p => !p), [])
-
-  const handleClose = useCallback(() => {
-    setIsClosing(true)
-    closeTimer.current = setTimeout(() => {
-      setOpen(false)
-      setIsClosing(false)
-    }, 260)
-  }, [])
-
-  useEffect(() => () => clearTimeout(closeTimer.current), [])
 
   // On mobile the drawer is controlled by parent; on desktop it's self-managed.
   const drawerOpen   = isMobile ? mobileOpen : open
@@ -486,10 +439,6 @@ const Sidebar = ({
   const resultCount  = filtered.length
   const isSearching  = search.trim().length > 0
 
-  const contentAnim = isClosing
-    ? `${fadeOut} 0.26s ease forwards`
-    : `${fadeIn} 0.3s cubic-bezier(0.16, 1, 0.3, 1)`
-
   const convItemProps = (conv) => ({
     conv,
     isActive: activeConvId === conv.id,
@@ -513,10 +462,11 @@ const Sidebar = ({
           cursor: (!isMobile && !open) ? 'pointer' : 'default',
           width: isMobile ? 0 : (open ? DRAWER_OPEN : DRAWER_CLOSED),
           flexShrink: 0,
-          transition: 'width 0.42s cubic-bezier(0.16, 1, 0.3, 1)',
+          transition: 'width 0.36s cubic-bezier(0.16, 1, 0.3, 1)',
           '& .MuiDrawer-paper': {
             width: DRAWER_OPEN,
-            transition: isMobile ? 'none' : 'width 0.42s cubic-bezier(0.16, 1, 0.3, 1)',
+            transition: isMobile ? 'none' : 'width 0.36s cubic-bezier(0.16, 1, 0.3, 1)',
+            willChange: 'width',
             overflowX: 'hidden',
             borderRight: `1px solid ${theme.palette.divider}`,
             backgroundColor: sidebarBg,
@@ -538,7 +488,7 @@ const Sidebar = ({
           mx: '6px',
         }}>
           {/* Collapsed desktop — big icon, click to expand */}
-          {!isMobile && !open && <LogoButton accent={accent} onToggle={toggleOpen} />}
+          {!isMobile && !open && <LogoButton onToggle={toggleOpen} />}
 
           {/* Open / mobile — logo on left */}
           {(isMobile || open) && (
@@ -550,7 +500,7 @@ const Sidebar = ({
             <IconButton
               size="small"
               aria-label="Close sidebar"
-              onClick={(e) => { e.stopPropagation(); isMobile ? closeMobile() : handleClose() }}
+              onClick={(e) => { e.stopPropagation(); isMobile ? closeMobile() : toggleOpen() }}
               sx={{
                 width: 28, height: 28, borderRadius: '7px', flexShrink: 0,
                 color: theme.palette.text.disabled,
@@ -573,7 +523,6 @@ const Sidebar = ({
               fontSize: 9.5, fontWeight: 600, color: theme.palette.text.secondary,
               textTransform: 'uppercase', letterSpacing: '0.8px',
               px: 2, mb: 0.5, opacity: 0.5,
-              animation: contentAnim,
             }}>
               Workspace
             </Typography>
@@ -591,41 +540,39 @@ const Sidebar = ({
 
         <Divider sx={{ mx: 1, mt: 1, mb: 0, borderColor: theme.palette.divider }} />
 
-        {/* ── New Chat ─────────────────────────────────────────────────────── */}
-        {(isMobile || open) ? (
-          <ListItem disablePadding sx={{ px: 0.75, py: 0.35, animation: contentAnim }}>
+        {/* ── New Chat — icon always visible, text fades ────────────────── */}
+        <Tooltip title={open || isMobile ? '' : 'New chat'} placement="right" arrow>
+          <ListItem disablePadding sx={{ py: 0.35 }}>
             <ListItemButton
               onClick={() => { onNewConversation(); if (isMobile) closeMobile() }}
               sx={{
-                borderRadius: '7px', minHeight: 34, px: 1,
+                borderRadius: '7px', minHeight: 34, px: 0, mx: 0.75,
+                overflow: 'hidden',
                 '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)' },
                 transition: 'background 0.15s',
               }}
             >
-              <ListItemIcon sx={{ minWidth: 0, mr: 1.25, justifyContent: 'center', color: theme.palette.text.secondary }}>
+              <Box sx={{ width: 38, minWidth: 38, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.palette.text.secondary }}>
                 <AddIcon sx={{ fontSize: ICON_SIZE }} />
-              </ListItemIcon>
-              <ListItemText
-                primary="New chat"
-                sx={{ '& .MuiTypography-root': { fontSize: 12.5, fontWeight: 400, color: theme.palette.text.primary } }}
-              />
-              {!isMobile && (
-                <Typography sx={{ fontSize: 9.5, color: theme.palette.text.disabled, opacity: 0.5, letterSpacing: '0.02em' }}>
-                  {newChatShortcut}
+              </Box>
+              <Box sx={{
+                flex: 1, display: 'flex', alignItems: 'center', gap: 1,
+                overflow: 'hidden', whiteSpace: 'nowrap',
+                opacity: (open || isMobile) ? 1 : 0,
+                transition: 'opacity 0.18s ease',
+              }}>
+                <Typography sx={{ fontSize: 12.5, fontWeight: 400, color: theme.palette.text.primary }}>
+                  New chat
                 </Typography>
-              )}
+                {!isMobile && (
+                  <Typography sx={{ fontSize: 9.5, color: theme.palette.text.disabled, opacity: 0.5, letterSpacing: '0.02em', ml: 'auto', mr: 0.5 }}>
+                    {newChatShortcut}
+                  </Typography>
+                )}
+              </Box>
             </ListItemButton>
           </ListItem>
-        ) : (
-          <List disablePadding>
-            <CollapsedBtn
-              label="New chat"
-              icon={<AddIcon sx={{ fontSize: ICON_SIZE }} />}
-              onClick={onNewConversation}
-              isActive={false} accent={accent} isDark={isDark}
-            />
-          </List>
-        )}
+        </Tooltip>
 
         <Divider sx={{ mx: 1, mt: 0, mb: 1, borderColor: theme.palette.divider }} />
 
@@ -633,7 +580,7 @@ const Sidebar = ({
         <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
 
           {(isMobile || open) && (
-            <Box sx={{ px: 0.75, mb: 0.5, flexShrink: 0, animation: contentAnim }}>
+            <Box sx={{ px: 0.75, mb: 0.5, flexShrink: 0 }}>
               <Box sx={{ px: 0.75, mb: 0.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Typography sx={{
                   fontSize: 9.5, fontWeight: 600, color: theme.palette.text.secondary,
@@ -681,14 +628,20 @@ const Sidebar = ({
           )}
 
           {!isMobile && !open && (
-            <List disablePadding>
-              <CollapsedBtn
-                label="Search chats"
-                icon={<SearchIcon sx={{ fontSize: ICON_SIZE }} />}
-                onClick={null}
-                isActive={false} accent={accent} isDark={isDark}
-              />
-            </List>
+            <Tooltip title="Search chats" placement="right" arrow>
+              <ListItem disablePadding sx={{ mb: 0.25 }}>
+                <ListItemButton
+                  sx={{
+                    borderRadius: '7px', minHeight: 34, px: 0, mx: 0.75,
+                    justifyContent: 'center',
+                    '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)' },
+                    transition: 'background 0.15s',
+                  }}
+                >
+                  <SearchIcon sx={{ fontSize: ICON_SIZE, color: theme.palette.text.secondary }} />
+                </ListItemButton>
+              </ListItem>
+            </Tooltip>
           )}
 
           {/* Scrollable list */}
@@ -768,13 +721,28 @@ const Sidebar = ({
           <Divider sx={{ mx: 1, mb: 1, borderColor: theme.palette.divider }} />
 
           {user && (
-            (isMobile || open) ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', px: 1.5, py: 0.75, mb: 0.25, overflow: 'hidden' }}>
+              <Tooltip title={(!isMobile && !open) ? `${user.name} — Sign out` : ''} placement="right" arrow>
+                <Box
+                  onClick={(!isMobile && !open) ? logout : undefined}
+                  sx={{
+                    flexShrink: 0,
+                    cursor: (!isMobile && !open) ? 'pointer' : 'default',
+                    borderRadius: '50%',
+                    '&:hover': { opacity: (!isMobile && !open) ? 0.75 : 1 },
+                    transition: 'opacity 0.15s',
+                  }}
+                >
+                  <Avatar src={user.avatar} alt={user.name} sx={{ width: 24, height: 24 }} />
+                </Box>
+              </Tooltip>
               <Box sx={{
-                display: 'flex', alignItems: 'center', gap: 1,
-                px: 1.5, py: 0.75, mb: 0.25,
-                animation: contentAnim,
+                flex: 1, minWidth: 0, ml: 1,
+                display: 'flex', alignItems: 'center', gap: 0.5,
+                overflow: 'hidden', whiteSpace: 'nowrap',
+                opacity: (open || isMobile) ? 1 : 0,
+                transition: 'opacity 0.18s ease',
               }}>
-                <Avatar src={user.avatar} alt={user.name} sx={{ width: 24, height: 24, flexShrink: 0 }} />
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Typography noWrap sx={{ fontSize: 12, fontWeight: 600, color: 'text.primary', lineHeight: 1.3 }}>
                     {user.name}
@@ -797,57 +765,39 @@ const Sidebar = ({
                   </IconButton>
                 </Tooltip>
               </Box>
-            ) : (
-              <Box sx={{ display: 'flex', justifyContent: 'center', mb: 0.5 }}>
-                <Tooltip title={`${user.name} — Sign out`} placement="right" arrow>
-                  <Box
-                    onClick={logout}
-                    sx={{
-                      cursor: 'pointer', borderRadius: '50%',
-                      '&:hover': { opacity: 0.75 },
-                      transition: 'opacity 0.15s',
-                    }}
-                  >
-                    <Avatar src={user.avatar} alt={user.name} sx={{ width: 24, height: 24 }} />
-                  </Box>
-                </Tooltip>
-              </Box>
-            )
+            </Box>
           )}
 
-          {(isMobile || open) ? (
-            <ListItem disablePadding sx={{ px: 0.75, mb: 0.25, animation: contentAnim }}>
+          {/* Theme toggle — icon always visible, text fades */}
+          <Tooltip title={(open || isMobile) ? '' : (themeMode === 'dark' ? 'Light mode' : 'Dark mode')} placement="right" arrow>
+            <ListItem disablePadding sx={{ mb: 0.25 }}>
               <ListItemButton
                 onClick={onThemeToggle}
                 sx={{
-                  borderRadius: '7px', minHeight: 34, px: 1,
+                  borderRadius: '7px', minHeight: 34, px: 0, mx: 0.75,
+                  overflow: 'hidden',
                   '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)' },
                   transition: 'background 0.15s',
                 }}
               >
-                <ListItemIcon sx={{ minWidth: 0, mr: 1.25, justifyContent: 'center', color: theme.palette.text.secondary }}>
+                <Box sx={{ width: 38, minWidth: 38, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.palette.text.secondary }}>
                   {themeMode === 'dark'
                     ? <LightModeOutlinedIcon sx={{ fontSize: ICON_SIZE }} />
                     : <DarkModeOutlinedIcon  sx={{ fontSize: ICON_SIZE }} />
                   }
-                </ListItemIcon>
-                <ListItemText
-                  primary={themeMode === 'dark' ? 'Light mode' : 'Dark mode'}
-                  sx={{ '& .MuiTypography-root': { fontSize: 12.5, fontWeight: 400, color: theme.palette.text.primary } }}
-                />
+                </Box>
+                <Box sx={{
+                  flex: 1, overflow: 'hidden', whiteSpace: 'nowrap',
+                  opacity: (open || isMobile) ? 1 : 0,
+                  transition: 'opacity 0.18s ease',
+                }}>
+                  <Typography sx={{ fontSize: 12.5, fontWeight: 400, color: theme.palette.text.primary }}>
+                    {themeMode === 'dark' ? 'Light mode' : 'Dark mode'}
+                  </Typography>
+                </Box>
               </ListItemButton>
             </ListItem>
-          ) : (
-            <CollapsedBtn
-              label={themeMode === 'dark' ? 'Light mode' : 'Dark mode'}
-              icon={themeMode === 'dark'
-                ? <LightModeOutlinedIcon sx={{ fontSize: ICON_SIZE }} />
-                : <DarkModeOutlinedIcon  sx={{ fontSize: ICON_SIZE }} />
-              }
-              onClick={onThemeToggle}
-              isActive={false} accent={accent} isDark={isDark}
-            />
-          )}
+          </Tooltip>
 
           <List disablePadding sx={{ pb: 1 }}>
             {bottomItems.map((item) => (
