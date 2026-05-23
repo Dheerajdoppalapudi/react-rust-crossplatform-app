@@ -1,6 +1,7 @@
 import { useRef, useCallback, useMemo } from 'react'
 import { Box, Typography, Tooltip, IconButton, useTheme } from '@mui/material'
 import DownloadIcon from '@mui/icons-material/Download'
+import { useExpanded } from '../BlockWrapper'
 import {
   ResponsiveContainer,
   BarChart, Bar,
@@ -14,6 +15,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, Legend, ReferenceLine, ReferenceDot,
 } from 'recharts'
 import { TYPOGRAPHY, RADIUS, PALETTE, BRAND } from '../../../theme/tokens'
+import EntityCaption from './EntityCaption'
 
 const DEFAULT_COLORS = [
   BRAND.primary, BRAND.accent,
@@ -176,9 +178,10 @@ export default function ChartViewer({
   colors,
   caption,
 }) {
-  const theme     = useTheme()
-  const isDark    = theme.palette.mode === 'dark'
-  const chartRef  = useRef(null)
+  const theme      = useTheme()
+  const isDark     = theme.palette.mode === 'dark'
+  const isExpanded = useExpanded()
+  const chartRef   = useRef(null)
   const tt        = buildTooltipStyle(isDark)
   const grid      = gridColor(isDark)
   const axis      = axisStyle(isDark)
@@ -262,10 +265,19 @@ export default function ChartViewer({
     </>
   )
 
+  const containerSx = {
+    border: isExpanded ? 'none' : '1px solid',
+    borderColor: 'divider',
+    borderRadius: isExpanded ? 0 : `${RADIUS.lg}px`,
+    backgroundColor: isDark ? PALETTE.darkSurface : PALETTE.ivory,
+    p: isExpanded ? 2 : 1.5,
+    overflow: 'hidden',
+  }
+
   // ── Heatmap ─────────────────────────────────────────────────────────────────
   if (type === 'heatmap') {
     return (
-      <Box>
+      <Box sx={containerSx}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: title ? 0 : 0.5 }}>
           <ChartTitle title={title} isDark={isDark} />
         </Box>
@@ -276,11 +288,7 @@ export default function ChartViewer({
           valueKey={valueKey}
           isDark={isDark}
         />
-        {caption && (
-          <Typography sx={{ mt: 1, fontSize: TYPOGRAPHY.sizes.caption, textAlign: 'center', color: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)' }}>
-            {caption}
-          </Typography>
-        )}
+        <EntityCaption caption={caption} />
       </Box>
     )
   }
@@ -406,7 +414,7 @@ export default function ChartViewer({
   }
 
   return (
-    <Box>
+    <Box sx={containerSx}>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: title ? 0 : 0.5 }}>
         <ChartTitle title={title} isDark={isDark} />
         <Tooltip title="Download SVG">
@@ -423,14 +431,7 @@ export default function ChartViewer({
         </ResponsiveContainer>
       </Box>
 
-      {caption && (
-        <Typography sx={{
-          mt: 1, fontSize: TYPOGRAPHY.sizes.caption, textAlign: 'center',
-          color: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)',
-        }}>
-          {caption}
-        </Typography>
-      )}
+      <EntityCaption caption={caption} />
     </Box>
   )
 }

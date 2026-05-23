@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Box, Typography, Skeleton, useTheme } from '@mui/material'
 import { TYPOGRAPHY, RADIUS, PALETTE } from '../../../theme/tokens'
+import EntityCaption from './EntityCaption'
 
 const CDN_URLS = [
   '/3Dmol-nojquery.min.js',  // local copy in public/ — always works offline
@@ -194,14 +195,7 @@ export default function MoleculeViewer({
           }}
         />
       </Box>
-      {caption && (
-        <Typography sx={{
-          mt: 1, fontSize: TYPOGRAPHY.sizes.caption, textAlign: 'center',
-          color: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)',
-        }}>
-          {caption}
-        </Typography>
-      )}
+      <EntityCaption caption={caption} />
     </Box>
   )
 }

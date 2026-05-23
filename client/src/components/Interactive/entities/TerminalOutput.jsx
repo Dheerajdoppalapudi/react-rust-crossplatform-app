@@ -3,13 +3,14 @@ import { Box, Typography, Tooltip, IconButton, useTheme } from '@mui/material'
 import { useExpanded } from '../BlockWrapper'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import CheckIcon       from '@mui/icons-material/Check'
-import { TYPOGRAPHY, RADIUS } from '../../../theme/tokens'
+import { TYPOGRAPHY, RADIUS, PALETTE, BRAND } from '../../../theme/tokens'
+import EntityCaption from './EntityCaption'
 
 const DOT_COLORS = ['#ff5f57', '#febc2e', '#28c840']
 
 const SIMULATE_DELAYS = { slow: 800, normal: 350, fast: 120 }
 
-function TerminalBlock({ block }) {
+function TerminalBlock({ block, skin }) {
   const lines = String(block.content ?? '').split('\n')
 
   if (block.type === 'command') {
@@ -18,13 +19,13 @@ function TerminalBlock({ block }) {
         <Typography component="span" sx={{
           fontFamily: TYPOGRAPHY.fontFamilyMono,
           fontSize: TYPOGRAPHY.sizes.bodySm,
-          color: '#4B72FF', lineHeight: TYPOGRAPHY.lineHeights.relaxed,
+          color: skin.command, lineHeight: TYPOGRAPHY.lineHeights.relaxed,
           flexShrink: 0, mt: '1px',
         }}>$</Typography>
         <Typography sx={{
           fontFamily: TYPOGRAPHY.fontFamilyMono,
           fontSize: TYPOGRAPHY.sizes.bodySm,
-          color: '#e6edf3', lineHeight: TYPOGRAPHY.lineHeights.relaxed,
+          color: skin.code, lineHeight: TYPOGRAPHY.lineHeights.relaxed,
           whiteSpace: 'pre-wrap', wordBreak: 'break-all',
         }}>
           {block.content}
@@ -40,7 +41,7 @@ function TerminalBlock({ block }) {
           <Typography key={i} sx={{
             fontFamily: TYPOGRAPHY.fontFamilyMono,
             fontSize: TYPOGRAPHY.sizes.bodySm,
-            color: '#8b949e', lineHeight: TYPOGRAPHY.lineHeights.relaxed,
+            color: skin.output, lineHeight: TYPOGRAPHY.lineHeights.relaxed,
             whiteSpace: 'pre-wrap', wordBreak: 'break-all',
           }}>
             {line || ' '}
@@ -55,7 +56,7 @@ function TerminalBlock({ block }) {
       <Typography sx={{
         fontFamily: TYPOGRAPHY.fontFamilyMono,
         fontSize: TYPOGRAPHY.sizes.bodySm,
-        color: '#6e7681', fontStyle: 'italic',
+        color: skin.comment, fontStyle: 'italic',
         lineHeight: TYPOGRAPHY.lineHeights.relaxed, mb: 0.5,
       }}>
         # {block.content}
@@ -77,6 +78,35 @@ export default function TerminalOutput({
   const theme      = useTheme()
   const isDark     = theme.palette.mode === 'dark'
   const isExpanded = useExpanded()
+
+  // Theme-aware terminal skin — dark keeps the GitHub Dark look; light uses a clean paper style
+  const skin = isDark ? {
+    bg:          PALETTE.sidebarDark,
+    headerBg:    '#161b22',
+    headerBorder:'#21262d',
+    border:      PALETTE.borderDark,
+    title:       PALETTE.oliveGray,
+    copy:        'rgba(255,255,255,0.3)',
+    copyHover:   'rgba(255,255,255,0.6)',
+    command:     BRAND.accent,
+    code:        PALETTE.warmSilver,
+    output:      PALETTE.oliveGray,
+    comment:     PALETTE.stoneGray,
+    cursor:      BRAND.accent,
+  } : {
+    bg:          PALETTE.warmSand,
+    headerBg:    PALETTE.ivory,
+    headerBorder:PALETTE.borderCream,
+    border:      PALETTE.borderCream,
+    title:       PALETTE.oliveGray,
+    copy:        'rgba(0,0,0,0.3)',
+    copyHover:   'rgba(0,0,0,0.6)',
+    command:     BRAND.primary,
+    code:        PALETTE.nearBlackText,
+    output:      PALETTE.oliveGray,
+    comment:     PALETTE.stoneGray,
+    cursor:      BRAND.primary,
+  }
 
   const [visibleCount, setVisibleCount] = useState(simulate ? 0 : blocks.length)
   const [copied,       setCopied]       = useState(false)
@@ -105,7 +135,7 @@ export default function TerminalOutput({
     } catch {}
   }, [blocks])
 
-  const titleText    = title || shell
+  const titleText     = title || shell
   const visibleBlocks = blocks.slice(0, visibleCount)
 
   return (
@@ -113,47 +143,49 @@ export default function TerminalOutput({
       <Box sx={{
         borderRadius: isExpanded ? 0 : `${RADIUS.lg}px`,
         overflow: 'hidden',
-        border: isExpanded ? 'none' : `1px solid ${isDark ? '#1e293b' : '#374151'}`,
-        backgroundColor: '#0d1117',
+        border: isExpanded ? 'none' : `1px solid ${skin.border}`,
+        backgroundColor: skin.bg,
       }}>
-        {/* Title bar */}
+        {/* Title bar: dots left · title center · copy right */}
         <Box sx={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          display: 'grid', gridTemplateColumns: '1fr auto 1fr',
+          alignItems: 'center',
           px: 1.5, py: 1,
-          backgroundColor: '#161b22',
-          borderBottom: '1px solid #21262d',
+          backgroundColor: skin.headerBg,
+          borderBottom: `1px solid ${skin.headerBorder}`,
         }}>
+          <Box sx={{ display: 'flex', gap: 0.625 }}>
+            {DOT_COLORS.map(c => (
+              <Box key={c} sx={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: c }} />
+            ))}
+          </Box>
           <Typography sx={{
             fontFamily: TYPOGRAPHY.fontFamilyMono,
             fontSize: TYPOGRAPHY.sizes.caption,
-            color: '#8b949e', letterSpacing: '0.02em',
+            color: skin.title, letterSpacing: '0.02em',
+            textAlign: 'center',
           }}>
             {titleText}
           </Typography>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
             <Tooltip title={copied ? 'Copied!' : 'Copy'}>
               <IconButton size="small" onClick={handleCopy} aria-label="Copy terminal output"
-                sx={{ color: 'rgba(255,255,255,0.3)', width: 22, height: 22, '&:hover': { color: 'rgba(255,255,255,0.6)' } }}>
-                {copied ? <CheckIcon sx={{ fontSize: 12 }} /> : <ContentCopyIcon sx={{ fontSize: 12 }} />}
+                sx={{ color: skin.copy, width: 28, height: 28, '&:hover': { color: skin.copyHover } }}>
+                {copied ? <CheckIcon sx={{ fontSize: 13 }} /> : <ContentCopyIcon sx={{ fontSize: 13 }} />}
               </IconButton>
             </Tooltip>
-            <Box sx={{ display: 'flex', gap: 0.625 }}>
-              {DOT_COLORS.map(c => (
-                <Box key={c} sx={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: c }} />
-              ))}
-            </Box>
           </Box>
         </Box>
 
         {/* Content */}
         <Box sx={{ p: 2 }}>
           {visibleBlocks.map((block, i) => (
-            <TerminalBlock key={i} block={block} />
+            <TerminalBlock key={i} block={block} skin={skin} />
           ))}
           {simulate && visibleCount < blocks.length && (
             <Typography component="span" sx={{
               fontFamily: TYPOGRAPHY.fontFamilyMono, fontSize: TYPOGRAPHY.sizes.bodySm,
-              color: '#4B72FF', animation: 'blink 1s step-end infinite',
+              color: skin.cursor, animation: 'blink 1s step-end infinite',
               '@keyframes blink': { '0%,100%': { opacity: 1 }, '50%': { opacity: 0 } },
             }}>
               ▋
@@ -162,14 +194,7 @@ export default function TerminalOutput({
         </Box>
       </Box>
 
-      {caption && (
-        <Typography sx={{
-          mt: 1, fontSize: TYPOGRAPHY.sizes.caption, textAlign: 'center',
-          color: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)',
-        }}>
-          {caption}
-        </Typography>
-      )}
+      <EntityCaption caption={caption} />
     </Box>
   )
 }

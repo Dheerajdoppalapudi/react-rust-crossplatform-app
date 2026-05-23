@@ -13,6 +13,7 @@ import SlideshowIcon         from '@mui/icons-material/Slideshow'
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown'
 import RestartAltIcon        from '@mui/icons-material/RestartAlt'
 import { TYPOGRAPHY, RADIUS, PALETTE } from '../../../theme/tokens'
+import EntityCaption from './EntityCaption'
 import { API_BASE } from '../../../constants/api'
 
 function downloadBlob(blob, filename) {
@@ -30,21 +31,25 @@ const TABS = [
   { id: 'edit', Icon: EditIcon,       label: 'Edit' },
 ]
 
-function TabGroup({ tab, onChange }) {
+function TabGroup({ tab, onChange, isDark }) {
   return (
     <Box sx={{
       display: 'flex', alignItems: 'center',
-      backgroundColor: 'rgba(255,255,255,0.08)',
+      backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
       borderRadius: '8px',
       padding: '2px',
       gap: '1px',
     }}>
-      {TABS.map(({ id, Icon, label }) => {
+      {TABS.map(({ id, Icon: TabIcon, label }) => {
         const active = tab === id
         return (
           <Box
             key={id}
+            component="button"
+            type="button"
             onClick={() => onChange(id)}
+            aria-pressed={active}
+            aria-label={label}
             sx={{
               display: 'flex', alignItems: 'center', gap: '5px',
               px: '10px', py: '5px',
@@ -52,18 +57,33 @@ function TabGroup({ tab, onChange }) {
               cursor: 'pointer',
               fontSize: '12px',
               fontWeight: active ? 600 : 400,
-              color: active ? '#fff' : 'rgba(255,255,255,0.45)',
-              backgroundColor: active ? 'rgba(255,255,255,0.14)' : 'transparent',
+              fontFamily: 'inherit',
+              color: active
+                ? (isDark ? '#fff' : PALETTE.nearBlackText)
+                : (isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.45)'),
+              backgroundColor: active
+                ? (isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.10)')
+                : 'transparent',
               transition: 'all 0.15s',
               userSelect: 'none',
               whiteSpace: 'nowrap',
+              border: 'none',
+              outline: 'none',
               '&:hover': {
-                color: active ? '#fff' : 'rgba(255,255,255,0.75)',
-                backgroundColor: active ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.06)',
+                color: active
+                  ? (isDark ? '#fff' : PALETTE.nearBlackText)
+                  : (isDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.65)'),
+                backgroundColor: active
+                  ? (isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.10)')
+                  : (isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)'),
+              },
+              '&:focus-visible': {
+                outline: `2px solid ${isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.4)'}`,
+                outlineOffset: 1,
               },
             }}
           >
-            <Icon sx={{ fontSize: '13px' }} />
+            <TabIcon sx={{ fontSize: '13px' }} />
             <span>{label}</span>
           </Box>
         )
@@ -72,9 +92,9 @@ function TabGroup({ tab, onChange }) {
   )
 }
 
-// ── Download dropdown (icon trigger for fullscreen, button for inline) ────────
+// ── Download dropdown ─────────────────────────────────────────────────────────
 
-function DownloadDropdown({ onHtml, onPptx, pptxLoading, iconOnly = false }) {
+function DownloadDropdown({ onHtml, onPptx, pptxLoading, iconOnly = false, isDark }) {
   const [anchor, setAnchor] = useState(null)
 
   const trigger = iconOnly ? (
@@ -84,9 +104,13 @@ function DownloadDropdown({ onHtml, onPptx, pptxLoading, iconOnly = false }) {
         onClick={e => setAnchor(e.currentTarget)}
         sx={{
           width: 32, height: 32, borderRadius: '7px',
-          color: 'rgba(255,255,255,0.45)',
-          border: '1px solid rgba(255,255,255,0.12)',
-          '&:hover': { backgroundColor: 'rgba(255,255,255,0.08)', color: '#fff', borderColor: 'rgba(255,255,255,0.25)' },
+          color: isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.45)',
+          border: `1px solid ${isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)'}`,
+          '&:hover': {
+            backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)',
+            color: isDark ? '#fff' : PALETTE.nearBlackText,
+            borderColor: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.25)',
+          },
         }}
       >
         <DownloadIcon sx={{ fontSize: 16 }} />
@@ -101,14 +125,14 @@ function DownloadDropdown({ onHtml, onPptx, pptxLoading, iconOnly = false }) {
       sx={{
         height: 30, px: 1.5,
         fontSize: 12, fontWeight: 500,
-        color: 'rgba(255,255,255,0.6)',
-        borderColor: 'rgba(255,255,255,0.15)',
+        color: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)',
+        borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)',
         textTransform: 'none',
         minWidth: 0,
         '&:hover': {
-          borderColor: 'rgba(255,255,255,0.3)',
-          backgroundColor: 'rgba(255,255,255,0.06)',
-          color: '#fff',
+          borderColor: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)',
+          backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
+          color: isDark ? '#fff' : PALETTE.nearBlackText,
         },
       }}
     >
@@ -128,9 +152,9 @@ function DownloadDropdown({ onHtml, onPptx, pptxLoading, iconOnly = false }) {
         PaperProps={{
           sx: {
             mt: 0.75, minWidth: 190,
-            backgroundColor: '#1c1c30',
-            border: '1px solid rgba(255,255,255,0.1)',
-            boxShadow: '0 12px 40px rgba(0,0,0,0.6)',
+            backgroundColor: isDark ? PALETTE.darkSubsurface : PALETTE.ivory,
+            border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : PALETTE.borderCream}`,
+            boxShadow: '0 12px 40px rgba(0,0,0,0.25)',
             borderRadius: '10px',
             overflow: 'hidden',
           },
@@ -138,7 +162,11 @@ function DownloadDropdown({ onHtml, onPptx, pptxLoading, iconOnly = false }) {
       >
         <MenuItem
           onClick={() => { onHtml(); setAnchor(null) }}
-          sx={{ fontSize: 13, gap: 1.5, py: 1.2, color: 'rgba(255,255,255,0.8)', '&:hover': { backgroundColor: 'rgba(255,255,255,0.07)' } }}
+          sx={{
+            fontSize: 13, gap: 1.5, py: 1.2,
+            color: isDark ? 'rgba(255,255,255,0.8)' : PALETTE.nearBlackText,
+            '&:hover': { backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)' },
+          }}
         >
           <DownloadIcon sx={{ fontSize: 16, opacity: 0.55 }} />
           Download as HTML
@@ -146,10 +174,14 @@ function DownloadDropdown({ onHtml, onPptx, pptxLoading, iconOnly = false }) {
         <MenuItem
           onClick={() => { onPptx(); setAnchor(null) }}
           disabled={pptxLoading}
-          sx={{ fontSize: 13, gap: 1.5, py: 1.2, color: 'rgba(255,255,255,0.8)', '&:hover': { backgroundColor: 'rgba(255,255,255,0.07)' } }}
+          sx={{
+            fontSize: 13, gap: 1.5, py: 1.2,
+            color: isDark ? 'rgba(255,255,255,0.8)' : PALETTE.nearBlackText,
+            '&:hover': { backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)' },
+          }}
         >
           {pptxLoading
-            ? <CircularProgress size={14} sx={{ color: 'rgba(255,255,255,0.4)' }} />
+            ? <CircularProgress size={14} sx={{ color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)' }} />
             : <SlideshowIcon sx={{ fontSize: 16, opacity: 0.55 }} />}
           {pptxLoading ? 'Generating…' : 'Download as PPTX'}
         </MenuItem>
@@ -160,20 +192,22 @@ function DownloadDropdown({ onHtml, onPptx, pptxLoading, iconOnly = false }) {
 
 // ── Inline toolbar ────────────────────────────────────────────────────────────
 
-function InlineToolbar({ onToggleFullscreen, onHtml, onPptx, pptxLoading, title }) {
+function InlineToolbar({ onToggleFullscreen, onHtml, onPptx, pptxLoading, title, isDark }) {
+  const toolbarBg     = isDark ? PALETTE.darkSurface     : PALETTE.warmSand
+  const toolbarBorder = isDark ? 'rgba(255,255,255,0.08)' : PALETTE.borderCream
   return (
     <Box sx={{
       display: 'flex', alignItems: 'center',
       px: 1.5, height: 44, flexShrink: 0,
-      backgroundColor: '#0e0e20',
-      borderBottom: '1px solid rgba(255,255,255,0.08)',
+      backgroundColor: toolbarBg,
+      borderBottom: `1px solid ${toolbarBorder}`,
     }}>
       {/* Left: icon + title */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1, overflow: 'hidden', minWidth: 0 }}>
-        <SlideshowIcon sx={{ fontSize: 15, color: 'rgba(255,255,255,0.3)', flexShrink: 0 }} />
+        <SlideshowIcon sx={{ fontSize: 15, color: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)', flexShrink: 0 }} />
         <Typography sx={{
           fontSize: 13, fontWeight: 500,
-          color: 'rgba(255,255,255,0.55)',
+          color: isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.55)',
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }}>
           {title}
@@ -188,28 +222,33 @@ function InlineToolbar({ onToggleFullscreen, onHtml, onPptx, pptxLoading, title 
             onClick={onToggleFullscreen}
             sx={{
               width: 28, height: 28, borderRadius: '6px',
-              color: 'rgba(255,255,255,0.35)',
-              '&:hover': { backgroundColor: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.8)' },
+              color: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)',
+              '&:hover': {
+                backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+                color: isDark ? 'rgba(255,255,255,0.8)' : 'rgba(0,0,0,0.75)',
+              },
             }}
           >
             <FullscreenIcon sx={{ fontSize: 16 }} />
           </IconButton>
         </Tooltip>
-        <DownloadDropdown onHtml={onHtml} onPptx={onPptx} pptxLoading={pptxLoading} iconOnly={false} />
+        <DownloadDropdown onHtml={onHtml} onPptx={onPptx} pptxLoading={pptxLoading} iconOnly={false} isDark={isDark} />
       </Box>
     </Box>
   )
 }
 
-// ── Fullscreen toolbar: exit (left) · tabs + download (right) ─────────────────
+// ── Fullscreen toolbar ────────────────────────────────────────────────────────
 
-function FullscreenToolbar({ tab, onTabChange, onToggleFullscreen, onHtml, onPptx, pptxLoading }) {
+function FullscreenToolbar({ tab, onTabChange, onToggleFullscreen, onHtml, onPptx, pptxLoading, isDark }) {
+  const toolbarBg     = isDark ? PALETTE.darkSurface     : PALETTE.warmSand
+  const toolbarBorder = isDark ? 'rgba(255,255,255,0.07)' : PALETTE.borderCream
   return (
     <Box sx={{
       display: 'flex', alignItems: 'center',
       px: 1.5, height: 48, flexShrink: 0,
-      backgroundColor: '#0e0e20',
-      borderBottom: '1px solid rgba(255,255,255,0.07)',
+      backgroundColor: toolbarBg,
+      borderBottom: `1px solid ${toolbarBorder}`,
     }}>
       {/* Exit fullscreen - left */}
       <Tooltip title="Exit fullscreen">
@@ -218,21 +257,23 @@ function FullscreenToolbar({ tab, onTabChange, onToggleFullscreen, onHtml, onPpt
           onClick={onToggleFullscreen}
           sx={{
             width: 32, height: 32, borderRadius: '7px',
-            color: 'rgba(255,255,255,0.4)',
-            '&:hover': { backgroundColor: 'rgba(255,255,255,0.08)', color: '#fff' },
+            color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)',
+            '&:hover': {
+              backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+              color: isDark ? '#fff' : PALETTE.nearBlackText,
+            },
           }}
         >
           <FullscreenExitIcon sx={{ fontSize: 17 }} />
         </IconButton>
       </Tooltip>
 
-      {/* Spacer */}
       <Box sx={{ flex: 1 }} />
 
       {/* Tabs + download - right */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <TabGroup tab={tab} onChange={onTabChange} />
-        <DownloadDropdown onHtml={onHtml} onPptx={onPptx} pptxLoading={pptxLoading} iconOnly />
+        <TabGroup tab={tab} onChange={onTabChange} isDark={isDark} />
+        <DownloadDropdown onHtml={onHtml} onPptx={onPptx} pptxLoading={pptxLoading} iconOnly isDark={isDark} />
       </Box>
     </Box>
   )
@@ -257,6 +298,7 @@ function SlideIframe({ html, height = '100%' }) {
       style={{
         width: '100%', height,
         border: 'none', display: 'block',
+        // Slide HTML controls its own background; this is just a load-time fallback
         backgroundColor: '#07071a',
         overflow: 'hidden',
       }}
@@ -268,24 +310,26 @@ function SlideIframe({ html, height = '100%' }) {
 
 // ── Code / Edit pane ──────────────────────────────────────────────────────────
 
-function CodePane({ value, editable, onChange, onReset, originalHtml }) {
-  const isDirty = editable && value !== originalHtml
+function CodePane({ value, editable, onChange, onReset, originalHtml, isDark }) {
+  const isDirty   = editable && value !== originalHtml
+  const paneBg    = isDark ? PALETTE.sidebarDark : PALETTE.parchment
+  const paneBorder= isDark ? 'rgba(255,255,255,0.06)' : PALETTE.borderCream
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%' }}>
       {editable && (
         <Box sx={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           px: 2, py: 0.6, flexShrink: 0,
-          backgroundColor: '#0a0a18',
-          borderBottom: '1px solid rgba(255,255,255,0.06)',
+          backgroundColor: paneBg,
+          borderBottom: `1px solid ${paneBorder}`,
         }}>
-          <Typography sx={{ fontSize: 11, color: isDirty ? 'rgba(251,189,35,0.7)' : 'rgba(255,255,255,0.28)' }}>
+          <Typography sx={{ fontSize: 11, color: isDirty ? 'rgba(251,189,35,0.7)' : (isDark ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.35)') }}>
             {isDirty ? '● unsaved — switch to View to preview' : 'Edit HTML · switch to View to preview changes'}
           </Typography>
           {isDirty && (
             <Tooltip title="Reset to original">
               <IconButton size="small" onClick={onReset}
-                sx={{ width: 24, height: 24, color: 'rgba(255,255,255,0.35)', '&:hover': { color: '#fff' } }}>
+                sx={{ width: 24, height: 24, color: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.4)', '&:hover': { color: isDark ? '#fff' : PALETTE.nearBlackText } }}>
                 <RestartAltIcon sx={{ fontSize: 13 }} />
               </IconButton>
             </Tooltip>
@@ -301,10 +345,10 @@ function CodePane({ value, editable, onChange, onReset, originalHtml }) {
         sx={{
           flex: 1, width: '100%', resize: 'none',
           border: 'none', outline: 'none',
-          fontFamily: "'Fira Code', 'Cascadia Code', Consolas, monospace",
+          fontFamily: TYPOGRAPHY.fontFamilyMono,
           fontSize: 12, lineHeight: 1.75,
-          backgroundColor: editable ? '#0a0a18' : '#07071a',
-          color: 'rgba(255,255,255,0.72)',
+          backgroundColor: paneBg,
+          color: isDark ? 'rgba(255,255,255,0.72)' : PALETTE.nearBlackText,
           p: 2,
           '&::selection': { backgroundColor: 'rgba(99,102,241,0.4)' },
         }}
@@ -362,7 +406,8 @@ export default function SlideDeck({ entityId, html, title, spec, caption }) {
   }, [activeHtml, presentationTitle, pptxLoading])
 
   const borderColor = isDark ? PALETTE.borderDark : PALETTE.borderCream
-  const dlProps = { onHtml: handleDownloadHtml, onPptx: handleDownloadPptx, pptxLoading }
+  const cardBg      = isDark ? PALETTE.darkSurface : PALETTE.ivory
+  const dlProps     = { onHtml: handleDownloadHtml, onPptx: handleDownloadPptx, pptxLoading, isDark }
 
   return (
     <Box>
@@ -371,8 +416,8 @@ export default function SlideDeck({ entityId, html, title, spec, caption }) {
         border: `1px solid ${borderColor}`,
         borderRadius: `${RADIUS.lg}px`,
         overflow: 'hidden',
-        backgroundColor: '#07071a',
-        boxShadow: isDark ? '0 8px 40px rgba(0,0,0,0.55)' : '0 4px 24px rgba(0,0,0,0.15)',
+        backgroundColor: cardBg,
+        boxShadow: isDark ? '0 8px 40px rgba(0,0,0,0.55)' : '0 4px 24px rgba(0,0,0,0.08)',
       }}>
         <InlineToolbar {...dlProps} title={presentationTitle} onToggleFullscreen={() => setFullscreen(true)} />
         <Box sx={{ height: 540, overflow: 'hidden' }}>
@@ -380,14 +425,7 @@ export default function SlideDeck({ entityId, html, title, spec, caption }) {
         </Box>
       </Box>
 
-      {caption && (
-        <Typography sx={{
-          mt: 1, fontSize: TYPOGRAPHY.sizes.caption, textAlign: 'center',
-          color: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)',
-        }}>
-          {caption}
-        </Typography>
-      )}
+      <EntityCaption caption={caption} />
 
       {/* ── Fullscreen dialog ── */}
       <Dialog
@@ -396,7 +434,7 @@ export default function SlideDeck({ entityId, html, title, spec, caption }) {
         fullScreen
         PaperProps={{
           sx: {
-            backgroundColor: '#07071a',
+            backgroundColor: cardBg,
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
@@ -418,6 +456,7 @@ export default function SlideDeck({ entityId, html, title, spec, caption }) {
               onChange={setEditedHtml}
               onReset={() => setEditedHtml(html || '')}
               originalHtml={html}
+              isDark={isDark}
             />
           )}
         </Box>

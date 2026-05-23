@@ -1,9 +1,10 @@
 import { useState, useCallback } from 'react'
-import { Box, Typography, Tooltip, IconButton, Skeleton, useTheme, Dialog, DialogContent } from '@mui/material'
+import { Box, Tooltip, IconButton, Skeleton, useTheme, Dialog, DialogContent } from '@mui/material'
 import RefreshIcon      from '@mui/icons-material/Refresh'
 import OpenInFullIcon   from '@mui/icons-material/OpenInFull'
 import CloseIcon        from '@mui/icons-material/Close'
 import { TYPOGRAPHY, RADIUS, PALETTE } from '../../../theme/tokens'
+import EntityCaption from './EntityCaption'
 
 export default function P5Sketch({
   html,
@@ -67,14 +68,7 @@ export default function P5Sketch({
         )}
       </Box>
 
-      {caption && (
-        <Typography sx={{
-          mt: 1, fontSize: TYPOGRAPHY.sizes.caption, textAlign: 'center',
-          color: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)',
-        }}>
-          {caption}
-        </Typography>
-      )}
+      <EntityCaption caption={caption} />
 
       {/* Expanded Dialog */}
       <Dialog

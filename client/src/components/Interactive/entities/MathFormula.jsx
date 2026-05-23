@@ -7,6 +7,7 @@ import UnfoldLessIcon   from '@mui/icons-material/UnfoldLess'
 import katex from 'katex'
 import 'katex/dist/katex.min.css'
 import { TYPOGRAPHY, RADIUS, PALETTE, BRAND } from '../../../theme/tokens'
+import EntityCaption from './EntityCaption'
 
 function renderLatex(latex, displayMode) {
   try {
@@ -163,11 +164,7 @@ export default function MathFormula({
         }}>
           <FormulaDisplay latex={latex} displayMode={displayMode} fontSize={fontSize} highlights={highlights} isDark={isDark} />
         </Box>
-        {caption && (
-          <Typography sx={{ mt: 1, fontSize: TYPOGRAPHY.sizes.caption, textAlign: 'center', color: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)' }}>
-            {caption}
-          </Typography>
-        )}
+        <EntityCaption caption={caption} />
       </Box>
     )
   }

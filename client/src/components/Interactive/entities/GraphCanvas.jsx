@@ -12,6 +12,7 @@ import 'reactflow/dist/style.css'
 import dagre from 'dagre'
 import { useSceneStore } from '../useSceneStore'
 import { TYPOGRAPHY, RADIUS, PALETTE, BRAND } from '../../../theme/tokens'
+import EntityCaption from './EntityCaption'
 
 const NODE_W = 140
 const NODE_H = 40
@@ -188,14 +189,7 @@ function GraphInner({ rawNodes, rawEdges, layout, directed, height, showMinimap,
         )}
       </Box>
 
-      {caption && (
-        <Typography sx={{
-          mt: 1, fontSize: TYPOGRAPHY.sizes.caption, textAlign: 'center',
-          color: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)',
-        }}>
-          {caption}
-        </Typography>
-      )}
+      <EntityCaption caption={caption} />
     </Box>
   )
 }

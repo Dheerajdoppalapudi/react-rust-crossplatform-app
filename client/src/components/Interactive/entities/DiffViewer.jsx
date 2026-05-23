@@ -1,5 +1,8 @@
 import { useMemo, useState, useEffect, useCallback } from 'react'
 import { Box, Typography, useTheme } from '@mui/material'
+import OpenInFullIcon from '@mui/icons-material/OpenInFull'
+import CloseIcon      from '@mui/icons-material/Close'
+import EditIcon       from '@mui/icons-material/Edit'
 import { Light as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { atomOneDark, atomOneLight } from 'react-syntax-highlighter/dist/esm/styles/hljs'
 import python     from 'react-syntax-highlighter/dist/esm/languages/hljs/python'
@@ -9,7 +12,8 @@ import java       from 'react-syntax-highlighter/dist/esm/languages/hljs/java'
 import cpp        from 'react-syntax-highlighter/dist/esm/languages/hljs/cpp'
 import go         from 'react-syntax-highlighter/dist/esm/languages/hljs/go'
 import bash       from 'react-syntax-highlighter/dist/esm/languages/hljs/bash'
-import { TYPOGRAPHY, RADIUS, PALETTE } from '../../../theme/tokens'
+import { TYPOGRAPHY, RADIUS, PALETTE, STATUS, BRAND } from '../../../theme/tokens'
+import EntityCaption from './EntityCaption'
 
 SyntaxHighlighter.registerLanguage('python',     python)
 SyntaxHighlighter.registerLanguage('javascript', javascript)
@@ -51,11 +55,9 @@ function LineNumber({ n, isDark }) {
 }
 
 function SplitPanel({ lines, language, hlStyle, isDark, side, editMode, editValue, onEdit }) {
-  const borderColor = isDark ? PALETTE.borderDark : PALETTE.borderCream
-  const label = side === 'before' ? 'Before' : 'After'
-  const labelColor = side === 'before'
-    ? (isDark ? '#f85149' : '#cf222e')
-    : (isDark ? '#2ea043' : '#1a7f37')
+  const borderColor  = isDark ? PALETTE.borderDark : PALETTE.borderCream
+  const label        = side === 'before' ? 'Before' : 'After'
+  const labelColor   = side === 'before' ? STATUS.error : STATUS.success
   let lineNum = 0
 
   return (
@@ -78,7 +80,7 @@ function SplitPanel({ lines, language, hlStyle, isDark, side, editMode, editValu
             fontFamily: TYPOGRAPHY.fontFamilyMono,
             fontSize: TYPOGRAPHY.sizes.bodySm,
             lineHeight: TYPOGRAPHY.lineHeights.relaxed,
-            color: isDark ? '#e6edf3' : '#24292f',
+            color: isDark ? PALETTE.warmSilver : PALETTE.nearBlackText,
             backgroundColor: 'transparent',
             border: 'none', outline: 'none', resize: 'vertical',
             boxSizing: 'border-box',
@@ -90,14 +92,14 @@ function SplitPanel({ lines, language, hlStyle, isDark, side, editMode, editValu
             const visible = side === 'before' ? entry.type !== 'insert' : entry.type !== 'delete'
             if (visible) lineNum++
             const bg = entry.type === 'delete' && side === 'before'
-              ? (isDark ? 'rgba(248,81,73,0.15)' : 'rgba(207,34,46,0.08)')
+              ? (isDark ? 'rgba(248,81,73,0.15)' : 'rgba(248,81,73,0.08)')
               : entry.type === 'insert' && side === 'after'
-                ? (isDark ? 'rgba(46,160,67,0.15)' : 'rgba(26,127,55,0.08)')
+                ? (isDark ? 'rgba(46,160,67,0.15)' : 'rgba(46,160,67,0.08)')
                 : 'transparent'
             const borderLeft = entry.type === 'delete' && side === 'before'
-              ? '3px solid #f85149'
+              ? `3px solid ${STATUS.error}`
               : entry.type === 'insert' && side === 'after'
-                ? '3px solid #2ea043'
+                ? `3px solid ${STATUS.success}`
                 : '3px solid transparent'
             if (!visible) return (
               <Box key={i} sx={{ display: 'flex', alignItems: 'center', px: 1, minHeight: 22, borderLeft: '3px solid transparent' }}>
@@ -134,10 +136,10 @@ function UnifiedView({ diff, language, hlStyle, isDark }) {
       {diff.map((entry, i) => {
         if (entry.type !== 'insert') beforeNum++
         if (entry.type !== 'delete') afterNum++
-        const bg = entry.type === 'delete' ? (isDark ? 'rgba(248,81,73,0.15)' : 'rgba(207,34,46,0.08)') : entry.type === 'insert' ? (isDark ? 'rgba(46,160,67,0.15)' : 'rgba(26,127,55,0.08)') : 'transparent'
-        const borderLeft = entry.type === 'delete' ? '3px solid #f85149' : entry.type === 'insert' ? '3px solid #2ea043' : '3px solid transparent'
-        const prefix = entry.type === 'delete' ? '-' : entry.type === 'insert' ? '+' : ' '
-        const prefixColor = entry.type === 'delete' ? '#f85149' : entry.type === 'insert' ? '#2ea043' : isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)'
+        const bg          = entry.type === 'delete' ? (isDark ? 'rgba(248,81,73,0.15)' : 'rgba(248,81,73,0.08)') : entry.type === 'insert' ? (isDark ? 'rgba(46,160,67,0.15)' : 'rgba(46,160,67,0.08)') : 'transparent'
+        const borderLeft  = entry.type === 'delete' ? `3px solid ${STATUS.error}` : entry.type === 'insert' ? `3px solid ${STATUS.success}` : '3px solid transparent'
+        const prefixColor = entry.type === 'delete' ? STATUS.error : entry.type === 'insert' ? STATUS.success : (isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)')
+        const prefix      = entry.type === 'delete' ? '-' : entry.type === 'insert' ? '+' : ' '
         return (
           <Box key={i} sx={{ display: 'flex', alignItems: 'flex-start', backgroundColor: bg, borderLeft, pl: 1 }}>
             <Box component="span" sx={{ minWidth: 28, textAlign: 'right', pr: 1, color: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)', fontFamily: TYPOGRAPHY.fontFamilyMono, fontSize: TYPOGRAPHY.sizes.caption, userSelect: 'none', flexShrink: 0 }}>
@@ -170,17 +172,18 @@ function ToolbarBtn({ active, onClick, title, children }) {
       onClick={onClick}
       title={title}
       sx={{
+        display: 'inline-flex', alignItems: 'center', gap: '4px',
         px: 1.25, py: 0.375,
         fontSize: TYPOGRAPHY.sizes.caption,
         fontFamily: 'inherit',
         border: '1px solid',
-        borderColor: active ? '#4B72FF' : (isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'),
+        borderColor: active ? BRAND.accent : (isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'),
         borderRadius: '4px',
         backgroundColor: active ? 'rgba(75,114,255,0.12)' : 'transparent',
-        color: active ? '#4B72FF' : (isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)'),
+        color: active ? BRAND.accent : (isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)'),
         cursor: 'pointer',
         lineHeight: 1.4,
-        '&:hover': { borderColor: '#4B72FF', color: '#4B72FF' },
+        '&:hover': { borderColor: BRAND.accent, color: BRAND.accent },
       }}
     >
       {children}
@@ -199,8 +202,8 @@ function DiffToolbar({ activeMode, setActiveMode, editMode, setEditMode, additio
       gap: 1, flexWrap: 'wrap', flexShrink: 0,
     }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-        {additions > 0 && <Typography sx={{ fontSize: TYPOGRAPHY.sizes.caption, color: isDark ? '#2ea043' : '#1a7f37', fontWeight: TYPOGRAPHY.weights.semibold }}>+{additions}</Typography>}
-        {deletions > 0 && <Typography sx={{ fontSize: TYPOGRAPHY.sizes.caption, color: isDark ? '#f85149' : '#cf222e', fontWeight: TYPOGRAPHY.weights.semibold }}>−{deletions}</Typography>}
+        {additions > 0 && <Typography sx={{ fontSize: TYPOGRAPHY.sizes.caption, color: STATUS.success, fontWeight: TYPOGRAPHY.weights.semibold }}>+{additions}</Typography>}
+        {deletions > 0 && <Typography sx={{ fontSize: TYPOGRAPHY.sizes.caption, color: STATUS.error,   fontWeight: TYPOGRAPHY.weights.semibold }}>−{deletions}</Typography>}
         {additions === 0 && deletions === 0 && (
           <Typography sx={{ fontSize: TYPOGRAPHY.sizes.caption, color: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)' }}>No changes</Typography>
         )}
@@ -209,10 +212,10 @@ function DiffToolbar({ activeMode, setActiveMode, editMode, setEditMode, additio
         <ToolbarBtn active={activeMode === 'split'}   onClick={() => setActiveMode('split')}   title="Side-by-side">Split</ToolbarBtn>
         <ToolbarBtn active={activeMode === 'unified'} onClick={() => setActiveMode('unified')} title="Unified view">Unified</ToolbarBtn>
         <ToolbarBtn active={editMode} onClick={() => setEditMode(m => !m)} title="Edit the 'after' panel live">
-          {editMode ? '✓ Editing' : '✎ Edit'}
+          <EditIcon sx={{ fontSize: 12 }} />{editMode ? 'Editing' : 'Edit'}
         </ToolbarBtn>
-        {onExpand && <ToolbarBtn onClick={onExpand} title="Expand fullscreen">⤢</ToolbarBtn>}
-        {onClose  && <ToolbarBtn onClick={onClose}  title="Close (Esc)">✕</ToolbarBtn>}
+        {onExpand && <ToolbarBtn onClick={onExpand} title="Expand fullscreen"><OpenInFullIcon sx={{ fontSize: 13 }} /></ToolbarBtn>}
+        {onClose  && <ToolbarBtn onClick={onClose}  title="Close (Esc)"><CloseIcon sx={{ fontSize: 13 }} /></ToolbarBtn>}
       </Box>
     </Box>
   )
@@ -250,7 +253,7 @@ export default function DiffViewer({
   }, [expanded, close])
 
   const borderColor = isDark ? PALETTE.borderDark : PALETTE.borderCream
-  const codeBg      = isDark ? '#0d1117' : '#f6f8fa'
+  const codeBg      = isDark ? PALETTE.sidebarDark : PALETTE.warmSand
 
   const diffBody = (
     <Box sx={{ backgroundColor: codeBg, '& .hljs': { background: 'transparent !important' } }}>
@@ -299,14 +302,7 @@ export default function DiffViewer({
         </Box>
       )}
 
-      {caption && (
-        <Typography sx={{
-          mt: 1, fontSize: TYPOGRAPHY.sizes.caption, textAlign: 'center',
-          color: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)',
-        }}>
-          {caption}
-        </Typography>
-      )}
+      <EntityCaption caption={caption} />
     </Box>
   )
 }

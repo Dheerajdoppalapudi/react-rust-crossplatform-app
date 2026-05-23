@@ -4,6 +4,7 @@ import { MapContainer, TileLayer, Marker, Popup, Polyline, Polygon, Circle, useM
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { TYPOGRAPHY, RADIUS, PALETTE } from '../../../theme/tokens'
+import EntityCaption from './EntityCaption'
 
 delete L.Icon.Default.prototype._getIconUrl
 L.Icon.Default.mergeOptions({
@@ -177,14 +178,7 @@ export default function MapViewer({
         </Box>
       )}
 
-      {caption && (
-        <Typography sx={{
-          mt: 1, fontSize: TYPOGRAPHY.sizes.caption, textAlign: 'center',
-          color: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)',
-        }}>
-          {caption}
-        </Typography>
-      )}
+      <EntityCaption caption={caption} />
     </Box>
   )
 }

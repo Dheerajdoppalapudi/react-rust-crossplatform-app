@@ -6,7 +6,8 @@ import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
 import ShuffleIcon      from '@mui/icons-material/Shuffle'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useSceneStore } from '../useSceneStore'
-import { TYPOGRAPHY, RADIUS, PALETTE } from '../../../theme/tokens'
+import { TYPOGRAPHY, RADIUS, PALETTE, STATUS, BRAND } from '../../../theme/tokens'
+import EntityCaption from './EntityCaption'
 
 const MotionDiv = motion.div
 
@@ -20,10 +21,10 @@ function shuffleArray(arr) {
 }
 
 const CONFIDENCE = [
-  { key: 'again', label: 'Again', color: '#f85149', bg: 'rgba(248,81,73,0.12)' },
-  { key: 'hard',  label: 'Hard',  color: '#f0883e', bg: 'rgba(240,136,62,0.12)' },
-  { key: 'good',  label: 'Good',  color: '#2ea043', bg: 'rgba(46,160,67,0.12)' },
-  { key: 'easy',  label: 'Easy',  color: '#58a6ff', bg: 'rgba(88,166,255,0.12)' },
+  { key: 'again', label: 'Again', color: STATUS.error,   bg: 'rgba(248,81,73,0.12)' },
+  { key: 'hard',  label: 'Hard',  color: STATUS.warning, bg: 'rgba(240,136,62,0.12)' },
+  { key: 'good',  label: 'Good',  color: STATUS.success, bg: 'rgba(46,160,67,0.12)' },
+  { key: 'easy',  label: 'Easy',  color: BRAND.accent,   bg: 'rgba(75,114,255,0.12)' },
 ]
 
 export default function FlashcardDeck({
@@ -113,8 +114,17 @@ export default function FlashcardDeck({
 
         {/* Card flip area */}
         <Box
+          role="button"
+          tabIndex={0}
+          aria-pressed={flipped}
+          aria-label={flipped ? 'Card answer — press Space or Enter to flip back' : 'Card question — press Space or Enter to reveal answer'}
           onClick={() => setFlipped(f => !f)}
-          sx={{ perspective: '1000px', cursor: 'pointer', height: 200, mb: 2, userSelect: 'none' }}
+          onKeyDown={e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); setFlipped(f => !f) } }}
+          sx={{
+            perspective: '1000px', cursor: 'pointer', mb: 2, userSelect: 'none',
+            outline: 'none',
+            '&:focus-visible': { outline: `2px solid ${BRAND.accent}`, outlineOffset: 3, borderRadius: `${RADIUS.md}px` },
+          }}
         >
           <AnimatePresence mode="wait" initial={false}>
             {!flipped ? (
@@ -124,10 +134,9 @@ export default function FlashcardDeck({
                 animate={{ rotateY: 0,   opacity: 1 }}
                 exit={{   rotateY: 90,   opacity: 0 }}
                 transition={{ duration: 0.25, ease: 'easeOut' }}
-                style={{ height: '100%' }}
               >
                 <Box sx={{
-                  height: '100%', borderRadius: `${RADIUS.md}px`, background: frontBg,
+                  minHeight: 180, borderRadius: `${RADIUS.md}px`, background: frontBg,
                   border: `1px solid ${isDark ? 'rgba(75,114,255,0.2)' : 'rgba(75,114,255,0.15)'}`,
                   display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
                   p: 3, position: 'relative',
@@ -173,10 +182,9 @@ export default function FlashcardDeck({
                 animate={{ rotateY: 0,   opacity: 1 }}
                 exit={{   rotateY: -90,  opacity: 0 }}
                 transition={{ duration: 0.25, ease: 'easeOut' }}
-                style={{ height: '100%' }}
               >
                 <Box sx={{
-                  height: '100%', borderRadius: `${RADIUS.md}px`, background: backBg,
+                  minHeight: 180, borderRadius: `${RADIUS.md}px`, background: backBg,
                   border: `1px solid ${isDark ? 'rgba(107,68,248,0.25)' : 'rgba(107,68,248,0.15)'}`,
                   display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
                   p: 3, position: 'relative',
@@ -208,12 +216,18 @@ export default function FlashcardDeck({
             {CONFIDENCE.map(({ key, label, color, bg }) => (
               <Box
                 key={key}
+                component="button"
+                type="button"
                 onClick={() => markConfidence(key)}
+                aria-label={`Rate as ${label}`}
                 sx={{
                   px: 1.5, py: 0.5, borderRadius: `${RADIUS.md}px`,
                   border: `1.5px solid ${color}`, backgroundColor: bg,
                   cursor: 'pointer', userSelect: 'none', transition: 'all 0.15s ease',
+                  fontFamily: 'inherit',
+                  outline: 'none',
                   '&:hover': { transform: 'scale(1.06)' },
+                  '&:focus-visible': { outline: `2px solid ${color}`, outlineOffset: 2 },
                 }}
               >
                 <Typography sx={{ fontSize: TYPOGRAPHY.sizes.caption, fontWeight: TYPOGRAPHY.weights.semibold, color }}>
@@ -250,14 +264,7 @@ export default function FlashcardDeck({
         )}
       </Box>
 
-      {caption && (
-        <Typography sx={{
-          mt: 1, fontSize: TYPOGRAPHY.sizes.caption, textAlign: 'center',
-          color: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)',
-        }}>
-          {caption}
-        </Typography>
-      )}
+      <EntityCaption caption={caption} />
     </Box>
   )
 }

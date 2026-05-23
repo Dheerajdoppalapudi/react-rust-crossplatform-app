@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import EditIcon  from '@mui/icons-material/Edit'
 import CloseIcon from '@mui/icons-material/Close'
 import { TYPOGRAPHY, RADIUS, PALETTE, BRAND } from '../../../theme/tokens'
+import EntityCaption from './EntityCaption'
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ── Utilities ────────────────────────────────────────────────────────────
@@ -751,14 +752,7 @@ export default function DSViewer({
         </AnimatePresence>
       </Box>
 
-      {caption && (
-        <Typography sx={{
-          mt: 1, fontSize: TYPOGRAPHY.sizes.caption, textAlign: 'center',
-          color: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)',
-        }}>
-          {caption}
-        </Typography>
-      )}
+      <EntityCaption caption={caption} />
     </Box>
   )
 }

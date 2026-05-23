@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { Box, Typography, useTheme } from '@mui/material'
 import { TYPOGRAPHY, RADIUS, PALETTE } from '../../../theme/tokens'
+import EntityCaption from './EntityCaption'
 import { useExpanded } from '../BlockWrapper'
 
 function SortIcon({ dir }) {
@@ -210,14 +211,7 @@ export default function TableViewer({
         </Box>
       </Box>
 
-      {caption && (
-        <Typography sx={{
-          mt: 1, fontSize: TYPOGRAPHY.sizes.caption, textAlign: 'center',
-          color: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)',
-        }}>
-          {caption}
-        </Typography>
-      )}
+      <EntityCaption caption={caption} />
     </Box>
   )
 }

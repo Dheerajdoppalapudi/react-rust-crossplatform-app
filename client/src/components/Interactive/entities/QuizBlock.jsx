@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
-import { Box, Typography, useTheme } from '@mui/material'
+import { Box, Typography, LinearProgress, useTheme } from '@mui/material'
 import { TYPOGRAPHY, RADIUS, PALETTE, BRAND, STATUS } from '../../../theme/tokens'
+import EntityCaption from './EntityCaption'
 import { useExpanded } from '../BlockWrapper'
 
 function QuizQuestion({ q, index, total, onAnswer, isDark }) {
@@ -255,6 +256,29 @@ export default function QuizBlock({
         p: isExpanded ? 3 : 2.5,
         backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.01)',
       }}>
+        {/* Progress bar — only shown for multi-question quizzes before summary */}
+        {total > 1 && !showSummary && (
+          <Box sx={{ mb: 2 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.75 }}>
+              <Typography sx={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', opacity: 0.4 }}>
+                Quiz
+              </Typography>
+              <Typography sx={{ fontSize: 10, opacity: 0.4 }}>
+                {currentQ + 1} / {total}
+              </Typography>
+            </Box>
+            <LinearProgress
+              variant="determinate"
+              value={(answers.length / total) * 100}
+              sx={{
+                height: 3, borderRadius: 2,
+                backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+                '& .MuiLinearProgress-bar': { borderRadius: 2 },
+              }}
+            />
+          </Box>
+        )}
+
         {showSummary ? (
           <ScoreSummary
             answers={answers}
@@ -274,14 +298,7 @@ export default function QuizBlock({
         )}
       </Box>
 
-      {caption && (
-        <Typography sx={{
-          mt: 1, fontSize: TYPOGRAPHY.sizes.caption, textAlign: 'center',
-          color: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)',
-        }}>
-          {caption}
-        </Typography>
-      )}
+      <EntityCaption caption={caption} />
     </Box>
   )
 }

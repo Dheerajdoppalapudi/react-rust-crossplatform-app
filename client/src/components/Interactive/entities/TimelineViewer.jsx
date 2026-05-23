@@ -9,6 +9,7 @@ const MotionDiv = motion.div
 import { useSceneStore } from '../useSceneStore'
 import { useExpanded } from '../BlockWrapper'
 import { TYPOGRAPHY, RADIUS, PALETTE, BRAND } from '../../../theme/tokens'
+import EntityCaption from './EntityCaption'
 
 const MIN_ZOOM  = 0.5
 const MAX_ZOOM  = 2.5
@@ -287,14 +288,7 @@ export default function TimelineViewer({
         </Box>
       </Box>
 
-      {caption && (
-        <Typography sx={{
-          mt: 1, fontSize: TYPOGRAPHY.sizes.caption, textAlign: 'center',
-          color: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)',
-        }}>
-          {caption}
-        </Typography>
-      )}
+      <EntityCaption caption={caption} />
     </Box>
   )
 }

@@ -1,9 +1,10 @@
 import { useMemo } from 'react'
-import { Box, Typography, useTheme } from '@mui/material'
+import { Box, useTheme } from '@mui/material'
 import createPlotlyComponent from 'react-plotly.js/factory'
 import Plotly from 'plotly.js-dist-min'
 import * as math from 'mathjs'
 import { TYPOGRAPHY, RADIUS, PALETTE } from '../../../theme/tokens'
+import EntityCaption from './EntityCaption'
 
 // Pre-built dist — avoids Rollup treeshaking the full mathjs/plotly source
 const Plot = createPlotlyComponent(Plotly)
@@ -184,14 +185,7 @@ export default function FunctionPlotter({
         </Box>
       )}
 
-      {caption && (
-        <Typography sx={{
-          mt: 1, fontSize: TYPOGRAPHY.sizes.caption, textAlign: 'center',
-          color: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)',
-        }}>
-          {caption}
-        </Typography>
-      )}
+      <EntityCaption caption={caption} />
     </Box>
   )
 }

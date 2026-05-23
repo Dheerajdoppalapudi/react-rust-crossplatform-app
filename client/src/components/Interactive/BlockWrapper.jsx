@@ -11,6 +11,7 @@ export function useExpanded() { return useContext(ExpandedContext) }
 
 export default function BlockWrapper({ children, copyText, label, noExpand = false }) {
   const [hovered,  setHovered]  = useState(false)
+  const [focused,  setFocused]  = useState(false)
   const [expanded, setExpanded] = useState(false)
   const [copied,   setCopied]   = useState(false)
   const theme  = useTheme()
@@ -38,8 +39,8 @@ export default function BlockWrapper({ children, copyText, label, noExpand = fal
     <Box sx={{
       position: 'absolute', top: 6, right: 6, zIndex: 10,
       display: 'flex', gap: 0.25,
-      opacity: hovered ? 1 : 0,
-      pointerEvents: hovered ? 'auto' : 'none',
+      opacity: (hovered || focused) ? 1 : 0,
+      pointerEvents: (hovered || focused) ? 'auto' : 'none',
       transition: 'opacity 0.15s ease',
       backgroundColor: isDark ? 'rgba(13,17,23,0.88)' : 'rgba(255,255,255,0.92)',
       borderRadius: '6px',
@@ -74,6 +75,8 @@ export default function BlockWrapper({ children, copyText, label, noExpand = fal
           sx={{ position: 'relative' }}
           onMouseEnter={() => setHovered(true)}
           onMouseLeave={() => setHovered(false)}
+          onFocusCapture={() => setFocused(true)}
+          onBlurCapture={() => setFocused(false)}
         >
           {!expanded && toolbar}
           {!expanded && children}
