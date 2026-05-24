@@ -24,9 +24,18 @@ CORS_ORIGINS: list[str] = [
 ]
 
 # ── Storage paths ─────────────────────────────────────────────────────────────
-DB_PATH: Path     = BASE_DIR / "database.sqlite"
+DB_PATH: Path     = BASE_DIR / "database.sqlite"   # kept for local fallback / tests
 UPLOAD_DIR: Path  = BASE_DIR / "uploads"
 OUTPUTS_DIR: Path = BASE_DIR / "outputs"
+
+# ── PostgreSQL ────────────────────────────────────────────────────────────────
+DATABASE_URL: str = os.getenv("DATABASE_URL", "")
+
+# ── AWS S3 + CloudFront ───────────────────────────────────────────────────────
+AWS_REGION:        str = os.getenv("AWS_REGION", "us-east-1")
+S3_MEDIA_BUCKET:   str = os.getenv("S3_MEDIA_BUCKET", "")
+S3_UPLOADS_BUCKET: str = os.getenv("S3_UPLOADS_BUCKET", "")
+CLOUDFRONT_DOMAIN: str = os.getenv("CLOUDFRONT_DOMAIN", "")
 
 # ── LLM API keys ─────────────────────────────────────────────────────────────
 ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")

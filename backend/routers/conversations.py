@@ -8,6 +8,7 @@ Fixes applied:
   CRIT-6: ffmpeg stderr is logged server-side only; client receives a generic message.
 """
 
+import asyncio
 import structlog
 import os
 import subprocess
@@ -22,10 +23,13 @@ from core.config import OUTPUTS_DIR
 from core.utils import safe_resolve
 from pydantic import BaseModel
 
-from core.database import (
-    get_db, update_session,
-    get_conversation_notes, upsert_conversation_notes,
-    rename_conversation, toggle_star_conversation, soft_delete_conversation,
+from core.db_async import (
+    get_async_db,
+    rename_conversation,
+    toggle_star_conversation,
+    soft_delete_conversation,
+    get_conversation_notes,
+    upsert_conversation_notes,
 )
 from core.db_models import User
 from core.responses import success
@@ -48,7 +52,7 @@ _bearer = HTTPBearer(auto_error=False)
 
 
 @router.post("/api/conversations/{conversation_id}/media-token")
-def get_conversation_media_token(
+async def get_conversation_media_token(
     conversation_id: str,
     current_user: User = Depends(get_current_user),
 ):
@@ -57,11 +61,11 @@ def get_conversation_media_token(
     Used by the browser to authenticate <video src> for the merged video.
     The token expires in MEDIA_TOKEN_EXPIRE_MINUTES (default 5 min).
     """
-    with get_db() as conn:
-        row = conn.execute(
-            "SELECT id FROM conversations WHERE id = ? AND user_id = ?",
-            (conversation_id, current_user.id),
-        ).fetchone()
+    async with get_async_db() as conn:
+        row = await conn.fetchrow(
+            "SELECT id FROM conversations WHERE id = $1 AND user_id = $2",
+            conversation_id, current_user.id,
+        )
     if not row:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
@@ -71,95 +75,129 @@ def get_conversation_media_token(
 
 
 @router.get("/api/conversations")
-def list_conversations(
+async def list_conversations(
     current_user: User = Depends(get_current_user),
     limit: int = Query(default=30, ge=1, le=100),
-    cursor: Optional[str] = Query(default=None, description="updated_at of last item from previous page (ISO 8601)"),
+    cursor: Optional[str] = Query(
+        default=None,
+        description="Opaque cursor from previous page's next_cursor field",
+    ),
 ):
     """
-    Paginated conversation list, ordered by updated_at DESC.
-    Pass `cursor=<updated_at of last item>` to fetch the next page.
+    Paginated conversation list, ordered by (updated_at DESC, id DESC).
+
+    The composite cursor encodes both updated_at and id so that conversations
+    updated in the same second are never skipped or duplicated across pages.
+    Pass `cursor=<next_cursor from previous response>` to fetch the next page.
     Returns { items, next_cursor, has_more }.
     """
-    with get_db() as conn:
-        if cursor:
-            rows = conn.execute("""
-                SELECT c.id, c.title, c.created_at, c.updated_at,
-                       COALESCE(c.starred, 0) AS starred,
-                       COUNT(s.id) AS turn_count,
-                       MIN(s.intent_type) AS intent_type
-                FROM conversations c
-                LEFT JOIN sessions s ON s.conversation_id = c.id AND s.status = 'done'
-                WHERE c.user_id = ? AND c.deleted_at IS NULL
-                  AND c.updated_at < ?
-                GROUP BY c.id
-                ORDER BY c.updated_at DESC
-                LIMIT ?
-            """, (current_user.id, cursor, limit + 1)).fetchall()
-        else:
-            rows = conn.execute("""
-                SELECT c.id, c.title, c.created_at, c.updated_at,
-                       COALESCE(c.starred, 0) AS starred,
-                       COUNT(s.id) AS turn_count,
-                       MIN(s.intent_type) AS intent_type
-                FROM conversations c
-                LEFT JOIN sessions s ON s.conversation_id = c.id AND s.status = 'done'
-                WHERE c.user_id = ? AND c.deleted_at IS NULL
-                GROUP BY c.id
-                ORDER BY c.updated_at DESC
-                LIMIT ?
-            """, (current_user.id, limit + 1)).fetchall()
+    cursor_ts: Optional[str] = None
+    cursor_id: Optional[str] = None
+    if cursor:
+        try:
+            cursor_ts, cursor_id = cursor.split("|", 1)
+        except ValueError:
+            # Tolerate old single-field cursors from clients that haven't updated
+            cursor_ts = cursor
 
-    has_more    = len(rows) > limit
-    page_rows   = rows[:limit]
-    next_cursor = page_rows[-1]["updated_at"] if has_more and page_rows else None
+    _BASE_SELECT = """
+        SELECT c.id, c.title, c.created_at, c.updated_at,
+               COALESCE(c.starred, 0) AS starred,
+               COUNT(s.id) AS turn_count,
+               MIN(s.intent_type) AS intent_type
+        FROM conversations c
+        LEFT JOIN sessions s ON s.conversation_id = c.id AND s.status = 'done'
+    """
+
+    async with get_async_db() as conn:
+        if cursor_ts and cursor_id:
+            rows = await conn.fetch(
+                _BASE_SELECT + """
+                WHERE c.user_id = $1 AND c.deleted_at IS NULL
+                  AND (c.updated_at < $2 OR (c.updated_at = $2 AND c.id < $3))
+                GROUP BY c.id
+                ORDER BY c.updated_at DESC, c.id DESC
+                LIMIT $4
+                """,
+                current_user.id, cursor_ts, cursor_id, limit + 1,
+            )
+        elif cursor_ts:
+            # Backwards-compatible path for old single-field cursors
+            rows = await conn.fetch(
+                _BASE_SELECT + """
+                WHERE c.user_id = $1 AND c.deleted_at IS NULL
+                  AND c.updated_at < $2
+                GROUP BY c.id
+                ORDER BY c.updated_at DESC, c.id DESC
+                LIMIT $3
+                """,
+                current_user.id, cursor_ts, limit + 1,
+            )
+        else:
+            rows = await conn.fetch(
+                _BASE_SELECT + """
+                WHERE c.user_id = $1 AND c.deleted_at IS NULL
+                GROUP BY c.id
+                ORDER BY c.updated_at DESC, c.id DESC
+                LIMIT $2
+                """,
+                current_user.id, limit + 1,
+            )
+
+    has_more  = len(rows) > limit
+    page_rows = rows[:limit]
+    next_cursor = (
+        f"{page_rows[-1]['updated_at']}|{page_rows[-1]['id']}"
+        if has_more and page_rows else None
+    )
 
     items = [ConversationSummary(**dict(r)).model_dump() for r in page_rows]
     return success({"items": items, "next_cursor": next_cursor, "has_more": has_more})
 
 
 @router.get("/api/conversations/{conversation_id}")
-def get_conversation(conversation_id: str, current_user: User = Depends(get_current_user)):
-    with get_db() as conn:
-        conv = conn.execute(
-            "SELECT * FROM conversations WHERE id = ? AND user_id = ?",
-            (conversation_id, current_user.id),
-        ).fetchone()
+async def get_conversation(conversation_id: str, current_user: User = Depends(get_current_user)):
+    async with get_async_db() as conn:
+        conv = await conn.fetchrow(
+            "SELECT * FROM conversations WHERE id = $1 AND user_id = $2",
+            conversation_id, current_user.id,
+        )
         if not conv:
             raise HTTPException(status_code=404, detail="Conversation not found")
-        turns = conn.execute(
+        turns = await conn.fetch(
             "SELECT id, prompt, created_at, status, intent_type, render_path, "
             "frame_count, video_path, turn_index, parent_session_id, parent_frame_index, "
             "stages_json, sources_json, synthesis_text "
-            "FROM sessions WHERE conversation_id = ? ORDER BY turn_index ASC",
-            (conversation_id,),
-        ).fetchall()
+            "FROM sessions WHERE conversation_id = $1 ORDER BY turn_index ASC",
+            conversation_id,
+        )
 
+    conv_dict = dict(conv)
     # M-1: Serialize through schema.
     detail = ConversationDetail(
-        **{k: conv[k] for k in ("id", "title", "created_at", "updated_at", "merged_video_path")
-           if k in conv.keys()},
+        **{k: conv_dict[k] for k in ("id", "title", "created_at", "updated_at", "merged_video_path")
+           if k in conv_dict},
         turns=[SessionTurn(**dict(t)) for t in turns],
     )
     return success(detail.model_dump())
 
 
 @router.get("/api/conversations/{conversation_id}/tree")
-def get_conversation_tree(conversation_id: str, current_user: User = Depends(get_current_user)):
+async def get_conversation_tree(conversation_id: str, current_user: User = Depends(get_current_user)):
     """Lightweight endpoint for the canvas tree view — returns only node/edge fields."""
-    with get_db() as conn:
-        conv = conn.execute(
-            "SELECT id, title FROM conversations WHERE id = ? AND user_id = ?",
-            (conversation_id, current_user.id),
-        ).fetchone()
+    async with get_async_db() as conn:
+        conv = await conn.fetchrow(
+            "SELECT id, title FROM conversations WHERE id = $1 AND user_id = $2",
+            conversation_id, current_user.id,
+        )
         if not conv:
             raise HTTPException(status_code=404, detail="Conversation not found")
-        nodes = conn.execute(
+        nodes = await conn.fetch(
             "SELECT id, prompt, status, intent_type, frame_count, video_path, "
             "turn_index, parent_session_id, parent_frame_index "
-            "FROM sessions WHERE conversation_id = ? ORDER BY turn_index ASC",
-            (conversation_id,),
-        ).fetchall()
+            "FROM sessions WHERE conversation_id = $1 ORDER BY turn_index ASC",
+            conversation_id,
+        )
 
     # M-1: Serialize through TreeNode schema.
     tree_nodes = [
@@ -178,20 +216,20 @@ def get_conversation_tree(conversation_id: str, current_user: User = Depends(get
 
 
 @router.post("/api/conversations/{conversation_id}/merge")
-def merge_conversation_videos(conversation_id: str, current_user: User = Depends(get_current_user)):
-    with get_db() as conn:
+async def merge_conversation_videos(conversation_id: str, current_user: User = Depends(get_current_user)):
+    async with get_async_db() as conn:
         # Verify ownership first
-        conv = conn.execute(
-            "SELECT id FROM conversations WHERE id = ? AND user_id = ?",
-            (conversation_id, current_user.id),
-        ).fetchone()
+        conv = await conn.fetchrow(
+            "SELECT id FROM conversations WHERE id = $1 AND user_id = $2",
+            conversation_id, current_user.id,
+        )
         if not conv:
             raise HTTPException(status_code=404, detail="Conversation not found")
-        rows = conn.execute(
+        rows = await conn.fetch(
             "SELECT id, prompt, video_path, parent_session_id, turn_index "
-            "FROM sessions WHERE conversation_id = ? AND status = 'done' ORDER BY turn_index ASC",
-            (conversation_id,),
-        ).fetchall()
+            "FROM sessions WHERE conversation_id = $1 AND status = 'done' ORDER BY turn_index ASC",
+            conversation_id,
+        )
 
     if not rows:
         raise HTTPException(status_code=400, detail="No completed sessions found for this conversation")
@@ -213,7 +251,8 @@ def merge_conversation_videos(conversation_id: str, current_user: User = Depends
         concat_file = f.name
 
     try:
-        subprocess.run(
+        await asyncio.to_thread(
+            subprocess.run,
             [ffmpeg_bin, "-y", "-f", "concat", "-safe", "0",
              "-i", concat_file, "-c", "copy", output_path],
             check=True,
@@ -234,12 +273,11 @@ def merge_conversation_videos(conversation_id: str, current_user: User = Depends
         if os.path.exists(concat_file):
             os.unlink(concat_file)
 
-    with get_db() as conn:
-        conn.execute(
-            "UPDATE conversations SET merged_video_path = ? WHERE id = ?",
-            (output_path, conversation_id),
+    async with get_async_db() as conn:
+        await conn.execute(
+            "UPDATE conversations SET merged_video_path = $1 WHERE id = $2",
+            output_path, conversation_id,
         )
-        conn.commit()
 
     logger.info("merge_complete", conversation=conversation_id, sessions=len(video_paths), output=output_path)
     # M-1: Serialize through MergeResponse schema.
@@ -252,7 +290,7 @@ def merge_conversation_videos(conversation_id: str, current_user: User = Depends
 
 
 @router.get("/api/conversations/{conversation_id}/merged_video")
-def get_merged_video(
+async def get_merged_video(
     conversation_id: str,
     token:           str = Query(default=""),
     credentials:     Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
@@ -264,13 +302,13 @@ def get_merged_video(
     Authorization: Bearer <jwt> (programmatic clients).
     The conversation media token is issued by POST /api/conversations/{id}/media-token.
     """
-    current_user = resolve_media_user(token, conversation_id, credentials)
+    current_user = await resolve_media_user(token, conversation_id, credentials)
 
-    with get_db() as conn:
-        row = conn.execute(
-            "SELECT merged_video_path FROM conversations WHERE id = ? AND user_id = ?",
-            (conversation_id, current_user.id),
-        ).fetchone()
+    async with get_async_db() as conn:
+        row = await conn.fetchrow(
+            "SELECT merged_video_path FROM conversations WHERE id = $1 AND user_id = $2",
+            conversation_id, current_user.id,
+        )
 
     if not row:
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -298,7 +336,7 @@ class RenameBody(BaseModel):
 
 
 @router.patch("/api/conversations/{conversation_id}")
-def rename_conv(
+async def rename_conv(
     conversation_id: str,
     body: RenameBody,
     current_user: User = Depends(get_current_user),
@@ -306,23 +344,23 @@ def rename_conv(
     title = body.title.strip()
     if not title:
         raise HTTPException(status_code=400, detail="Title cannot be empty")
-    updated = rename_conversation(conversation_id, current_user.id, title)
+    updated = await rename_conversation(conversation_id, current_user.id, title)
     if not updated:
         raise HTTPException(status_code=404, detail="Conversation not found")
     return success({"title": title})
 
 
 @router.post("/api/conversations/{conversation_id}/star")
-def star_conv(conversation_id: str, current_user: User = Depends(get_current_user)):
-    new_starred = toggle_star_conversation(conversation_id, current_user.id)
+async def star_conv(conversation_id: str, current_user: User = Depends(get_current_user)):
+    new_starred = await toggle_star_conversation(conversation_id, current_user.id)
     if new_starred is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
     return success({"starred": new_starred})
 
 
 @router.delete("/api/conversations/{conversation_id}")
-def delete_conv(conversation_id: str, current_user: User = Depends(get_current_user)):
-    deleted = soft_delete_conversation(conversation_id, current_user.id)
+async def delete_conv(conversation_id: str, current_user: User = Depends(get_current_user)):
+    deleted = await soft_delete_conversation(conversation_id, current_user.id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Conversation not found")
     return success({"deleted": True})
@@ -335,36 +373,36 @@ class NotesUpdateBody(BaseModel):
 
 
 @router.get("/api/conversations/{conversation_id}/notes")
-def get_notes(conversation_id: str, current_user: User = Depends(get_current_user)):
-    with get_db() as conn:
-        conv = conn.execute(
-            "SELECT id FROM conversations WHERE id = ? AND user_id = ?",
-            (conversation_id, current_user.id),
-        ).fetchone()
+async def get_notes(conversation_id: str, current_user: User = Depends(get_current_user)):
+    async with get_async_db() as conn:
+        conv = await conn.fetchrow(
+            "SELECT id FROM conversations WHERE id = $1 AND user_id = $2",
+            conversation_id, current_user.id,
+        )
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
-    notes = get_conversation_notes(conversation_id, current_user.id)
+    notes = await get_conversation_notes(conversation_id, current_user.id)
     if notes is None:
         return success({"content": None, "updated_at": None})
     return success(notes)
 
 
 @router.put("/api/conversations/{conversation_id}/notes")
-def update_notes(
+async def update_notes(
     conversation_id: str,
     body: NotesUpdateBody,
     current_user: User = Depends(get_current_user),
 ):
-    with get_db() as conn:
-        conv = conn.execute(
-            "SELECT id FROM conversations WHERE id = ? AND user_id = ?",
-            (conversation_id, current_user.id),
-        ).fetchone()
+    async with get_async_db() as conn:
+        conv = await conn.fetchrow(
+            "SELECT id FROM conversations WHERE id = $1 AND user_id = $2",
+            conversation_id, current_user.id,
+        )
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
-    updated_at = upsert_conversation_notes(conversation_id, current_user.id, body.content)
+    updated_at = await upsert_conversation_notes(conversation_id, current_user.id, body.content)
     return success({"updated_at": updated_at})
 
 

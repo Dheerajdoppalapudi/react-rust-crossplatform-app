@@ -23,7 +23,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from core.database import get_db, update_session
+from core.db_async import get_async_db, update_session
 from core.db_models import User
 from core.responses import success
 from core.utils import safe_resolve
@@ -60,7 +60,7 @@ def _sse(payload: dict) -> str:
 # ── Media token endpoint (CRIT-2) ─────────────────────────────────────────────
 
 @router.post("/api/sessions/{session_id}/media-token")
-def get_media_token(
+async def get_media_token(
     session_id:   str,
     current_user: User = Depends(get_current_user),
 ):
@@ -75,11 +75,11 @@ def get_media_token(
 
     This keeps the main access JWT out of any URL / log.
     """
-    with get_db() as conn:
-        row = conn.execute(
-            "SELECT id FROM sessions WHERE id = ? AND user_id = ?",
-            (session_id, current_user.id),
-        ).fetchone()
+    async with get_async_db() as conn:
+        row = await conn.fetchrow(
+            "SELECT id FROM sessions WHERE id = $1 AND user_id = $2",
+            session_id, current_user.id,
+        )
     if not row:
         raise HTTPException(status_code=404, detail="Session not found")
 
@@ -107,12 +107,12 @@ async def generate_video(
             detail="moviepy not installed — run: pip install moviepy",
         )
 
-    with get_db() as conn:
-        row = conn.execute(
+    async with get_async_db() as conn:
+        row = await conn.fetchrow(
             "SELECT output_dir, frame_count, status, render_path, video_path FROM sessions "
-            "WHERE id = ? AND user_id = ?",
-            (session_id, current_user.id),
-        ).fetchone()
+            "WHERE id = $1 AND user_id = $2",
+            session_id, current_user.id,
+        )
 
     if not row:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -315,7 +315,7 @@ async def generate_video(
 
             yield _sse({"type": "stage_done", "stage": "assembling", "duration_s": d3})
 
-            update_session(session_id, video_path=video_path)
+            await update_session(session_id, video_path=video_path)
 
             total = elapsed()
             logger.info("video_generation_done", session=session_id, frames=len(normalized_pngs), tts=tts_backend, total_s=total)
@@ -353,7 +353,7 @@ async def generate_video(
 # ── Video download (CRIT-2, CRIT-3) ──────────────────────────────────────────
 
 @router.get("/api/sessions/{session_id}/video")
-def get_session_video(
+async def get_session_video(
     session_id:  str,
     request:     Request,
     token:       str = Query(default=""),
@@ -372,13 +372,13 @@ def get_session_video(
     """
     # Resolve user from media token or Bearer JWT (no Authorization header required
     # for browser <video src> clients using ?token=).
-    current_user = resolve_media_user(token, session_id, credentials)
+    current_user = await resolve_media_user(token, session_id, credentials)
 
-    with get_db() as conn:
-        row = conn.execute(
-            "SELECT video_path FROM sessions WHERE id = ? AND user_id = ?",
-            (session_id, current_user.id),
-        ).fetchone()
+    async with get_async_db() as conn:
+        row = await conn.fetchrow(
+            "SELECT video_path FROM sessions WHERE id = $1 AND user_id = $2",
+            session_id, current_user.id,
+        )
 
     if not row:
         raise HTTPException(status_code=404, detail="Session not found")

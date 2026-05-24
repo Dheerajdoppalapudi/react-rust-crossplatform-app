@@ -8,13 +8,14 @@ Fixes applied:
 """
 
 import structlog
-import os
 import uuid
+from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 
 from core.config import UPLOAD_DIR
 from core.db_models import User
+from core.limiter import limiter, get_user_key
 from core.responses import success
 from dependencies.auth import get_current_user
 from schemas.sessions import UploadResponse, ChatWithFilesResponse
@@ -24,6 +25,12 @@ logger = structlog.get_logger(__name__)
 router = APIRouter()
 
 _MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50 MB per file
+
+_ALLOWED_EXTENSIONS = frozenset({
+    '.pdf', '.pptx', '.docx', '.txt', '.csv',
+    '.png', '.jpg', '.jpeg', '.gif', '.webp',
+    '.mp4', '.mov', '.mp3', '.wav',
+})
 
 
 def _user_upload_dir(user_id: str):
@@ -37,20 +44,27 @@ def _user_upload_dir(user_id: str):
 
 
 @router.post("/api/upload")
+@limiter.limit("20/minute", key_func=get_user_key)
 async def upload_files(
+    request: Request,
     files: list[UploadFile] = File(...),
     current_user: User = Depends(get_current_user),
 ):
     upload_dir = _user_upload_dir(current_user.id)
     saved = []
     for file in files:
+        ext = Path(file.filename or "").suffix.lower()
+        if ext not in _ALLOWED_EXTENSIONS:
+            raise HTTPException(
+                status_code=415,
+                detail=f"File type {ext!r} not allowed. Allowed: {', '.join(sorted(_ALLOWED_EXTENSIONS))}",
+            )
         content = await file.read()
         if len(content) > _MAX_UPLOAD_SIZE:
             raise HTTPException(
                 status_code=413,
                 detail=f"File {file.filename!r} exceeds the 50 MB limit",
             )
-        ext      = os.path.splitext(file.filename or "")[1]
         filename = f"{uuid.uuid4().hex}{ext}"
         filepath = upload_dir / filename
         filepath.write_bytes(content)
@@ -65,7 +79,9 @@ async def upload_files(
 
 
 @router.post("/api/chat-with-files")
+@limiter.limit("20/minute", key_func=get_user_key)
 async def chat_with_files(
+    request: Request,
     message: str = Form(""),
     files: list[UploadFile] = File(default=[]),
     current_user: User = Depends(get_current_user),
@@ -73,13 +89,18 @@ async def chat_with_files(
     upload_dir = _user_upload_dir(current_user.id)
     saved = []
     for file in files:
+        ext = Path(file.filename or "").suffix.lower()
+        if ext not in _ALLOWED_EXTENSIONS:
+            raise HTTPException(
+                status_code=415,
+                detail=f"File type {ext!r} not allowed. Allowed: {', '.join(sorted(_ALLOWED_EXTENSIONS))}",
+            )
         content = await file.read()
         if len(content) > _MAX_UPLOAD_SIZE:
             raise HTTPException(
                 status_code=413,
                 detail=f"File {file.filename!r} exceeds the 50 MB limit",
             )
-        ext      = os.path.splitext(file.filename or "")[1]
         filename = f"{uuid.uuid4().hex}{ext}"
         (upload_dir / filename).write_bytes(content)
         logger.info("file_uploaded", user=current_user.id, filename=file.filename, size=len(content))

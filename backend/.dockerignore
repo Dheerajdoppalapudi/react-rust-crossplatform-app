@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+
+# Virtual environment — never copy into image
+env/
+venv/
+.venv/
+
+# Local secrets — never bake into image
+.env
+.env.*
+*.env
+
+# Generated outputs — mounted as a volume in production
+outputs/
+logs/
+chromadb/
+
+# Dev / test artifacts
+database.sqlite
+*.sqlite
+tests/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# Docker
+Dockerfile
+.dockerignore
+
+# Alembic offline SQL dumps
+alembic/versions/*.sql

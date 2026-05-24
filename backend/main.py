@@ -31,8 +31,8 @@ from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
-from core.config import ANTHROPIC_API_KEY, CORS_ORIGINS, OPENAI_API_KEY
-from core.database import init_db, get_db
+from core.config import ANTHROPIC_API_KEY, COOKIE_SECURE, CORS_ORIGINS, OPENAI_API_KEY
+from core.db_async import init_pool, close_pool, get_async_db, init_db, mark_stale_pending_sessions
 from core.limiter import limiter
 from core.responses import success
 from routers import auth, conversations, export, generate, sessions, upload, video
@@ -44,9 +44,14 @@ logger = structlog.get_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    init_db()
+    await init_pool()
+    await init_db()
+    swept = await mark_stale_pending_sessions(older_than_minutes=10)
+    if swept:
+        logger.warning("stale_sessions_swept", count=swept)
     logger.info("zenith_api_started")
     yield
+    await close_pool()
     logger.info("zenith_api_stopped")
 
 
@@ -71,12 +76,45 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
 )
 
 
 # ── Request ID middleware (M-10) ──────────────────────────────────────────────
+
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    """
+    Add defence-in-depth security headers to every response.
+    HSTS is only set in production (COOKIE_SECURE=True) since it breaks HTTP dev servers.
+    CSP allows SSE (connect-src 'self') and blob: URLs for video playback.
+    """
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"]  = "nosniff"
+    response.headers["X-Frame-Options"]         = "DENY"
+    response.headers["Referrer-Policy"]         = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"]      = "camera=(), microphone=(), geolocation=()"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        # Interactive mode embeds P5.js / Prism / Chart.js via CDN inside srcdoc iframes
+        "script-src 'self' 'unsafe-inline' "
+        "https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://unpkg.com; "
+        "style-src 'self' 'unsafe-inline' "
+        "https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com; "
+        "connect-src 'self'; "
+        "media-src 'self' blob:; "
+        "img-src 'self' data: blob:; "
+        "frame-src 'self' blob:; "
+        "frame-ancestors 'none'"
+    )
+    if COOKIE_SECURE:
+        response.headers["Strict-Transport-Security"] = (
+            "max-age=63072000; includeSubDomains; preload"
+        )
+    return response
+
 
 @app.middleware("http")
 async def request_id_middleware(request: Request, call_next):
@@ -140,7 +178,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 # ── Health check ──────────────────────────────────────────────────────────────
 
 @app.get("/api/health")
-def health_check():
+async def health_check():
     """
     Liveness + readiness probe. Checks DB, ChromaDB, and LLM key presence.
     Returns 503 if the database is unreachable (hard dependency).
@@ -148,8 +186,8 @@ def health_check():
     checks: dict[str, bool] = {"db": False, "chromadb": False, "llm": False}
 
     try:
-        with get_db() as conn:
-            conn.execute("SELECT 1").fetchone()
+        async with get_async_db() as conn:
+            await conn.fetchval("SELECT 1")
         checks["db"] = True
     except Exception:
         logger.error("health_check_db_failed", exc_info=True)
@@ -179,4 +217,4 @@ def health_check():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=False)

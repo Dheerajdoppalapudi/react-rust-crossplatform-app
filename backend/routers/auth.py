@@ -2,6 +2,7 @@
 Auth router — Google OAuth, token refresh, logout, and /me.
 """
 
+import asyncio
 import structlog
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -20,7 +21,7 @@ from core.config import (
     JWT_SECRET_KEY,
     REFRESH_TOKEN_EXPIRE_DAYS,
 )
-from core.database import (
+from core.db_async import (
     create_password_user,
     create_refresh_token,
     delete_refresh_token,
@@ -113,12 +114,12 @@ def _get_google_user_info(access_token: str) -> dict:
 
 @router.post("/google")
 @limiter.limit("10/minute")
-def login_with_google(request: Request, body: GoogleLoginRequest, response: Response):
+async def login_with_google(request: Request, body: GoogleLoginRequest, response: Response):
     """
     Verify a Google OAuth access token via Google's userinfo endpoint.
     Upserts the user, issues an access JWT + sets a refresh token cookie.
     """
-    info = _get_google_user_info(body.access_token)
+    info = await asyncio.to_thread(_get_google_user_info, body.access_token)
 
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     user = User(
@@ -129,10 +130,10 @@ def login_with_google(request: Request, body: GoogleLoginRequest, response: Resp
         created_at=now,
         last_login=now,
     )
-    upsert_user(user)
+    await upsert_user(user)
 
     access_token  = _create_access_token(user.id)
-    refresh_token = create_refresh_token(user.id)
+    refresh_token = await create_refresh_token(user.id)
     _set_refresh_cookie(response, refresh_token)
 
     logger.info("user_login", user_id=user.id, email=user.email)
@@ -148,7 +149,7 @@ def login_with_google(request: Request, body: GoogleLoginRequest, response: Resp
 
 
 @router.post("/refresh")
-def refresh_token(response: Response, refresh_token: str = Cookie(default=None)):
+async def refresh_token(response: Response, refresh_token: str = Cookie(default=None)):
     """
     Rotate the refresh token and issue a new access token.
 
@@ -161,7 +162,7 @@ def refresh_token(response: Response, refresh_token: str = Cookie(default=None))
             detail="No refresh token",
         )
 
-    result = rotate_refresh_token(refresh_token)
+    result = await rotate_refresh_token(refresh_token)
     if result is None:
         # Token was not found — possible theft; clear the cookie
         _clear_refresh_cookie(response)
@@ -172,7 +173,7 @@ def refresh_token(response: Response, refresh_token: str = Cookie(default=None))
 
     new_refresh_token, user_id = result
 
-    user = get_user_by_id(user_id)
+    user = await get_user_by_id(user_id)
     if not user:
         _clear_refresh_cookie(response)
         raise HTTPException(
@@ -195,14 +196,14 @@ def refresh_token(response: Response, refresh_token: str = Cookie(default=None))
 
 
 @router.post("/logout")
-def logout(
+async def logout(
     response: Response,
     refresh_token: str = Cookie(default=None),
     current_user: User = Depends(get_current_user),
 ):
     """Delete the refresh token and clear the cookie."""
     if refresh_token:
-        delete_refresh_token(refresh_token)
+        await delete_refresh_token(refresh_token)
     _clear_refresh_cookie(response)
     logger.info("user_logout", user_id=current_user.id)
     return success({"message": "Logged out"})
@@ -210,7 +211,7 @@ def logout(
 
 @router.post("/register")
 @limiter.limit("5/minute")
-def register(request: Request, body: RegisterRequest, response: Response):
+async def register(request: Request, body: RegisterRequest, response: Response):
     """
     Register a new user with name, email, and password.
     Returns an access token and sets a refresh cookie — same as Google login.
@@ -221,7 +222,7 @@ def register(request: Request, body: RegisterRequest, response: Response):
             detail="Password must be 8–128 characters",
         )
 
-    existing = get_user_by_email(body.email)
+    existing = await get_user_by_email(body.email)
     if existing:
         if existing.auth_provider == "google":
             raise HTTPException(
@@ -233,18 +234,20 @@ def register(request: Request, body: RegisterRequest, response: Response):
             detail="An account with this email already exists.",
         )
 
-    password_hash = bcrypt.hashpw(body.password.encode(), bcrypt.gensalt()).decode()
+    password_hash = await asyncio.to_thread(
+        bcrypt.hashpw, body.password.encode(), bcrypt.gensalt()
+    )
     user_id = uuid.uuid4().hex
 
-    user = create_password_user(
+    user = await create_password_user(
         user_id=user_id,
         name=body.name.strip(),
         email=body.email,
-        password_hash=password_hash,
+        password_hash=password_hash.decode(),
     )
 
     access_token  = _create_access_token(user.id)
-    refresh_token = create_refresh_token(user.id)
+    refresh_token = await create_refresh_token(user.id)
     _set_refresh_cookie(response, refresh_token)
 
     logger.info("user_register", user_id=user.id, email=user.email)
@@ -261,12 +264,12 @@ def register(request: Request, body: RegisterRequest, response: Response):
 
 @router.post("/login")
 @limiter.limit("5/minute")
-def login_with_password(request: Request, body: PasswordLoginRequest, response: Response):
+async def login_with_password(request: Request, body: PasswordLoginRequest, response: Response):
     """
     Authenticate with email + password.
     Returns an access token and sets a refresh cookie.
     """
-    existing = get_user_by_email(body.email)
+    existing = await get_user_by_email(body.email)
     if not existing:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -282,15 +285,24 @@ def login_with_password(request: Request, body: PasswordLoginRequest, response: 
     if len(body.password) > 128:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
 
-    stored_hash = get_user_password_hash(body.email)
-    if not stored_hash or not bcrypt.checkpw(body.password.encode(), stored_hash.encode()):
+    stored_hash = await get_user_password_hash(body.email)
+    if not stored_hash:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password",
+        )
+
+    pw_valid = await asyncio.to_thread(
+        bcrypt.checkpw, body.password.encode(), stored_hash.encode()
+    )
+    if not pw_valid:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
         )
 
     access_token  = _create_access_token(existing.id)
-    refresh_token = create_refresh_token(existing.id)
+    refresh_token = await create_refresh_token(existing.id)
     _set_refresh_cookie(response, refresh_token)
 
     logger.info("user_login_password", user_id=existing.id, email=existing.email)
@@ -306,7 +318,7 @@ def login_with_password(request: Request, body: PasswordLoginRequest, response: 
 
 
 @router.get("/me")
-def get_me(current_user: User = Depends(get_current_user)):
+async def get_me(current_user: User = Depends(get_current_user)):
     """Return the currently authenticated user."""
     return success({
         "id":     current_user.id,

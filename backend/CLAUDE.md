@@ -10,7 +10,7 @@
 - **Interactive mode** — live cited lesson blocks (text, diagrams, charts, code) streamed via SSE
 - **Video mode** — an animated educational video (SVG frames / Manim animations / Mermaid diagrams + narration)
 
-The backend is a **FastAPI / Python** application running on EC2 behind Nginx. All AI generation is streamed to the client via Server-Sent Events (SSE).
+The backend is a **FastAPI / Python** application. All AI generation is streamed to the client via Server-Sent Events (SSE).
 
 ---
 
@@ -20,7 +20,7 @@ The backend is a **FastAPI / Python** application running on EC2 behind Nginx. A
 # Backend
 cd backend/
 source env/bin/activate
-python main.py           # FastAPI + Uvicorn on :8000, hot reload enabled
+python main.py           # FastAPI + Uvicorn on :8000
 
 # Tests
 python -m pytest tests/ -v
@@ -39,11 +39,26 @@ playwright install chromium   # for SVG animation screenshots
 
 **Required `.env` (in `backend/`):**
 ```
+# Auth
 JWT_SECRET_KEY=<64-char random string>
+
+# LLM
 ANTHROPIC_API_KEY=sk-ant-...
 OPENAI_API_KEY=sk-proj-...
 TAVILY_API_KEY=tvly-...
-ENV=production            # only on EC2 — enables Secure cookies
+
+# PostgreSQL (RDS)
+DATABASE_URL=postgresql://user:password@host:5432/zenith
+
+# AWS S3 + CloudFront
+AWS_ACCESS_KEY_ID=AKIA...
+AWS_SECRET_ACCESS_KEY=...
+AWS_REGION=us-east-1
+S3_MEDIA_BUCKET=zenith-app-media
+S3_UPLOADS_BUCKET=zenith-app-uploads
+CLOUDFRONT_DOMAIN=dXXXXXXX.cloudfront.net
+
+ENV=production            # enables Secure cookies in production
 ```
 
 ---
@@ -56,8 +71,9 @@ backend/
 │
 ├── core/                            # Shared infrastructure — import from here, never bypass
 │   ├── config.py                    # ALL constants and env vars — single source of truth
-│   ├── database.py                  # ALL SQLite helpers: get_db(), init_db(), insert_*, update_*
-│   ├── db_models.py                 # Typed dataclasses for DB rows: User, RefreshToken
+│   ├── database.py                  # ALL PostgreSQL helpers: get_db(), init_db(), insert_*, update_*
+│   ├── s3.py                        # S3 + CloudFront helpers: upload, key derivation, presigned URLs
+│   ├── db_models.py                 # Typed dataclasses for DB rows: User
 │   ├── limiter.py                   # slowapi Limiter singleton (avoids circular import via main.py)
 │   ├── logging_config.py            # setup_logging() — structlog JSON (prod) / console (dev)
 │   ├── responses.py                 # success() envelope helper
@@ -194,7 +210,7 @@ SVG_INTENT_TYPES   = frozenset({"illustration", "concept_analogy", "comparison",
 
 // Shared
 {"type": "init",      "conversation_id": "..."}   // fired first, before any LLM call
-{"type": "heartbeat", "elapsed_s": 22.0}           // every 20s to prevent Nginx timeout
+{"type": "heartbeat", "elapsed_s": 22.0}           // every 20s to prevent proxy timeout
 {"type": "done",      "session_id", "conversation_id", "turn_index", "render_path", ...}
 {"type": "error",     "message": "..."}
 ```
@@ -225,8 +241,6 @@ llm_service.make_system_user_request(system_prompt, user_prompt)
 
 **Prompt caching** (Anthropic only): pass `cache_prefix=<static_template_text>` to split the user message into a cached block (10× cheaper on cache hits).
 
-**Tool use** (Anthropic only): pass `tool_schema=<schema_dict>` to force structured JSON output guaranteed to match the schema.
-
 All LLM calls are blocking (`client.messages.create()`). Always call them via `asyncio.to_thread()` from async contexts:
 ```python
 raw, usage = await asyncio.to_thread(llm_service.make_system_user_request, sys_prompt, user_prompt)
@@ -245,7 +259,7 @@ raw, usage = await asyncio.to_thread(llm_service.make_system_user_request, sys_p
 
 **Flow:** `POST /auth/google` → Google userinfo → upsert user → issue JWT + refresh cookie.
 
-**Refresh token rotation:** Every `/auth/refresh` invalidates the old token and issues a new one. Reuse of an already-rotated token = theft detected → clear cookie + return 401.
+**Refresh token rotation:** Every `/auth/refresh` atomically deletes the old token (`DELETE ... WHERE token = ? AND expires_at > ?`) and inserts a new one via `RETURNING user_id`. If `rowcount == 0` the token is missing or expired → 401. This is a single atomic operation — no race condition possible.
 
 **Rate limits:**
 - `/auth/login` → `5/minute` per IP
@@ -260,21 +274,36 @@ from core.db_models import User
 @router.get("/api/my-resource")
 def my_resource(current_user: User = Depends(get_current_user)):
     # Always filter by user_id for data isolation
-    rows = conn.execute("SELECT * FROM x WHERE user_id = ?", (current_user.id,))
+    with get_db() as conn:
+        rows = conn.execute("SELECT * FROM x WHERE user_id = ?", (current_user.id,)).fetchall()
 ```
-
-**`User` dataclass fields:** `id`, `email`, `name`, `avatar`, `created_at`, `last_login`, `password_hash`, `auth_provider` (`"google"` | `"password"`).
 
 ---
 
 ## Database
 
-**Engine:** SQLite with WAL mode. File: `backend/database.sqlite`.
+**Engine:** PostgreSQL 16 on AWS RDS. Connection managed via `psycopg2` with a `ThreadedConnectionPool(min=1, max=10)`.
 
-**All DB access** must go through `core/database.py`. Never open SQLite connections directly in routers or services.
+**All DB access** must go through `core/database.py`. Never import psycopg2 directly in routers or services.
 
 ```python
 from core.database import get_db, insert_session, update_session, insert_conversation
+```
+
+### `_PGConn` wrapper
+
+`get_db()` returns a `_PGConn` that wraps psycopg2 and exposes the same API as the old sqlite3 connection:
+- `conn.execute(sql, params)` — accepts `?` placeholders (auto-converted to `%s`), returns a `RealDictCursor`
+- `conn.commit()` / `conn.rollback()`
+- `with get_db() as conn:` — commits on success, rolls back on exception, returns connection to pool
+
+```python
+with get_db() as conn:
+    row  = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    rows = conn.execute("SELECT * FROM sessions WHERE conversation_id = ?", (conv_id,)).fetchall()
+    cur  = conn.execute("UPDATE sessions SET status = ? WHERE id = ?", ("done", sid))
+    conn.commit()
+    # cur.rowcount is available
 ```
 
 ### Tables
@@ -282,21 +311,24 @@ from core.database import get_db, insert_session, update_session, insert_convers
 | Table | Key columns |
 |---|---|
 | `users` | `id` (Google sub or UUID), `email`, `auth_provider`, `password_hash` |
-| `refresh_tokens` | `token`, `user_id`, `expires_at` (FK to users) |
-| `conversations` | `id`, `title`, `user_id`, `starred`, `deleted_at` |
-| `sessions` | `id`, `prompt`, `conversation_id`, `turn_index`, `user_id`, `status`, `intent_type`, `render_path`, `frame_count`, `output_dir`, `sources_json`, `synthesis_text` |
+| `refresh_tokens` | `token`, `user_id`, `expires_at` (FK → users) |
+| `conversations` | `id`, `title`, `user_id`, `starred`, `deleted_at`, `merged_video_path` |
+| `sessions` | `id`, `prompt`, `conversation_id`, `turn_index`, `user_id`, `status`, `intent_type`, `render_path`, `frame_count`, `output_dir`, `sources_json`, `synthesis_text`, `stages_json`, `research_mode`, `video_path` |
+| `conversation_notes` | `conversation_id`, `user_id`, `content`, `updated_at` |
 
 ### Indexes
 
 ```sql
-idx_sessions_status         ON sessions(status)
-idx_sessions_created_at     ON sessions(created_at DESC)
-idx_conversations_deleted   ON conversations(deleted_at) WHERE deleted_at IS NOT NULL
-idx_sessions_conv_turn_user UNIQUE ON sessions(conversation_id, turn_index, user_id)
-                             WHERE conversation_id IS NOT NULL
+idx_sessions_user_id         ON sessions(user_id)
+idx_sessions_conversation_id ON sessions(conversation_id)
+idx_sessions_status          ON sessions(status)
+idx_sessions_created_at      ON sessions(created_at DESC)
+idx_conversations_user_id    ON conversations(user_id)
+idx_conversations_updated_at ON conversations(updated_at DESC)
+idx_conversations_deleted    ON conversations(deleted_at) WHERE deleted_at IS NOT NULL
+idx_sessions_conv_turn_user  UNIQUE ON sessions(conversation_id, turn_index, user_id)
+                              WHERE conversation_id IS NOT NULL
 ```
-
-The UNIQUE index on `(conversation_id, turn_index, user_id)` is the safety net for the atomic `turn_index` insert.
 
 ### Atomic turn_index insert
 
@@ -304,14 +336,59 @@ The UNIQUE index on `(conversation_id, turn_index, user_id)` is the safety net f
 ```sql
 INSERT INTO sessions (..., turn_index)
 VALUES (..., COALESCE(
-    (SELECT MAX(turn_index) FROM sessions WHERE conversation_id=? AND user_id=?), 0
+    (SELECT MAX(turn_index) FROM sessions WHERE conversation_id=%s AND user_id=%s), 0
 ) + 1)
 ```
 Pass `turn_index=1` explicitly only for the first turn of a new conversation.
 
-### Schema migrations
+### Schema management
 
-`init_db()` in `core/database.py` runs on every startup. New columns are added with `ALTER TABLE ... ADD COLUMN` wrapped in `try/except` (intentional — SQLite has no `IF NOT EXISTS` for ALTER TABLE).
+`init_db()` in `core/database.py` runs on every startup. All tables and indexes use `IF NOT EXISTS` — safe to call repeatedly. To add a new column: add it to the `CREATE TABLE` statement in `init_db()` and run `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` for existing databases.
+
+---
+
+## S3 + CloudFront — `core/s3.py`
+
+Two buckets:
+
+| Bucket | Access | Used for |
+|---|---|---|
+| `zenith-app-media` | Public via CloudFront | Generated frames, videos, scene_ir.json |
+| `zenith-app-uploads` | Private, presigned URLs | User-uploaded PDFs, PPTXes, images |
+
+### Key derivation — never store S3 paths in the DB
+
+```python
+from core.s3 import frame_key, video_key, meta_key, cdn_url
+
+frame_key(session_id, 0)              # → "frames/{session_id}/000.png"
+video_key(session_id)                 # → "video/{session_id}/final.mp4"
+meta_key(session_id, "scene_ir.json") # → "meta/{session_id}/scene_ir.json"
+cdn_url(key)                          # → "https://dXXX.cloudfront.net/{key}"
+```
+
+Keys are always derived from `session_id`. The DB stores `video_ready: bool`, not paths.
+
+### Upload helpers
+
+```python
+from core.s3 import upload_frame, upload_video, upload_scene_ir, upload_bytes, presigned_url
+
+url = upload_frame(local_path, session_id, index)   # returns CloudFront URL
+url = upload_video(local_path, session_id)
+url = upload_scene_ir(json_bytes, session_id)
+key = upload_user_file(local_path, key)             # private bucket, returns key only
+url = presigned_url(key, expires_in=3600)           # for private uploads
+exists = video_ready(session_id)                    # head_object check
+```
+
+### Cache policies (set in CloudFront behaviors)
+
+| Path prefix | TTL | Reason |
+|---|---|---|
+| `frames/*` | 1-7 days | Immutable once generated |
+| `video/*` | 1 day | Immutable once assembled |
+| `meta/*` | 1 min | Regeneratable (scene_ir.json may be overwritten) |
 
 ---
 
@@ -323,12 +400,18 @@ Pass `turn_index=1` explicitly only for the first turn of a new conversation.
 
 ```python
 # Paths
-DB_PATH, UPLOAD_DIR, OUTPUTS_DIR, CHROMADB_PATH
+UPLOAD_DIR, OUTPUTS_DIR, CHROMADB_PATH
+
+# PostgreSQL
+DATABASE_URL          # full connection string
+
+# AWS
+AWS_REGION, S3_MEDIA_BUCKET, S3_UPLOADS_BUCKET, CLOUDFRONT_DOMAIN
 
 # LLM
 ANTHROPIC_API_KEY, OPENAI_API_KEY
-CLAUDE_MODEL        = "claude-sonnet-4-6"        # default generation model
-CLASSIFY_MODEL      = "claude-haiku-4-5-20251001" # cheap model for intent classification
+CLAUDE_MODEL        = "claude-haiku-4-5-20251001"  # default generation model
+CLASSIFY_MODEL      = "claude-haiku-4-5-20251001"  # intent classification
 OPENAI_MODEL        = "gpt-4.1"
 EMBEDDING_MODEL     = "text-embedding-3-small"
 PROMPT_CACHE_ENABLED = True
@@ -336,23 +419,24 @@ PROMPT_CACHE_ENABLED = True
 # Research
 TAVILY_API_KEY
 DEEP_SEARCH_ROUNDS, DEEP_SEARCH_QUERIES, DEEP_SEARCH_SOURCES
-FOLLOWUP_TOP_K_SOURCES = 8     # ChromaDB top-K retrieval for follow-ups
+FOLLOWUP_TOP_K_SOURCES = 8
 INSTANT_MAX_QUERIES    = 3
 DEEP_MAX_QUERIES       = 5
 
 # Generation tuning
-HEARTBEAT_INTERVAL_SECS      = 20    # SSE heartbeat to prevent Nginx proxy_read_timeout
-CONVERSATION_TITLE_MAX_CHARS = 80    # title is first 80 chars of prompt
+HEARTBEAT_INTERVAL_SECS      = 20
+CONVERSATION_TITLE_MAX_CHARS = 80
 LLM_DEFAULT_MAX_TOKENS       = 4096
-SCENE_PLANNER_MAX_TOKENS     = 8192  # interactive scene planning needs more space
-SOURCES_SNIPPET_MAX_CHARS    = 2500  # source content injected into interactive prompts
-MAX_FRAMES_JSON_BYTES        = 10_000_000  # 10 MB size guard on frames.json reads
+SCENE_PLANNER_MAX_TOKENS     = 8192
+SOURCES_SNIPPET_MAX_CHARS    = 2500
+MAX_FRAMES_JSON_BYTES        = 10_000_000
 
 # Auth
 JWT_SECRET_KEY, JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES  = 15
 REFRESH_TOKEN_EXPIRE_DAYS    = 30
-COOKIE_SECURE                = True  # only when ENV=production
+MEDIA_TOKEN_EXPIRE_MINUTES   = 5
+COOKIE_SECURE                = True   # only when ENV=production
 
 # Intent routing
 MANIM_INTENT_TYPES, SVG_INTENT_TYPES
@@ -362,8 +446,6 @@ VIDEO_WIDTH=1920, VIDEO_HEIGHT=1080, VIDEO_FPS=24
 TTS_WORDS_PER_SECOND = 2.3
 ```
 
-All tunable via env vars with the same name (e.g., `HEARTBEAT_INTERVAL_SECS=30` in `.env`).
-
 ---
 
 ## Research pipeline — `services/research/`
@@ -372,9 +454,9 @@ All tunable via env vars with the same name (e.g., `HEARTBEAT_INTERVAL_SECS=30` 
 |---|---|
 | `search_provider.py` | `TavilyProvider.search()` + `.extract()` — all web access flows through here. Module-level singleton `tavily`. Both methods have `asyncio.wait_for(timeout=20.0)`. |
 | `source_processor.py` | `rank_and_deduplicate()` + `truncate_content()` — filters and trims raw Tavily results |
-| `vector_store.py` | ChromaDB wrapper. `upsert_sources()` + `retrieve_sources()`. Thread-safe init (double-checked lock). Collection name = `f"conv_{conversation_id}"` (full UUID, no truncation). |
-| `synthesiser.py` | `stream()` — async generator yielding cited markdown tokens. Uses real Anthropic streaming via `_get_anthropic_client()` singleton. Falls back to blocking call if streaming fails. |
-| `file_extractor.py` | `extract_urls_from_text()` + `extract_text()` — pulls text from uploaded PDFs and PPTXes for use as additional context |
+| `vector_store.py` | ChromaDB wrapper. `upsert_sources()` + `retrieve_sources()`. Thread-safe init (double-checked lock). Collection name = `f"conv_{conversation_id}"`. |
+| `synthesiser.py` | `stream()` — async generator yielding cited markdown tokens. Uses `asyncio.get_running_loop()` (not deprecated `get_event_loop()`). Falls back to blocking call if streaming fails. |
+| `file_extractor.py` | `extract_urls_from_text()` + `extract_text()` — pulls text from uploaded PDFs and PPTXes |
 | `research_service.py` | `source_summary()` / `source_full()` — formats source dicts for injection into prompts |
 
 **Tavily concurrency cap** — in `generate.py`:
@@ -400,8 +482,6 @@ resolved = safe_resolve(db_row["output_path"], label="frames")
 data = read_json_file(resolved)   # also enforces 10 MB size limit
 ```
 
-`safe_resolve()` uses `Path.resolve()` to collapse `../../` before checking the prefix. String `startswith()` alone is insufficient.
-
 ### 2. All endpoints require auth
 
 Every endpoint reading or writing user data must have:
@@ -409,11 +489,31 @@ Every endpoint reading or writing user data must have:
 current_user: User = Depends(get_current_user)
 ```
 
-Exceptions (public by design — health check, auth endpoints) must have an inline comment explaining why.
-
 Always filter DB queries by `user_id = current_user.id`.
 
-### 3. Rate limiting on auth endpoints
+### 3. File upload type validation
+
+`POST /api/upload` and `POST /api/chat-with-files` validate extension against an explicit allowlist before reading content:
+
+```python
+_ALLOWED_EXTENSIONS = frozenset({
+    '.pdf', '.pptx', '.docx', '.txt', '.csv',
+    '.png', '.jpg', '.jpeg', '.gif', '.webp',
+    '.mp4', '.mov', '.mp3', '.wav',
+})
+ext = Path(file.filename or "").suffix.lower()
+if ext not in _ALLOWED_EXTENSIONS:
+    raise HTTPException(status_code=415, ...)
+```
+
+### 4. CORS is explicit, not wildcard
+
+```python
+allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
+```
+
+### 5. Rate limiting on auth endpoints
 
 The `limiter` singleton lives in `core/limiter.py` — import from there, not `main.py`:
 ```python
@@ -421,10 +521,10 @@ from core.limiter import limiter
 
 @router.post("/auth/login")
 @limiter.limit("5/minute")
-def login(request: Request, ...):  # request param required by slowapi
+def login(request: Request, ...):
 ```
 
-### 4. Never return raw JSONResponse for errors
+### 6. Never return raw JSONResponse for errors
 
 ```python
 # WRONG
@@ -433,8 +533,6 @@ return JSONResponse({"error": "something went wrong"})
 # RIGHT
 raise HTTPException(status_code=400, detail="something went wrong")
 ```
-
-The global handler in `main.py` wraps all `HTTPException`s in the standard envelope.
 
 ---
 
@@ -462,20 +560,17 @@ return success({"key": "value"})
 import structlog
 logger = structlog.get_logger(__name__)
 
-# Use kwargs — every key becomes a real JSON field, queryable in CloudWatch/Datadog
 logger.info("session_complete", session_id=sid, duration_s=round(t, 1), tokens=n)
 logger.warning("tavily_timeout", query=query[:80], timeout_s=timeout)
 logger.error("llm_failed", error=str(exc), exc_info=True)
 ```
 
-- **Never** use `logging.getLogger()` in application code — always `structlog.get_logger()`.
-- **Never** use format strings (`%s`, f-strings) in log calls — pass kwargs so each key is a structured field.
-- Request-scoped context (e.g. `request_id`) is bound once in middleware via `structlog.contextvars.bind_contextvars()` and auto-included in every log line for that request — no need to pass it explicitly.
-- `exc_info=True` works unchanged — structlog's stdlib bridge forwards it to the formatter.
+- **Never** use `logging.getLogger()` — always `structlog.get_logger()`.
+- **Never** use format strings in log calls — pass kwargs so each key is a structured field.
+- Request-scoped `request_id` is bound once in middleware and auto-included in every log line.
 
-In production (`ENV=production`): structlog outputs JSON lines — queryable in CloudWatch.
-In development: coloured human-readable console via structlog ConsoleRenderer.
-Log file: `backend/logs/app.log` (5 MB × 3 rotating backups).
+In production (`ENV=production`): JSON lines queryable in CloudWatch.
+In development: coloured human-readable console.
 
 **Never use `print()`.**
 
@@ -493,6 +588,7 @@ Log file: `backend/logs/app.log` (5 MB × 3 rotating backups).
 8. All file I/O in async functions must be wrapped in `asyncio.to_thread()`
 9. All DB access via helpers in `core/database.py`
 10. Path traversal guard via `core/utils.safe_resolve()` on any path from DB/user input
+11. File uploads: validate extension against `_ALLOWED_EXTENSIONS` before reading bytes
 
 ---
 
@@ -504,9 +600,12 @@ Log file: `backend/logs/app.log` (5 MB × 3 rotating backups).
 |---|---|
 | File read/write | `await asyncio.to_thread(Path(p).read_text)` |
 | LLM call (sync SDK) | `await asyncio.to_thread(llm_service.make_system_user_request, ...)` |
-| DB query (sqlite3) | `with get_db() as conn:` — synchronous, but fast (<1ms); call from sync helpers only |
+| DB query (psycopg2) | `with get_db() as conn:` — call from sync helpers only; fast over LAN to RDS |
 | CPU-heavy work | `await asyncio.to_thread(heavy_function, args)` |
 | External HTTP | Use timeout: `asyncio.wait_for(asyncio.to_thread(fn), timeout=20.0)` |
+| Event loop ref | Use `asyncio.get_running_loop()` — never `asyncio.get_event_loop()` (deprecated) |
+| mkdir / os.path | `await asyncio.to_thread(session_output_dir, session_id)` |
+| Context builders | `await asyncio.to_thread(build_conversation_context, ...)` |
 
 ---
 
@@ -516,33 +615,11 @@ Log file: `backend/logs/app.log` (5 MB × 3 rotating backups).
 ```json
 {"status": "ok|degraded", "checks": {"db": true, "chromadb": true, "llm": true}}
 ```
-Returns 503 only if `db` is false (hard dependency). chromadb/llm = "degraded" but still 200.
+Returns 503 only if `db` is false. chromadb/llm failures → "degraded" but still 200.
 
-**Metrics:** `GET /metrics` — Prometheus text format (if `prometheus-client` is installed).
+**Metrics:** `GET /metrics` — Prometheus text format.
 
-**Request tracing:** Every request gets `X-Request-ID` header (generated or echoed from caller). Appears in all log lines for that request.
-
----
-
-## Deployment (EC2 + GitHub Actions)
-
-**Infrastructure:**
-- EC2 `m7i-flex.large`, `eu-north-1`, Ubuntu 22.04
-- Nginx on port 80 → FastAPI on port 8000 (localhost only)
-- CloudFront: `/api/*` → EC2, `*` → S3 (React frontend)
-
-**Services:**
-```bash
-sudo systemctl status falcon-backend     # FastAPI
-sudo systemctl status mermaid-converter  # Node sidecar on :3001
-sudo systemctl status nginx
-journalctl -u falcon-backend -f          # live logs
-tail -f /home/ubuntu/react-rust-crossplatform-app/backend/logs/app.log
-```
-
-**CI/CD:** Push to `main` → GitHub Actions auto-deploys frontend (S3 + CloudFront) and backend (SSH → git pull → pip install → restart).
-
-**Backend `.env` on EC2** lives at `/home/ubuntu/react-rust-crossplatform-app/backend/.env` — never committed to git.
+**Request tracing:** Every request gets `X-Request-ID` header. Appears in all log lines for that request.
 
 ---
 
@@ -550,14 +627,16 @@ tail -f /home/ubuntu/react-rust-crossplatform-app/backend/logs/app.log
 
 | Item | Risk | Fix |
 |---|---|---|
-| SQLite | Not horizontally scalable | Migrate to PostgreSQL (RDS) when multi-instance needed |
-| Video generation blocking | Runs in-process; long jobs hold a request open | Push to Celery/RQ worker + job polling |
-| CloudFront 60s timeout | Long SVG/video generation may timeout | Async job pattern: POST returns job_id, client polls |
-| Upload auth | `POST /api/upload` lacks `Depends(get_current_user)` | Add auth + scope files to user_id |
-| `time.sleep` in LLM retry | Holds thread pool threads during backoff | Replace with `tenacity` retry library |
-| CORS `allow_methods=["*"]` | Permissive | Restrict to `["GET", "POST"]` in production |
+| Base64 frames in SSE | 2–10 MB per generation over SSE | Upload to S3, emit CloudFront URLs instead |
+| Video generation blocking | Long jobs hold SSE connection open | Celery/RQ worker + job polling |
+| `time.sleep` in LLM retry | Holds thread pool threads during backoff | Replace with `asyncio.sleep` in retry loops |
+| Local ChromaDB | Cannot share across instances | Replace with Pinecone or Qdrant |
+| ChromaDB collections never cleaned | Disk fills over time | Delete collection on conversation soft-delete |
+| Per-user rate limits | `/api/generate` rate-limited by IP, not user ID | `key_func=lambda req: req.state.request_user_id` |
+| `turn_count` column missing | `list_conversations` does expensive `COUNT + GROUP BY` | Add `turn_count` column, increment in `insert_session` |
+| Cursor pagination stability | Same-second `updated_at` can skip/duplicate pages | Add `(updated_at, id)` tiebreaker cursor |
+| ffmpeg merge blocks HTTP thread | Up to 10 min blocking subprocess in sync route | Move to async job |
 | Mermaid sidecar | Single point of failure | Backend auto-falls back to SVG path if :3001 is down |
-| Token revocation | Access tokens not revocable (15-min TTL acceptable) | Add revocation list to Redis if needed |
 
 ---
 
@@ -565,7 +644,6 @@ tail -f /home/ubuntu/react-rust-crossplatform-app/backend/logs/app.log
 
 ```bash
 python -m pytest tests/ -v
-# 40 tests, ~0.5s
 ```
 
 | Test file | What it covers |
@@ -577,7 +655,7 @@ python -m pytest tests/ -v
 | `test_auth.py` | JWT expiry, tamper detection, refresh rotation theft detection |
 | `test_vector_store.py` | Thread-safe init, full UUID names, graceful ChromaDB/OpenAI degradation |
 
-Fixtures in `conftest.py`: `tmp_db` (isolated SQLite), `mock_llm` (stub provider), `mock_tavily` (no real HTTP calls).
+Note: `conftest.py` fixtures use SQLite for `tmp_db`. These need updating to use PostgreSQL or a mock when the test suite is next revisited.
 
 ---
 
@@ -588,6 +666,7 @@ Fixtures in `conftest.py`: `tmp_db` (isolated SQLite), `mock_llm` (stub provider
 | Add a config constant | `core/config.py` |
 | Add a DB table or column | `core/database.py → init_db()` |
 | Add a DB query helper | `core/database.py` |
+| Add an S3 upload/key helper | `core/s3.py` |
 | Add an API route | `routers/<appropriate_router>.py` |
 | Add a response schema | `schemas/sessions.py` or `schemas/generation.py` |
 | Change LLM provider or model | `services/llm_service.py → default_llm_service` |
@@ -596,3 +675,5 @@ Fixtures in `conftest.py`: `tmp_db` (isolated SQLite), `mock_llm` (stub provider
 | Change interactive lesson blocks | `services/interactive/` + frontend registry |
 | Add a rate limit | `core/limiter.py` singleton + `@limiter.limit("N/minute")` on route |
 | Fix a security gap | `core/utils.py → safe_resolve()` for path issues; `dependencies/auth.py` for auth issues |
+| Upload generated media | `core/s3.py → upload_frame / upload_video / upload_scene_ir` |
+| Get a CloudFront URL | `core/s3.py → cdn_url(key)` |

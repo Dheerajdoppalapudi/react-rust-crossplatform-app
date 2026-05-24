@@ -17,7 +17,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from core.config import JWT_ALGORITHM, JWT_SECRET_KEY, MEDIA_TOKEN_EXPIRE_MINUTES
-from core.database import get_user_by_id
+from core.db_async import get_user_by_id
 from core.db_models import User
 
 logger = structlog.get_logger(__name__)
@@ -27,7 +27,7 @@ _bearer = HTTPBearer(auto_error=False)
 
 # ── Token resolution ──────────────────────────────────────────────────────────
 
-def _resolve_user(token_str: str) -> User:
+async def _resolve_user(token_str: str) -> User:
     """Decode a raw JWT string and return the User, or raise 401."""
     try:
         payload = jwt.decode(token_str, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
@@ -51,7 +51,7 @@ def _resolve_user(token_str: str) -> User:
             detail="Invalid token payload",
         )
 
-    user = get_user_by_id(user_id)
+    user = await get_user_by_id(user_id)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -62,7 +62,7 @@ def _resolve_user(token_str: str) -> User:
 
 # ── Standard auth dependency ──────────────────────────────────────────────────
 
-def get_current_user(
+async def get_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
 ) -> User:
     """
@@ -75,7 +75,7 @@ def get_current_user(
             detail="Not authenticated",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    return _resolve_user(credentials.credentials)
+    return await _resolve_user(credentials.credentials)
 
 
 # ── Media token (CRIT-2) ──────────────────────────────────────────────────────
@@ -98,7 +98,7 @@ def create_media_token(user_id: str, session_id: str) -> str:
     return jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
 
 
-def get_current_user_media(
+async def get_current_user_media(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
 ) -> User:
     """
@@ -120,10 +120,10 @@ def get_current_user_media(
             detail="Not authenticated",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    return _resolve_user(credentials.credentials)
+    return await _resolve_user(credentials.credentials)
 
 
-def resolve_media_user(
+async def resolve_media_user(
     token: str,
     session_id: str,
     credentials: "Optional[HTTPAuthorizationCredentials]",
@@ -141,9 +141,9 @@ def resolve_media_user(
       3. Neither → HTTP 401
     """
     if token:
-        return validate_media_token(token, session_id)
+        return await validate_media_token(token, session_id)
     if credentials:
-        return _resolve_user(credentials.credentials)
+        return await _resolve_user(credentials.credentials)
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Not authenticated",
@@ -151,7 +151,7 @@ def resolve_media_user(
     )
 
 
-def validate_media_token(token_str: str, expected_session_id: str) -> User:
+async def validate_media_token(token_str: str, expected_session_id: str) -> User:
     """
     Validate a media token and verify it is scoped to the expected session.
     Called by media endpoints that receive the token as a query parameter.
@@ -177,7 +177,7 @@ def validate_media_token(token_str: str, expected_session_id: str) -> User:
     if not user_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
 
-    user = get_user_by_id(user_id)
+    user = await get_user_by_id(user_id)
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
 

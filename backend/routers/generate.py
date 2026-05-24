@@ -53,14 +53,13 @@ from core.config import (
     DEEP_MAX_QUERIES,
     UPLOAD_DIR,
 )
-from core.limiter import limiter as _limiter
-from core.database import (
-    get_db,
+from core.limiter import limiter as _limiter, get_user_key
+from core.db_async import (
+    session_output_dir,
     insert_conversation,
     touch_conversation,
     insert_session,
     update_session,
-    session_output_dir,
 )
 from core.db_models import User
 from services.frame_generation.planner import (
@@ -104,7 +103,7 @@ def _write_activity_log(output_dir: str, lifecycle_log: list) -> None:
 
 
 @router.post("/api/generate")
-@_limiter.limit("10/minute")
+@_limiter.limit("10/minute", key_func=get_user_key)
 async def generate(
     request:             Request,
     message:             str           = Form(""),
@@ -136,29 +135,34 @@ async def generate(
         raise _HTTPException(status_code=422, detail=f"invalid render_mode: {render_mode!r}")
 
     session_id = uuid.uuid4().hex
-    output_dir = session_output_dir(session_id)
+    output_dir = await asyncio.to_thread(session_output_dir, session_id)
     start_time = time.time()
 
     # ── Resolve / create conversation ─────────────────────────────────────────
     if not conversation_id:
         conversation_id = uuid.uuid4().hex
-        insert_conversation(conversation_id, message[:CONVERSATION_TITLE_MAX_CHARS], user_id=current_user.id)
+        await insert_conversation(
+            conversation_id,
+            message[:CONVERSATION_TITLE_MAX_CHARS],
+            user_id=current_user.id,
+        )
         # First turn — always 1, no need for an atomic lookup
-        turn_index = insert_session(
-            session_id, message, conversation_id, turn_index=1,
+        turn_index = await insert_session(
+            session_id, message, conversation_id,
+            turn_index=1,
             parent_session_id=parent_session_id,
             parent_frame_index=parent_frame_index,
             user_id=current_user.id,
         )
     else:
         # Atomic MAX()+1 inside insert_session eliminates the COUNT race condition
-        turn_index = insert_session(
+        turn_index = await insert_session(
             session_id, message, conversation_id,
             parent_session_id=parent_session_id,
             parent_frame_index=parent_frame_index,
             user_id=current_user.id,
         )
-    touch_conversation(conversation_id)
+    await touch_conversation(conversation_id)
 
     # ── LLM provider ─────────────────────────────────────────────────────────
     _llm_provider = (
@@ -273,19 +277,25 @@ async def _generate_stream(p: dict):
 
         # ── 1. Conversation context ───────────────────────────────────────────
         if video_enabled:
-            conversation_context = build_conversation_context(
-                parent_session_id=parent_session_id,
-                pause_session_id=pause_session_id,
-                pause_frame_index=pause_frame_index,
-                pause_caption=pause_caption,
-            ) if (parent_session_id or pause_session_id) else ""
+            if parent_session_id or pause_session_id:
+                conversation_context = await build_conversation_context(
+                    parent_session_id=parent_session_id,
+                    pause_session_id=pause_session_id,
+                    pause_frame_index=pause_frame_index,
+                    pause_caption=pause_caption,
+                )
+            else:
+                conversation_context = ""
         else:
-            conversation_context = build_interactive_context(
-                parent_session_id=parent_session_id,
-            ) if parent_session_id else ""
+            if parent_session_id:
+                conversation_context = await build_interactive_context(
+                    parent_session_id=parent_session_id,
+                )
+            else:
+                conversation_context = ""
 
         # ── 2. Load prior synthesis_text from ancestor chain (branch-aware) ──
-        prior_synthesis = _load_prior_synthesis(parent_session_id, FOLLOWUP_CONTEXT_TURNS)
+        prior_synthesis = await _load_prior_synthesis(parent_session_id, FOLLOWUP_CONTEXT_TURNS)
 
         # ── 3. Thinking stage + plan_and_classify ─────────────────────────────
         short_q = message.strip()
@@ -467,7 +477,7 @@ async def _generate_stream(p: dict):
         if sources_all:
             await asyncio.to_thread(upsert_sources, conversation_id, sources_all)
 
-        update_session(
+        await update_session(
             session_id,
             status="done",
             intent_type=result_payload.get("intent_type"),
@@ -505,14 +515,14 @@ async def _generate_stream(p: dict):
 
     except asyncio.CancelledError:
         logger.info("generate_cancelled", session=session_id)
-        update_session(session_id, status="error")
+        await update_session(session_id, status="error")
         raise
 
     except Exception as exc:
         logger.error("generate_failed", session=session_id, error=str(exc), exc_info=True)
         _log({"event": "error", "error": str(exc)})
         await asyncio.to_thread(_write_activity_log, output_dir, lifecycle_log)
-        update_session(session_id, status="error")
+        await update_session(session_id, status="error")
         yield _sse({"type": "error", "message": "Generation failed. Please try again."})
 
     finally:
@@ -551,6 +561,10 @@ async def _search_phase(
 
     all_results: list[SearchResult] = []
 
+    # One semaphore for the entire request — caps total concurrent Tavily calls
+    # across all rounds so both round 1 and round 2 share the same 3-slot limit.
+    _tavily_sem = asyncio.Semaphore(3)
+
     # ── Round 1 (and optional round 2 for deep) ───────────────────────────────
     for round_n in range(2 if research_mode == "deep_research" else 1):
         if not queries_used:
@@ -566,9 +580,6 @@ async def _search_phase(
         }
         yield search_evt
         t_search = time.time()
-
-        # Semaphore caps concurrent Tavily calls to prevent 429 storms at scale
-        _tavily_sem = asyncio.Semaphore(3)
 
         async def _bounded_search(q: str) -> list:
             async with _tavily_sem:
@@ -649,13 +660,13 @@ async def _search_phase(
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 
-def _load_prior_synthesis(parent_session_id: Optional[str], limit: int) -> str:
+async def _load_prior_synthesis(parent_session_id: Optional[str], limit: int) -> str:
     """Load synthesis_text from the ancestor chain — branch-aware."""
     if not parent_session_id:
         return ""
     try:
-        from services.generation_service import _collect_ancestor_chain
-        chain = _collect_ancestor_chain(parent_session_id, limit)
+        from core.db_async import collect_ancestor_chain
+        chain = await collect_ancestor_chain(parent_session_id, limit)
         texts = [r["synthesis_text"] for r in chain if r.get("synthesis_text")]
         return "\n\n---\n\n".join(texts) if texts else ""
     except Exception as exc:

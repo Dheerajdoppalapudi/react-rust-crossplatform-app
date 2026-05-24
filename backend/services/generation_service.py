@@ -24,7 +24,7 @@ from core.config import (
     BEAT_PIPELINE_ENABLED,
     BEAT_TTS_BACKEND,
 )
-from core.database import get_db
+from core.db_async import get_async_db, collect_ancestor_chain
 from services.frame_generation.planner import (
     GenerationPlan,
     _vocab_plan_to_generation_plan,
@@ -156,7 +156,7 @@ def _append_summary_slide(
 
 # ── Conversation context builders ─────────────────────────────────────────────
 
-def build_conversation_context(
+async def build_conversation_context(
     parent_session_id: Optional[str],
     pause_session_id:  Optional[str] = None,
     pause_frame_index: Optional[int] = None,
@@ -165,7 +165,7 @@ def build_conversation_context(
     if not parent_session_id:
         return ""
 
-    prior_turns = _collect_ancestor_chain(parent_session_id, INTERACTIVE_CONTEXT_TURNS)
+    prior_turns = await collect_ancestor_chain(parent_session_id, INTERACTIVE_CONTEXT_TURNS)
     if not prior_turns:
         return ""
 
@@ -206,10 +206,10 @@ def build_conversation_context(
 
     if pause_session_id and pause_frame_index is not None:
         pause_narration_text = ""
-        with get_db() as conn:
-            pause_row = conn.execute(
-                "SELECT output_dir FROM sessions WHERE id = ?", (pause_session_id,)
-            ).fetchone()
+        async with get_async_db() as conn:
+            pause_row = await conn.fetchrow(
+                "SELECT output_dir FROM sessions WHERE id = $1", pause_session_id
+            )
         if pause_row and pause_row["output_dir"]:
             narrations = _parse_narrations_from_file(
                 os.path.join(pause_row["output_dir"], "narration.txt")
@@ -237,36 +237,14 @@ def build_conversation_context(
     return "\n".join(lines)
 
 
-def _collect_ancestor_chain(
-    parent_session_id: Optional[str],
-    limit: int,
-) -> list:
-    chain: list = []
-    current_id = parent_session_id
 
-    with get_db() as conn:
-        while current_id and len(chain) < limit:
-            row = conn.execute(
-                "SELECT id, prompt, turn_index, output_dir, parent_session_id, synthesis_text "
-                "FROM sessions WHERE id = ? AND status = 'done'",
-                (current_id,),
-            ).fetchone()
-            if not row:
-                break
-            chain.append(row)
-            current_id = row["parent_session_id"]
-
-    chain.reverse()
-    return chain
-
-
-def build_interactive_context(
+async def build_interactive_context(
     parent_session_id: Optional[str],
 ) -> str:
     if not parent_session_id:
         return ""
 
-    prior_turns = _collect_ancestor_chain(parent_session_id, INTERACTIVE_CONTEXT_TURNS)
+    prior_turns = await collect_ancestor_chain(parent_session_id, INTERACTIVE_CONTEXT_TURNS)
     if not prior_turns:
         return ""
 

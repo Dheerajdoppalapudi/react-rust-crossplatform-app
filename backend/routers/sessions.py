@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from core.database import get_db
+from core.db_async import get_async_db
 from core.db_models import User
 from core.responses import success
 from core.utils import safe_resolve, read_json_file
@@ -31,25 +31,25 @@ router = APIRouter()
 
 
 @router.get("/api/sessions")
-def list_sessions(current_user: User = Depends(get_current_user)):
-    with get_db() as conn:
-        rows = conn.execute(
+async def list_sessions(current_user: User = Depends(get_current_user)):
+    async with get_async_db() as conn:
+        rows = await conn.fetch(
             "SELECT id, prompt, created_at, status, intent_type, render_path, frame_count, "
             "api_call_count, prompt_tokens, completion_tokens, total_tokens, model_name "
-            "FROM sessions WHERE user_id = ? ORDER BY created_at DESC",
-            (current_user.id,),
-        ).fetchall()
+            "FROM sessions WHERE user_id = $1 ORDER BY created_at DESC",
+            current_user.id,
+        )
     # M-1: Serialize through schema so the response shape is contract-enforced.
     return success([SessionSummary(**dict(r)).model_dump() for r in rows])
 
 
 @router.get("/api/sessions/{session_id}/output")
-def get_session_output(session_id: str, current_user: User = Depends(get_current_user)):
-    with get_db() as conn:
-        row = conn.execute(
-            "SELECT ui_output_file, status FROM sessions WHERE id = ? AND user_id = ?",
-            (session_id, current_user.id),
-        ).fetchone()
+async def get_session_output(session_id: str, current_user: User = Depends(get_current_user)):
+    async with get_async_db() as conn:
+        row = await conn.fetchrow(
+            "SELECT ui_output_file, status FROM sessions WHERE id = $1 AND user_id = $2",
+            session_id, current_user.id,
+        )
 
     if not row:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -67,12 +67,12 @@ def get_session_output(session_id: str, current_user: User = Depends(get_current
 
 
 @router.get("/api/sessions/{session_id}/log")
-def get_session_log(session_id: str, current_user: User = Depends(get_current_user)):
-    with get_db() as conn:
-        row = conn.execute(
-            "SELECT output_dir FROM sessions WHERE id = ? AND user_id = ?",
-            (session_id, current_user.id),
-        ).fetchone()
+async def get_session_log(session_id: str, current_user: User = Depends(get_current_user)):
+    async with get_async_db() as conn:
+        row = await conn.fetchrow(
+            "SELECT output_dir FROM sessions WHERE id = $1 AND user_id = $2",
+            session_id, current_user.id,
+        )
 
     if not row or not row["output_dir"]:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -87,17 +87,17 @@ def get_session_log(session_id: str, current_user: User = Depends(get_current_us
 
 
 @router.get("/api/sessions/{session_id}/frames-meta")
-def get_session_frames_meta(session_id: str, current_user: User = Depends(get_current_user)):
+async def get_session_frames_meta(session_id: str, current_user: User = Depends(get_current_user)):
     """Return the frames metadata for a session.
 
     For video/text sessions this is frames.json.
     For interactive sessions this is scene_ir.json (saved by interactive_service).
     """
-    with get_db() as conn:
-        row = conn.execute(
-            "SELECT output_dir, render_path FROM sessions WHERE id = ? AND user_id = ?",
-            (session_id, current_user.id),
-        ).fetchone()
+    async with get_async_db() as conn:
+        row = await conn.fetchrow(
+            "SELECT output_dir, render_path FROM sessions WHERE id = $1 AND user_id = $2",
+            session_id, current_user.id,
+        )
 
     if not row or not row["output_dir"]:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -118,7 +118,7 @@ def get_session_frames_meta(session_id: str, current_user: User = Depends(get_cu
 
 
 @router.get("/api/sessions/{session_id}/frame/{frame_index}")
-def get_session_frame(
+async def get_session_frame(
     session_id:  str,
     frame_index: int,
     token:       str = Query(default=""),
@@ -131,13 +131,13 @@ def get_session_frame(
     that cannot set Authorization headers) or Authorization: Bearer <jwt>.
     """
     # Resolve user from media token or Bearer JWT.
-    current_user = resolve_media_user(token, session_id, credentials)
+    current_user = await resolve_media_user(token, session_id, credentials)
 
-    with get_db() as conn:
-        row = conn.execute(
-            "SELECT output_dir FROM sessions WHERE id = ? AND user_id = ?",
-            (session_id, current_user.id),
-        ).fetchone()
+    async with get_async_db() as conn:
+        row = await conn.fetchrow(
+            "SELECT output_dir FROM sessions WHERE id = $1 AND user_id = $2",
+            session_id, current_user.id,
+        )
 
     if not row or not row["output_dir"]:
         raise HTTPException(status_code=404, detail="Session not found")

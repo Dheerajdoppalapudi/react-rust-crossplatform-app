@@ -86,7 +86,7 @@ async def _stream_anthropic(llm_service: LLMService, user_msg: str) -> AsyncGene
 
     client: anthropic.Anthropic = _get_anthropic_client()
     model = getattr(provider, "model", "claude-haiku-4-5-20251001")
-    loop  = asyncio.get_event_loop()
+    loop  = asyncio.get_running_loop()
     queue: asyncio.Queue[Optional[str]] = asyncio.Queue()
 
     def _run_stream():

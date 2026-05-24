@@ -46,3 +46,13 @@ chromadb>=0.5.0
 # Observability
 structlog>=24.0
 prometheus-client>=0.20.0
+
+# PostgreSQL — async driver for app code
+asyncpg>=0.29
+
+# Migrations (asyncpg used by both app and Alembic — no psycopg2 anywhere)
+alembic>=1.13
+sqlalchemy[asyncio]>=2.0  # asyncio extra pulls in greenlet, required for run_sync
+
+# AWS S3
+boto3>=1.34
