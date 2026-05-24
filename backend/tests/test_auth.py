@@ -1,13 +1,9 @@
 """
-Tests for auth token handling in routers/auth.py and core/database.py.
-
-Covers: token rotation theft detection, JWT expiry, password validation.
+Tests for auth token handling — JWT validation and refresh token rotation.
 """
 
-import time
 import uuid
 from datetime import datetime, timedelta, timezone
-from unittest.mock import patch
 
 import jwt
 import pytest
@@ -27,7 +23,7 @@ def _make_expired_token(sub: str) -> str:
     return jwt.encode({"sub": sub, "exp": expire}, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
 
 
-# ── JWT validation ─────────────────────────────────────────────────────────────
+# ── JWT validation (no DB required) ───────────────────────────────────────────
 
 def test_valid_jwt_decodes():
     token = _make_token("user-123")
@@ -48,55 +44,39 @@ def test_tampered_jwt_raises():
         jwt.decode(tampered, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
 
 
-# ── Refresh token rotation ─────────────────────────────────────────────────────
+# ── Refresh token rotation (requires live DB) ──────────────────────────────────
 
-def test_rotate_refresh_token(tmp_path):
-    import core.config as cfg
-    cfg.DB_PATH = tmp_path / "auth_test.sqlite"
-    from core.database import init_db, create_refresh_token, rotate_refresh_token, upsert_user
-    from core.db_models import User
-    init_db()
+async def test_rotate_refresh_token(clean_db):
+    from core.db_async import create_password_user, create_refresh_token, rotate_refresh_token
 
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    user = User(id="u1", email="a@b.com", name="Test", avatar="", created_at=now, last_login=now)
-    upsert_user(user)
+    user = await create_password_user(uuid.uuid4().hex, "Test", "a@b.com", "hash")
+    token = await create_refresh_token(user.id)
 
-    token = create_refresh_token("u1")
-    result = rotate_refresh_token(token)
+    result = await rotate_refresh_token(token)
     assert result is not None
     new_token, user_id = result
-    assert user_id == "u1"
+    assert user_id == user.id
     assert new_token != token
 
 
-def test_rotate_already_used_token_returns_none(tmp_path):
-    import core.config as cfg
-    cfg.DB_PATH = tmp_path / "auth_theft.sqlite"
-    from core.database import init_db, create_refresh_token, rotate_refresh_token, upsert_user
-    from core.db_models import User
-    init_db()
+async def test_rotate_already_used_token_returns_none(clean_db):
+    from core.db_async import create_password_user, create_refresh_token, rotate_refresh_token
 
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    user = User(id="u2", email="b@b.com", name="Test2", avatar="", created_at=now, last_login=now)
-    upsert_user(user)
+    user = await create_password_user(uuid.uuid4().hex, "Test2", "b@b.com", "hash")
+    token = await create_refresh_token(user.id)
 
-    token = create_refresh_token("u2")
-    rotate_refresh_token(token)  # first rotation — valid
-
-    result = rotate_refresh_token(token)  # reuse — theft detected
+    await rotate_refresh_token(token)        # first rotation — valid
+    result = await rotate_refresh_token(token)  # reuse — theft detected
     assert result is None
 
 
-# ── Password validation ────────────────────────────────────────────────────────
+# ── Password length validation ─────────────────────────────────────────────────
 
 def test_password_too_short_rejected():
     from fastapi import HTTPException
-    import bcrypt
-
     password = "short"
-    with pytest.raises(Exception):
+    with pytest.raises(HTTPException):
         if len(password) < 8 or len(password) > 128:
-            from fastapi import HTTPException
             raise HTTPException(status_code=422, detail="Password must be 8–128 characters")
 
 

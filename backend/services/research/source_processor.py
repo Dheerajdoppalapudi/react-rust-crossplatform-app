@@ -73,6 +73,29 @@ def truncate_content(text: str, max_tokens: int = DEEP_MAX_TOKENS_SOURCE) -> str
     return truncated
 
 
+def source_summary(s: SearchResult) -> dict:
+    """Compact dict sent to the frontend (no full content)."""
+    return {
+        "title":          s.title,
+        "url":            s.url,
+        "snippet":        s.snippet[:300],
+        "domain":         s.domain,
+        "published_date": s.published_date,
+    }
+
+
+def source_full(s: SearchResult) -> dict:
+    """Full dict persisted to DB and fed to LLM/ChromaDB."""
+    return {
+        "title":          s.title,
+        "url":            s.url,
+        "snippet":        s.snippet,
+        "domain":         s.domain,
+        "score":          s.score,
+        "published_date": s.published_date,
+    }
+
+
 def build_evidence_table(sources: list[SearchResult]) -> str:
     """
     Format sources into a compact evidence table for the synthesis prompt.

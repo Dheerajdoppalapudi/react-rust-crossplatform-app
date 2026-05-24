@@ -25,7 +25,7 @@ from typing import Optional
 
 import asyncpg
 
-from core.config import DATABASE_URL, OUTPUTS_DIR, REFRESH_TOKEN_EXPIRE_DAYS
+from core.config import DATABASE_URL, MAX_REFRESH_TOKENS_PER_USER, OUTPUTS_DIR, REFRESH_TOKEN_EXPIRE_DAYS
 from core.db_models import User
 
 logger = structlog.get_logger(__name__)
@@ -72,15 +72,15 @@ async def get_async_db():
         async with get_async_db() as conn:
             await conn.execute("UPDATE ...", ...)
     """
-    async with _get_pool().acquire() as conn:
+    async with _get_pool().acquire(timeout=5.0) as conn:
         async with conn.transaction():
             yield conn
 
 
 # ── Shared helpers ─────────────────────────────────────────────────────────────
 
-def _now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 # ── Allowed columns for update_session ───────────────────────────────────────
@@ -178,7 +178,7 @@ async def upsert_conversation_notes(
             "content = EXCLUDED.content, updated_at = EXCLUDED.updated_at",
             conversation_id, user_id, content, ts,
         )
-    return ts
+    return ts.isoformat()
 
 
 # ── Session writes ─────────────────────────────────────────────────────────────
@@ -309,15 +309,21 @@ async def create_password_user(
 
 async def create_refresh_token(user_id: str) -> str:
     token      = uuid.uuid4().hex
-    ts         = _now()
-    expires_at = (
-        datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
-    ).strftime("%Y-%m-%dT%H:%M:%SZ")
+    now        = _now()
+    expires_at = now + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
     async with get_async_db() as conn:
         await conn.execute(
             "INSERT INTO refresh_tokens (token, user_id, expires_at, created_at) "
             "VALUES ($1, $2, $3, $4)",
-            token, user_id, expires_at, ts,
+            token, user_id, expires_at, now,
+        )
+        # Prune oldest tokens beyond limit — prevents unbounded growth per user.
+        await conn.execute(
+            "DELETE FROM refresh_tokens WHERE user_id = $1 AND token NOT IN ("
+            "  SELECT token FROM refresh_tokens WHERE user_id = $1 "
+            "  ORDER BY created_at DESC LIMIT $2"
+            ")",
+            user_id, MAX_REFRESH_TOKENS_PER_USER,
         )
     return token
 
@@ -330,9 +336,7 @@ async def rotate_refresh_token(old_token: str) -> Optional[tuple[str, str]]:
     """
     now        = _now()
     new_token  = uuid.uuid4().hex
-    expires_at = (
-        datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
-    ).strftime("%Y-%m-%dT%H:%M:%SZ")
+    expires_at = now + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
 
     async with get_async_db() as conn:
         row = await conn.fetchrow(
@@ -424,8 +428,8 @@ async def init_db() -> None:
                 email         TEXT UNIQUE NOT NULL,
                 name          TEXT,
                 avatar        TEXT,
-                created_at    TEXT NOT NULL,
-                last_login    TEXT NOT NULL,
+                created_at    TIMESTAMPTZ NOT NULL,
+                last_login    TIMESTAMPTZ NOT NULL,
                 password_hash TEXT,
                 auth_provider TEXT DEFAULT 'google'
             )
@@ -434,8 +438,8 @@ async def init_db() -> None:
             CREATE TABLE IF NOT EXISTS refresh_tokens (
                 token      TEXT PRIMARY KEY,
                 user_id    TEXT NOT NULL,
-                expires_at TEXT NOT NULL,
-                created_at TEXT NOT NULL,
+                expires_at TIMESTAMPTZ NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL,
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             )
         """)
@@ -443,19 +447,19 @@ async def init_db() -> None:
             CREATE TABLE IF NOT EXISTS conversations (
                 id                TEXT PRIMARY KEY,
                 title             TEXT NOT NULL,
-                created_at        TEXT NOT NULL,
-                updated_at        TEXT NOT NULL,
+                created_at        TIMESTAMPTZ NOT NULL,
+                updated_at        TIMESTAMPTZ NOT NULL,
                 merged_video_path TEXT,
                 user_id           TEXT,
                 starred           INTEGER DEFAULT 0,
-                deleted_at        TEXT
+                deleted_at        TIMESTAMPTZ
             )
         """)
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS sessions (
                 id                 TEXT PRIMARY KEY,
                 prompt             TEXT NOT NULL,
-                created_at         TEXT NOT NULL,
+                created_at         TIMESTAMPTZ NOT NULL,
                 status             TEXT NOT NULL DEFAULT 'pending',
                 intent_type        TEXT,
                 render_path        TEXT,
@@ -484,7 +488,7 @@ async def init_db() -> None:
                 conversation_id  TEXT NOT NULL,
                 user_id          TEXT NOT NULL,
                 content          TEXT NOT NULL DEFAULT '{}',
-                updated_at       TEXT NOT NULL,
+                updated_at       TIMESTAMPTZ NOT NULL,
                 PRIMARY KEY (conversation_id, user_id),
                 FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
                 FOREIGN KEY (user_id)         REFERENCES users(id)         ON DELETE CASCADE
@@ -520,9 +524,7 @@ async def mark_stale_pending_sessions(older_than_minutes: int = 10) -> int:
     Called once on startup so that sessions orphaned by a previous crash or
     pod restart don't stay in 'pending' forever. Returns the number of rows updated.
     """
-    threshold = (
-        datetime.now(timezone.utc) - timedelta(minutes=older_than_minutes)
-    ).strftime("%Y-%m-%dT%H:%M:%SZ")
+    threshold = datetime.now(timezone.utc) - timedelta(minutes=older_than_minutes)
     async with get_async_db() as conn:
         result = await conn.execute(
             "UPDATE sessions SET status = 'error' "

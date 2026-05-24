@@ -24,6 +24,7 @@ from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from core.db_async import get_async_db, update_session
+from core.s3 import upload_video as _s3_upload_video
 from core.db_models import User
 from core.responses import success
 from core.utils import safe_resolve
@@ -126,15 +127,17 @@ async def generate_video(
     if row["render_path"] == "beats":
         if not row["video_path"]:
             raise HTTPException(status_code=404, detail="Beat video not found for this session")
-        safe_beat_video = safe_resolve(row["video_path"])
-        if not safe_beat_video.exists():
-            raise HTTPException(status_code=404, detail="Beat video file missing from disk")
+        _beat_vp = row["video_path"]
+        if not _beat_vp.startswith("https://"):
+            safe_beat_video = safe_resolve(_beat_vp)
+            if not safe_beat_video.exists():
+                raise HTTPException(status_code=404, detail="Beat video file missing from disk")
 
         async def _beat_stream():
             yield _sse({
                 "type":        "done",
                 "session_id":  session_id,
-                "video_path":  row["video_path"],
+                "video_path":  _beat_vp,
                 "frame_count": row["frame_count"],
                 "tts_backend": "none",
             })
@@ -179,15 +182,16 @@ async def generate_video(
 
     # Idempotency: video already exists — emit a single "done" event
     if row["video_path"]:
-        existing = safe_resolve(row["video_path"])
-        if existing.exists():
+        _cached_vp = row["video_path"]
+        _is_cached = _cached_vp.startswith("https://") or safe_resolve(_cached_vp).exists()
+        if _is_cached:
             logger.info("video_cached", session=session_id)
 
             async def _cached_stream():
                 yield _sse({
                     "type":        "done",
                     "session_id":  session_id,
-                    "video_path":  row["video_path"],
+                    "video_path":  _cached_vp,
                     "frame_count": row["frame_count"],
                     "tts_backend": "cached",
                 })
@@ -315,14 +319,19 @@ async def generate_video(
 
             yield _sse({"type": "stage_done", "stage": "assembling", "duration_s": d3})
 
-            await update_session(session_id, video_path=video_path)
+            _final_video = video_path
+            try:
+                _final_video = await asyncio.to_thread(_s3_upload_video, video_path, session_id)
+            except Exception as exc:
+                logger.warning("s3_video_upload_failed", session=session_id, error=str(exc))
+            await update_session(session_id, video_path=_final_video)
 
             total = elapsed()
             logger.info("video_generation_done", session=session_id, frames=len(normalized_pngs), tts=tts_backend, total_s=total)
             yield _sse({
                 "type":        "done",
                 "session_id":  session_id,
-                "video_path":  video_path,
+                "video_path":  _final_video,
                 "frame_count": len(normalized_pngs),
                 "tts_backend": tts_backend,
                 "elapsed_s":   total,
@@ -384,6 +393,10 @@ async def get_session_video(
         raise HTTPException(status_code=404, detail="Session not found")
     if not row["video_path"]:
         raise HTTPException(status_code=404, detail="Video not yet generated for this session")
+
+    if row["video_path"].startswith("https://"):
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url=row["video_path"], status_code=302)
 
     # CRIT-3: validate path before serving
     safe_video = safe_resolve(row["video_path"])

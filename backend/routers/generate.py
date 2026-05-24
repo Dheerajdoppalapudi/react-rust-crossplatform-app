@@ -43,6 +43,8 @@ from urllib.parse import urlparse
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import StreamingResponse
 from core.config import (
+    ALLOWED_CLAUDE_MODELS,
+    ALLOWED_OPENAI_MODELS,
     CONVERSATION_TITLE_MAX_CHARS,
     DEEP_SEARCH_SOURCES,
     DEEP_SOURCES_IN_ANSWER,
@@ -79,7 +81,7 @@ from services.llm_service import LLMService, OpenAIProvider, ClaudeProvider
 from services.research.file_extractor import extract_urls_from_text, extract_text
 from services.research.search_provider import SearchResult, tavily
 from services.research.source_processor import rank_and_deduplicate
-from services.research.research_service import source_summary, source_full
+from services.research.source_processor import source_summary, source_full
 from services.research.vector_store import upsert_sources, retrieve_sources
 from dependencies.auth import get_current_user
 
@@ -94,10 +96,14 @@ def _sse(data: dict) -> str:
     return f"data: {json.dumps(data)}\n\n"
 
 
-def _write_activity_log(output_dir: str, lifecycle_log: list) -> None:
+def _write_activity_log(output_dir: str, lifecycle_log: list, session_id: str = "") -> None:
     try:
-        with open(f"{output_dir}/activity_log.json", "w") as f:
-            json.dump(lifecycle_log, f, indent=2)
+        data = json.dumps(lifecycle_log, indent=2).encode()
+        with open(f"{output_dir}/activity_log.json", "wb") as f:
+            f.write(data)
+        if session_id:
+            from core.s3 import upload_activity_log
+            upload_activity_log(data, session_id)
     except Exception as exc:
         logger.warning("activity_log_write_failed", output_dir=output_dir, error=str(exc))
 
@@ -133,6 +139,10 @@ async def generate(
         raise _HTTPException(status_code=422, detail=f"invalid research_mode: {research_mode!r}")
     if render_mode is not None and render_mode not in ("manim", "svg"):
         raise _HTTPException(status_code=422, detail=f"invalid render_mode: {render_mode!r}")
+    if model:
+        _allowed = ALLOWED_CLAUDE_MODELS if provider == "claude" else ALLOWED_OPENAI_MODELS
+        if model not in _allowed:
+            raise _HTTPException(status_code=422, detail=f"unsupported model: {model!r}")
 
     session_id = uuid.uuid4().hex
     output_dir = await asyncio.to_thread(session_output_dir, session_id)
@@ -467,7 +477,7 @@ async def _generate_stream(p: dict):
             tokens=final_usage.get("total_tokens", 0),
         )
 
-        await asyncio.to_thread(_write_activity_log, output_dir, lifecycle_log)
+        await asyncio.to_thread(_write_activity_log, output_dir, lifecycle_log, session_id)
 
         for s in stages_log:
             if s.get("status") == "active":
@@ -521,7 +531,7 @@ async def _generate_stream(p: dict):
     except Exception as exc:
         logger.error("generate_failed", session=session_id, error=str(exc), exc_info=True)
         _log({"event": "error", "error": str(exc)})
-        await asyncio.to_thread(_write_activity_log, output_dir, lifecycle_log)
+        await asyncio.to_thread(_write_activity_log, output_dir, lifecycle_log, session_id)
         await update_session(session_id, status="error")
         yield _sse({"type": "error", "message": "Generation failed. Please try again."})
 

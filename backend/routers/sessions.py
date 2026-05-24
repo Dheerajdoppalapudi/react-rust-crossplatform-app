@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from core.db_async import get_async_db
@@ -156,6 +156,9 @@ async def get_session_frame(
     raw_image_path = images[frame_index]
     if not raw_image_path:
         raise HTTPException(status_code=404, detail="Frame image not available")
+
+    if raw_image_path.startswith("https://"):
+        return RedirectResponse(url=raw_image_path, status_code=302)
 
     # CRIT-3: validate the individual frame path too — it may be an absolute path
     # written by the generator; it must still reside inside OUTPUTS_DIR.

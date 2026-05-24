@@ -121,7 +121,7 @@ async def login_with_google(request: Request, body: GoogleLoginRequest, response
     """
     info = await asyncio.to_thread(_get_google_user_info, body.access_token)
 
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    now = datetime.now(timezone.utc)
     user = User(
         id=info["sub"],
         email=info.get("email", ""),

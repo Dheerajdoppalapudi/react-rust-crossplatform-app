@@ -48,6 +48,24 @@ CLAUDE_MODEL: str  = os.getenv("CLAUDE_MODEL",  "claude-haiku-4-5-20251001")
 # Always uses Haiku regardless of the user's chosen model.
 CLASSIFY_MODEL: str = os.getenv("CLASSIFY_MODEL", "claude-haiku-4-5-20251001")
 
+# Models the user may request — validated on every /api/generate call.
+# Add new models here when they become available; never trust raw user input.
+ALLOWED_CLAUDE_MODELS: frozenset[str] = frozenset({
+    "claude-haiku-4-5-20251001",
+    "claude-sonnet-4-6",
+    "claude-opus-4-7",
+})
+ALLOWED_OPENAI_MODELS: frozenset[str] = frozenset({
+    "gpt-4.1",
+    "gpt-4.1-mini",
+    "gpt-4o",
+    "gpt-4o-mini",
+})
+
+# ── Refresh token bounding ────────────────────────────────────────────────────
+# Old tokens beyond this limit are pruned (oldest-first) on each new issuance.
+MAX_REFRESH_TOKENS_PER_USER: int = int(os.getenv("MAX_REFRESH_TOKENS_PER_USER", "5"))
+
 # ── Cost optimisation flags ───────────────────────────────────────────────────
 # Anthropic prompt caching — marks large static prompt templates with
 # cache_control so repeated calls reuse cached tokens at 10% of normal cost.

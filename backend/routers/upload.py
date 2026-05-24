@@ -7,6 +7,7 @@ Fixes applied:
           cannot enumerate or access each other's uploads.
 """
 
+import asyncio
 import structlog
 import uuid
 from pathlib import Path
@@ -14,6 +15,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 
 from core.config import UPLOAD_DIR
+from core.s3 import upload_user_file as _s3_upload_user_file, upload_key as _s3_upload_key
 from core.db_models import User
 from core.limiter import limiter, get_user_key
 from core.responses import success
@@ -69,6 +71,14 @@ async def upload_files(
         filepath = upload_dir / filename
         filepath.write_bytes(content)
         logger.info("file_uploaded", user=current_user.id, filename=file.filename, size=len(content))
+        try:
+            s3_key = _s3_upload_key(current_user.id, Path(filename).stem, file.filename or filename)
+            await asyncio.to_thread(
+                _s3_upload_user_file, str(filepath), s3_key,
+                file.content_type or "application/octet-stream",
+            )
+        except Exception as exc:
+            logger.warning("s3_user_upload_failed", user=current_user.id, filename=file.filename, error=str(exc))
         saved.append({
             "original_name": file.filename,
             "saved_as":      filename,
@@ -102,8 +112,17 @@ async def chat_with_files(
                 detail=f"File {file.filename!r} exceeds the 50 MB limit",
             )
         filename = f"{uuid.uuid4().hex}{ext}"
-        (upload_dir / filename).write_bytes(content)
+        filepath = upload_dir / filename
+        filepath.write_bytes(content)
         logger.info("file_uploaded", user=current_user.id, filename=file.filename, size=len(content))
+        try:
+            s3_key = _s3_upload_key(current_user.id, Path(filename).stem, file.filename or filename)
+            await asyncio.to_thread(
+                _s3_upload_user_file, str(filepath), s3_key,
+                file.content_type or "application/octet-stream",
+            )
+        except Exception as exc:
+            logger.warning("s3_user_upload_failed", user=current_user.id, filename=file.filename, error=str(exc))
         saved.append({
             "original_name": file.filename,
             "saved_as":      filename,

@@ -2,21 +2,27 @@
 S3 + CloudFront helpers for Zenith media storage.
 
 Two buckets:
-  zenith-app-media   — public, served via CloudFront (frames, videos, scene_ir)
+  zenith-app-media   — public, served via CloudFront (frames, videos, meta)
   zenith-app-uploads — private, accessed via presigned URLs (user uploads)
 
 Key structure (zenith-app-media):
-  frames/{session_id}/{index:03d}.png   — video frame PNGs
-  video/{session_id}/final.mp4          — assembled video
-  meta/{session_id}/scene_ir.json       — interactive lesson JSON
-  meta/{session_id}/frames.json         — video frame metadata
+  frames/{session_id}/{index:03d}.png    — video frame PNGs
+  video/{session_id}/final.mp4           — assembled session video
+  video/{session_id}/beat_{n}.mp4        — individual beat clips
+  merged/{conversation_id}/final.mp4     — cross-session merged video
+  meta/{session_id}/scene_ir.json        — interactive lesson JSON
+  meta/{session_id}/frames.json          — video frame metadata
+  meta/{session_id}/narration.txt        — TTS narration text
+  meta/{session_id}/activity_log.json    — generation activity log
 
-Keys are always derived from session_id — never stored as paths in the DB.
+Keys are always derived from session_id/conversation_id — never stored as paths in the DB.
+The DB stores video_ready: bool (sessions) or a CDN URL (merged_video_path on conversations).
 """
 
 import io
+import json
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import boto3
 from botocore.exceptions import ClientError
@@ -45,8 +51,23 @@ def frame_key(session_id: str, index: int) -> str:
 def video_key(session_id: str) -> str:
     return f"video/{session_id}/final.mp4"
 
+def beats_clip_key(session_id: str, beat_index: int) -> str:
+    return f"video/{session_id}/beat_{beat_index:03d}.mp4"
+
+def merged_video_key(conversation_id: str) -> str:
+    return f"merged/{conversation_id}/final.mp4"
+
 def meta_key(session_id: str, filename: str) -> str:
     return f"meta/{session_id}/{filename}"
+
+def frames_json_key(session_id: str) -> str:
+    return meta_key(session_id, "frames.json")
+
+def narration_key(session_id: str) -> str:
+    return meta_key(session_id, "narration.txt")
+
+def activity_log_key(session_id: str) -> str:
+    return meta_key(session_id, "activity_log.json")
 
 def upload_key(user_id: str, upload_id: str, filename: str) -> str:
     return f"{user_id}/{upload_id}_{filename}"
@@ -112,7 +133,44 @@ def upload_scene_ir(data: bytes, session_id: str) -> str:
 
 def upload_frames_json(data: bytes, session_id: str) -> str:
     """Upload frames.json bytes and return its CloudFront URL."""
-    return upload_bytes(data, meta_key(session_id, "frames.json"), "application/json")
+    return upload_bytes(data, frames_json_key(session_id), "application/json")
+
+
+def upload_narration(text: str, session_id: str) -> str:
+    """Upload narration.txt and return its CloudFront URL."""
+    return upload_bytes(text.encode(), narration_key(session_id), "text/plain")
+
+
+def upload_activity_log(data: bytes, session_id: str) -> str:
+    """Upload activity_log.json and return its CloudFront URL."""
+    return upload_bytes(data, activity_log_key(session_id), "application/json")
+
+
+def upload_merged_video(local_path: str | Path, conversation_id: str) -> str:
+    """Upload the merged conversation video and return its CloudFront URL."""
+    return upload_file(local_path, merged_video_key(conversation_id), "video/mp4")
+
+
+# ── Download helpers ──────────────────────────────────────────────────────────
+
+def download_text(key: str) -> Optional[str]:
+    """Download a text object from zenith-app-media. Returns None if not found."""
+    try:
+        resp = _get_client().get_object(Bucket=S3_MEDIA_BUCKET, Key=key)
+        return resp["Body"].read().decode()
+    except ClientError:
+        return None
+
+
+def download_json(key: str) -> Optional[Any]:
+    """Download and parse a JSON object from zenith-app-media. Returns None if not found."""
+    text = download_text(key)
+    if text is None:
+        return None
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        return None
 
 
 # ── Existence check ───────────────────────────────────────────────────────────

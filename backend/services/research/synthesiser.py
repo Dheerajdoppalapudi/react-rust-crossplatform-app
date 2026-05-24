@@ -56,10 +56,9 @@ async def stream(
     except Exception as e:
         logger.warning("synthesis_stream_failed_fallback", error=str(e))
 
-    # Fallback: single blocking call
+    # Fallback: single async call
     try:
-        raw, _ = await asyncio.to_thread(
-            llm_service.make_system_user_request,
+        raw, _ = await llm_service.make_system_user_request_async(
             _SYSTEM_PROMPT,
             user_msg,
             max_tokens=4096,
@@ -72,43 +71,20 @@ async def stream(
 
 
 async def _stream_anthropic(llm_service: LLMService, user_msg: str) -> AsyncGenerator[str, None]:
-    """
-    Real token-by-token streaming via asyncio.Queue bridge.
-    The sync Anthropic stream runs in a thread and puts tokens onto a queue;
-    the async generator drains the queue so tokens reach the caller as they arrive.
-    """
+    """Native async streaming via AsyncAnthropic — no thread or queue needed."""
     provider = llm_service.provider
     if provider.__class__.__name__ != "ClaudeProvider":
         raise NotImplementedError("streaming only implemented for ClaudeProvider")
 
-    import anthropic
-    from services.llm_service import _get_anthropic_client
+    from services.llm_service import _get_async_anthropic_client
+    client = _get_async_anthropic_client()
+    model  = getattr(provider, "model", "claude-haiku-4-5-20251001")
 
-    client: anthropic.Anthropic = _get_anthropic_client()
-    model = getattr(provider, "model", "claude-haiku-4-5-20251001")
-    loop  = asyncio.get_running_loop()
-    queue: asyncio.Queue[Optional[str]] = asyncio.Queue()
-
-    def _run_stream():
-        try:
-            with client.messages.stream(
-                model=model,
-                max_tokens=4096,
-                system=_SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": user_msg}],
-            ) as s:
-                for text in s.text_stream:
-                    loop.call_soon_threadsafe(queue.put_nowait, text)
-        except Exception as exc:
-            loop.call_soon_threadsafe(queue.put_nowait, exc)
-        finally:
-            loop.call_soon_threadsafe(queue.put_nowait, None)  # sentinel
-
-    asyncio.create_task(asyncio.to_thread(_run_stream))
-    while True:
-        item = await queue.get()
-        if item is None:
-            break
-        if isinstance(item, Exception):
-            raise item
-        yield item
+    async with client.messages.stream(
+        model=model,
+        max_tokens=4096,
+        system=_SYSTEM_PROMPT,
+        messages=[{"role": "user", "content": user_msg}],
+    ) as stream:
+        async for text in stream.text_stream:
+            yield text

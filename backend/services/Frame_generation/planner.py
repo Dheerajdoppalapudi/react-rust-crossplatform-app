@@ -224,6 +224,50 @@ def call_llm(
     return result
 
 
+async def call_llm_async(
+    prompt: str,
+    max_tokens: int = 8192,
+    prompt_name: str = "",
+    cache_prefix: str = "",
+    override_service: LLMService = None,
+    tool_schema: dict = None,
+    json_mode: bool = False,
+) -> str:
+    """
+    Async version of call_llm() — uses provider.complete_async() so the event
+    loop is never blocked and the thread pool is never saturated.
+    Drop-in replacement for `await asyncio.to_thread(call_llm, ...)`.
+    """
+    label = prompt_name or "unknown"
+    svc   = override_service or request_llm_service.get() or default_llm_service
+    model = getattr(svc.provider, "model", "unknown")
+    logger.info("llm_call", prompt=label, model=model, chars=len(prompt), cache="yes" if cache_prefix else "no")
+    result, usage = await svc.make_single_prompt_request_async(
+        prompt,
+        cache_prefix=cache_prefix,
+        max_tokens=max_tokens,
+        tool_schema=tool_schema,
+        json_mode=json_mode,
+    )
+    if result is None:
+        raise RuntimeError("LLM service returned None — check server connectivity and credentials.")
+    _accumulate_tokens(usage)
+    logger.info("llm_done", prompt=label, model=model,
+                tokens=(usage or {}).get("total_tokens", 0),
+                cache_read=(usage or {}).get("cache_read_input_tokens", 0),
+                cache_create=(usage or {}).get("cache_creation_input_tokens", 0))
+    _log({
+        "event": "llm_call",
+        "prompt_name": label,
+        "prompt_preview": prompt[:600] + ("…" if len(prompt) > 600 else ""),
+        "response_preview": result[:600] + ("…" if len(result) > 600 else ""),
+        "full_prompt": prompt,
+        "full_response": result,
+        "usage": usage,
+    })
+    return result
+
+
 # ---------------------------------------------------------------------------
 # JSON extraction
 # ---------------------------------------------------------------------------
@@ -465,8 +509,8 @@ async def plan_and_classify(
         .replace("{{CONVERSATION_CONTEXT}}", context_block)
     )
 
-    raw = await asyncio.to_thread(
-        call_llm, prompt, 1500,
+    raw = await call_llm_async(
+        prompt, 1500,
         prompt_name="plan_and_classify",
         override_service=_classify_service,
     )
@@ -542,11 +586,11 @@ async def create_vocab_plan(
             break
 
     max_tokens = _VOCAB_PLAN_MAX_TOKENS.get(intent_type, 2500)
-    raw = await asyncio.to_thread(
-        call_llm, prompt, max_tokens,
+    raw = await call_llm_async(
+        prompt, max_tokens,
         prompt_name=prompt_file,
         cache_prefix=cache_prefix,
-        json_mode=True,   # OpenAI: guarantees valid JSON; Claude: no-op (prompt already asks for JSON)
+        json_mode=True,
     )
 
     plan_dict = _extract_json(raw)
@@ -653,8 +697,8 @@ async def _generate_one_frame(
     split_idx = prompt_template.find("{{DIAGRAM_DESCRIPTION}}")
     cache_prefix = prompt_template[:split_idx] if split_idx != -1 else ""
 
-    raw = await asyncio.to_thread(
-        call_llm, prompt, 8192,
+    raw = await call_llm_async(
+        prompt, 8192,
         prompt_name=f"prompt_template.md (frame {frame.index})",
         cache_prefix=cache_prefix,
     )

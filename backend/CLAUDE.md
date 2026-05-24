@@ -228,22 +228,41 @@ default_llm_service = LLMService(provider=OpenAIProvider(model="gpt-4.1"))
 
 **Module-level singletons** — one HTTP connection pool per provider, shared across all requests:
 ```python
-_anthropic_client = None   # lazy-init via _get_anthropic_client()
-_openai_client    = None   # lazy-init via _get_openai_client()
+_anthropic_client       = None   # sync — lazy-init via _get_anthropic_client()
+_openai_client          = None   # sync — lazy-init via _get_openai_client()
+_async_anthropic_client = None   # async — lazy-init via _get_async_anthropic_client()
+_async_openai_client    = None   # async — lazy-init via _get_async_openai_client()
 ```
 
-**Key methods:**
+**Sync methods** (use only from sync helpers or inside `asyncio.to_thread()`):
 ```python
 llm_service.make_completion_request(messages)
 llm_service.make_single_prompt_request(prompt, cache_prefix="", tool_schema=None)
 llm_service.make_system_user_request(system_prompt, user_prompt)
 ```
 
-**Prompt caching** (Anthropic only): pass `cache_prefix=<static_template_text>` to split the user message into a cached block (10× cheaper on cache hits).
-
-All LLM calls are blocking (`client.messages.create()`). Always call them via `asyncio.to_thread()` from async contexts:
+**Async methods** (use from async contexts — no thread pool needed):
 ```python
-raw, usage = await asyncio.to_thread(llm_service.make_system_user_request, sys_prompt, user_prompt)
+await llm_service.make_completion_request_async(messages)
+await llm_service.make_single_prompt_request_async(prompt, cache_prefix="", tool_schema=None)
+await llm_service.make_system_user_request_async(system_prompt, user_prompt)
+```
+
+**Async is the default** for all orchestration code. Use `asyncio.to_thread()` ONLY for frame generators (svg_generator, manim_generator, beat_generator) that call the sync `call_llm()` internally.
+
+**call_llm_async()** (planner.py) — async drop-in for `call_llm()` used in orchestration:
+```python
+# planner.py
+raw = await call_llm_async(prompt, max_tokens, prompt_name="...", cache_prefix="...")
+# NOT: await asyncio.to_thread(call_llm, prompt, ...)
+```
+
+**Prompt caching** (Anthropic only): pass `cache_prefix=<static_template_text>` to mark the static portion as ephemeral (10× cheaper on cache hits).
+
+**Model allowlists** — validated on every `/api/generate` call before any DB write:
+```python
+ALLOWED_CLAUDE_MODELS = {"claude-haiku-4-5-20251001", "claude-sonnet-4-6", "claude-opus-4-7"}
+ALLOWED_OPENAI_MODELS = {"gpt-4.1", "gpt-4.1-mini", "gpt-4o", "gpt-4o-mini"}
 ```
 
 ---
@@ -282,7 +301,7 @@ def my_resource(current_user: User = Depends(get_current_user)):
 
 ## Database
 
-**Engine:** PostgreSQL 16 on AWS RDS. Connection managed via `psycopg2` with a `ThreadedConnectionPool(min=1, max=10)`.
+**Engine:** PostgreSQL 16 on AWS RDS. Connection managed via `asyncpg` pool (min=2, max=50, acquire timeout=5s).
 
 **All DB access** must go through `core/database.py`. Never import psycopg2 directly in routers or services.
 
@@ -310,8 +329,8 @@ with get_db() as conn:
 
 | Table | Key columns |
 |---|---|
-| `users` | `id` (Google sub or UUID), `email`, `auth_provider`, `password_hash` |
-| `refresh_tokens` | `token`, `user_id`, `expires_at` (FK → users) |
+| `users` | `id` (Google sub or UUID), `email`, `auth_provider`, `password_hash`, `created_at` (TIMESTAMPTZ) |
+| `refresh_tokens` | `token`, `user_id`, `expires_at` (TIMESTAMPTZ, FK → users) — max 5 per user (oldest pruned on insert) |
 | `conversations` | `id`, `title`, `user_id`, `starred`, `deleted_at`, `merged_video_path` |
 | `sessions` | `id`, `prompt`, `conversation_id`, `turn_index`, `user_id`, `status`, `intent_type`, `render_path`, `frame_count`, `output_dir`, `sources_json`, `synthesis_text`, `stages_json`, `research_mode`, `video_path` |
 | `conversation_notes` | `conversation_id`, `user_id`, `content`, `updated_at` |
@@ -341,9 +360,20 @@ VALUES (..., COALESCE(
 ```
 Pass `turn_index=1` explicitly only for the first turn of a new conversation.
 
+### Timestamp columns
+
+All timestamp columns are `TIMESTAMPTZ` (not `TEXT`). asyncpg returns them as timezone-aware `datetime` objects automatically.
+
+`_now()` in `db_async.py` returns `datetime.now(timezone.utc)` — a native `datetime`. Never call `.strftime()` before passing to asyncpg; pass the `datetime` object directly.
+
+**Deployment ordering for migration 002:**
+1. Run `alembic upgrade head` (converts TEXT → TIMESTAMPTZ in existing DB)
+2. Then deploy new app code (which passes `datetime` objects)
+Never deploy the new code against an un-migrated DB.
+
 ### Schema management
 
-`init_db()` in `core/database.py` runs on every startup. All tables and indexes use `IF NOT EXISTS` — safe to call repeatedly. To add a new column: add it to the `CREATE TABLE` statement in `init_db()` and run `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` for existing databases.
+`init_db()` in `core/db_async.py` runs on every startup. All tables and indexes use `IF NOT EXISTS` — safe to call repeatedly. All timestamp columns are declared as `TIMESTAMPTZ` in the schema (for fresh deployments after migration 002).
 
 ---
 
@@ -353,41 +383,61 @@ Two buckets:
 
 | Bucket | Access | Used for |
 |---|---|---|
-| `zenith-app-media` | Public via CloudFront | Generated frames, videos, scene_ir.json |
+| `zenith-app-media` | Public via CloudFront | Generated frames, videos, meta artifacts |
 | `zenith-app-uploads` | Private, presigned URLs | User-uploaded PDFs, PPTXes, images |
 
-### Key derivation — never store S3 paths in the DB
+### Key derivation — never store S3 paths in the DB (except `merged_video_path` which stores the CDN URL)
 
 ```python
-from core.s3 import frame_key, video_key, meta_key, cdn_url
+from core.s3 import frame_key, video_key, beats_clip_key, merged_video_key, meta_key
+from core.s3 import frames_json_key, narration_key, activity_log_key, cdn_url
 
 frame_key(session_id, 0)              # → "frames/{session_id}/000.png"
 video_key(session_id)                 # → "video/{session_id}/final.mp4"
+beats_clip_key(session_id, n)         # → "video/{session_id}/beat_NNN.mp4"
+merged_video_key(conversation_id)     # → "merged/{conversation_id}/final.mp4"
+frames_json_key(session_id)           # → "meta/{session_id}/frames.json"
+narration_key(session_id)             # → "meta/{session_id}/narration.txt"
+activity_log_key(session_id)          # → "meta/{session_id}/activity_log.json"
 meta_key(session_id, "scene_ir.json") # → "meta/{session_id}/scene_ir.json"
 cdn_url(key)                          # → "https://dXXX.cloudfront.net/{key}"
 ```
 
-Keys are always derived from `session_id`. The DB stores `video_ready: bool`, not paths.
-
 ### Upload helpers
 
 ```python
-from core.s3 import upload_frame, upload_video, upload_scene_ir, upload_bytes, presigned_url
+from core.s3 import (upload_frame, upload_video, upload_scene_ir, upload_frames_json,
+                     upload_narration, upload_activity_log, upload_merged_video,
+                     upload_bytes, presigned_url)
 
-url = upload_frame(local_path, session_id, index)   # returns CloudFront URL
+url = upload_frame(local_path, session_id, index)
 url = upload_video(local_path, session_id)
 url = upload_scene_ir(json_bytes, session_id)
-key = upload_user_file(local_path, key)             # private bucket, returns key only
-url = presigned_url(key, expires_in=3600)           # for private uploads
-exists = video_ready(session_id)                    # head_object check
+url = upload_frames_json(json_bytes, session_id)
+url = upload_narration(text, session_id)
+url = upload_activity_log(json_bytes, session_id)
+url = upload_merged_video(local_path, conversation_id)  # stores in merged/{id}/final.mp4
+key = upload_user_file(local_path, key)                 # private bucket, returns key only
+url = presigned_url(key, expires_in=3600)               # for private uploads
+```
+
+### Download helpers (S3-first, local fallback pattern)
+
+```python
+from core.s3 import download_json, download_text, frames_json_key, narration_key, meta_key
+
+data = download_json(frames_json_key(session_id))   # returns dict or None
+text = download_text(narration_key(session_id))     # returns str or None
+# Always fall back to local filesystem if S3 returns None
 ```
 
 ### Cache policies (set in CloudFront behaviors)
 
 | Path prefix | TTL | Reason |
 |---|---|---|
-| `frames/*` | 1-7 days | Immutable once generated |
+| `frames/*` | 7 days | Immutable once generated |
 | `video/*` | 1 day | Immutable once assembled |
+| `merged/*` | no-cache | Regeneratable on demand |
 | `meta/*` | 1 min | Regeneratable (scene_ir.json may be overwritten) |
 
 ---
@@ -596,16 +646,20 @@ In development: coloured human-readable console.
 
 **The event loop must never be blocked.** Blocking calls in async functions stall all concurrent requests.
 
-| Blocking operation | Correct pattern |
+| Operation | Correct pattern |
 |---|---|
+| LLM call (orchestration) | `await llm_service.make_system_user_request_async(...)` — native async SDK |
+| LLM call (frame generators) | `await asyncio.to_thread(call_llm, ...)` — frame generators are sync-internal |
 | File read/write | `await asyncio.to_thread(Path(p).read_text)` |
-| LLM call (sync SDK) | `await asyncio.to_thread(llm_service.make_system_user_request, ...)` |
-| DB query (psycopg2) | `with get_db() as conn:` — call from sync helpers only; fast over LAN to RDS |
+| DB query | `async with get_async_db() as conn:` — asyncpg is native async, no wrapping needed |
 | CPU-heavy work | `await asyncio.to_thread(heavy_function, args)` |
 | External HTTP | Use timeout: `asyncio.wait_for(asyncio.to_thread(fn), timeout=20.0)` |
 | Event loop ref | Use `asyncio.get_running_loop()` — never `asyncio.get_event_loop()` (deprecated) |
 | mkdir / os.path | `await asyncio.to_thread(session_output_dir, session_id)` |
-| Context builders | `await asyncio.to_thread(build_conversation_context, ...)` |
+| S3 upload | `await asyncio.to_thread(upload_frames_json, data, session_id)` |
+| S3 download | `await asyncio.to_thread(download_json, key)` |
+
+**DO NOT use `asyncio.to_thread` for LLM calls in orchestration code.** The async SDK clients (`AsyncAnthropic`, `AsyncOpenAI`) are native async — wrapping them in `to_thread` wastes a thread and adds latency.
 
 ---
 

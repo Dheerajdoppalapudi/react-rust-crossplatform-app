@@ -22,6 +22,7 @@ Prompt caching (Anthropic only):
   Requires PROMPT_CACHE_ENABLED=true (default) in config.py.
 """
 
+import asyncio
 import json
 import structlog
 import re
@@ -44,6 +45,8 @@ _WAIT_RE = re.compile(r'try again in ([\d.]+)s', re.IGNORECASE)
 # ---------------------------------------------------------------------------
 _openai_client = None
 _anthropic_client = None
+_async_openai_client = None
+_async_anthropic_client = None
 
 
 def _get_openai_client():
@@ -62,21 +65,41 @@ def _get_anthropic_client():
     return _anthropic_client
 
 
+def _get_async_openai_client():
+    global _async_openai_client
+    if _async_openai_client is None:
+        from openai import AsyncOpenAI
+        _async_openai_client = AsyncOpenAI()
+    return _async_openai_client
+
+
+def _get_async_anthropic_client():
+    global _async_anthropic_client
+    if _async_anthropic_client is None:
+        import anthropic
+        _async_anthropic_client = anthropic.AsyncAnthropic()
+    return _async_anthropic_client
+
+
 # ---------------------------------------------------------------------------
 # Base interface
 # ---------------------------------------------------------------------------
 
 class LLMProvider(ABC):
-    """Every provider must implement a single method: complete(messages) → (text, usage)."""
+    """Every provider must implement complete() and complete_async()."""
 
     @abstractmethod
     def complete(self, messages: List[Dict[str, str]], **kwargs) -> tuple[Optional[str], dict]:
         """
-        Send a list of {"role": ..., "content": ...} messages and return
-        (reply_text, usage_dict) where usage_dict has keys:
-            prompt_tokens, completion_tokens, total_tokens
+        Send messages and return (reply_text, usage_dict).
+        usage_dict keys: prompt_tokens, completion_tokens, total_tokens.
         Returns (None, {}) on failure.
         """
+        ...  # pragma: no cover
+
+    @abstractmethod
+    async def complete_async(self, messages: List[Dict[str, str]], **kwargs) -> tuple[Optional[str], dict]:
+        """Async version of complete() — uses native async SDK clients."""
         ...  # pragma: no cover
 
 
@@ -133,6 +156,47 @@ class OpenAIProvider(LLMProvider):
                 wait = (float(match.group(1)) + 0.5) if match else (5.0 * (attempt + 1))
                 logger.warning("openai_rate_limit_retry", wait_s=round(wait, 1), attempt=attempt + 1, max_retries=_MAX_RETRIES - 1)
                 time.sleep(wait)
+
+            except Exception as e:
+                logger.error("openai_request_failed", error=str(e))
+                return None, {}
+
+        return None, {}
+
+    async def complete_async(self, messages: List[Dict[str, str]], **kwargs) -> tuple[Optional[str], dict]:
+        from openai import RateLimitError
+        client = _get_async_openai_client()
+
+        kwargs.pop("cache_prefix", None)
+        kwargs.pop("tool_schema", None)
+        json_mode: bool = kwargs.pop("json_mode", False)
+
+        if json_mode:
+            kwargs["response_format"] = {"type": "json_object"}
+
+        for attempt in range(_MAX_RETRIES):
+            try:
+                response = await client.chat.completions.create(
+                    model=self.model,
+                    messages=messages,
+                    **kwargs,
+                )
+                usage = response.usage
+                usage_dict = {
+                    "prompt_tokens":     usage.prompt_tokens,
+                    "completion_tokens": usage.completion_tokens,
+                    "total_tokens":      usage.total_tokens,
+                } if usage else {}
+                return response.choices[0].message.content, usage_dict
+
+            except RateLimitError as e:
+                if attempt == _MAX_RETRIES - 1:
+                    logger.error("openai_rate_limit_exhausted", retries=_MAX_RETRIES, error=str(e))
+                    return None, {}
+                match = _WAIT_RE.search(str(e))
+                wait = (float(match.group(1)) + 0.5) if match else (5.0 * (attempt + 1))
+                logger.warning("openai_rate_limit_retry", wait_s=round(wait, 1), attempt=attempt + 1)
+                await asyncio.sleep(wait)
 
             except Exception as e:
                 logger.error("openai_request_failed", error=str(e))
@@ -284,6 +348,94 @@ class ClaudeProvider(LLMProvider):
 
         return None, {}
 
+    async def complete_async(self, messages: List[Dict[str, str]], **kwargs) -> tuple[Optional[str], dict]:
+        from core.config import PROMPT_CACHE_ENABLED
+
+        cache_prefix: str = kwargs.pop("cache_prefix", "")
+        tool_schema: Optional[dict] = kwargs.pop("tool_schema", None)
+        kwargs.pop("json_mode", None)
+
+        client = _get_async_anthropic_client()
+
+        system = next((m["content"] for m in messages if m["role"] == "system"), None)
+        user_messages = [m for m in messages if m["role"] != "system"]
+
+        processed_messages = []
+        for idx, msg in enumerate(user_messages):
+            if (
+                idx == 0
+                and cache_prefix
+                and PROMPT_CACHE_ENABLED
+                and msg["role"] == "user"
+                and isinstance(msg.get("content"), str)
+                and msg["content"].startswith(cache_prefix)
+            ):
+                dynamic = msg["content"][len(cache_prefix):]
+                content: Any = [{"type": "text", "text": cache_prefix, "cache_control": {"type": "ephemeral"}}]
+                if dynamic:
+                    content.append({"type": "text", "text": dynamic})
+                processed_messages.append({"role": "user", "content": content})
+            else:
+                processed_messages.append(msg)
+
+        create_kwargs: dict = {
+            "model":      self.model,
+            "max_tokens": kwargs.get("max_tokens", 4096),
+            "messages":   processed_messages,
+        }
+        if system:
+            create_kwargs["system"] = system
+        if tool_schema:
+            create_kwargs["tools"]       = [tool_schema]
+            create_kwargs["tool_choice"] = {"type": "tool", "name": tool_schema["name"]}
+
+        for attempt in range(_MAX_RETRIES):
+            try:
+                response = await client.messages.create(**create_kwargs)
+                usage = response.usage
+                usage_dict = {
+                    "prompt_tokens":              usage.input_tokens,
+                    "completion_tokens":           usage.output_tokens,
+                    "total_tokens":               usage.input_tokens + usage.output_tokens,
+                    "cache_creation_input_tokens": getattr(usage, "cache_creation_input_tokens", 0),
+                    "cache_read_input_tokens":     getattr(usage, "cache_read_input_tokens", 0),
+                } if usage else {}
+
+                if tool_schema:
+                    for block in response.content:
+                        if block.type == "tool_use":
+                            return json.dumps(block.input), usage_dict
+                    return response.content[0].text, usage_dict
+
+                return response.content[0].text, usage_dict
+
+            except Exception as e:
+                import anthropic as _anthropic
+                if isinstance(e, _anthropic.RateLimitError):
+                    if attempt == _MAX_RETRIES - 1:
+                        logger.error("claude_rate_limit_exhausted", retries=_MAX_RETRIES, error=str(e))
+                        return None, {}
+                    try:
+                        wait = float(e.response.headers.get("retry-after", 5.0 * (attempt + 1)))
+                    except Exception:
+                        wait = 5.0 * (attempt + 1)
+                    logger.warning("claude_rate_limit_retry", wait_s=round(wait, 1), attempt=attempt + 1)
+                    await asyncio.sleep(wait)
+                    continue
+
+                if isinstance(e, _anthropic.APIStatusError) and e.status_code == 529:
+                    if attempt == _MAX_RETRIES - 1:
+                        logger.error("claude_overloaded_exhausted", retries=_MAX_RETRIES)
+                        return None, {}
+                    wait = 10.0 * (attempt + 1)
+                    logger.warning("claude_overloaded_retry", wait_s=round(wait, 1), attempt=attempt + 1)
+                    await asyncio.sleep(wait)
+                else:
+                    logger.error("claude_request_failed", error=str(e))
+                    return None, {}
+
+        return None, {}
+
 
 # ---------------------------------------------------------------------------
 # LLMService — thin wrapper used across the app
@@ -351,6 +503,44 @@ class LLMService:
             {"role": "user", "content": user_prompt},
         ]
         return self.provider.complete(messages, **kwargs)
+
+    # -- Async variants — use these from async contexts to avoid thread-pool saturation --
+
+    async def make_completion_request_async(
+        self,
+        messages: List[Dict[str, str]],
+        **kwargs,
+    ) -> tuple[Optional[Any], dict]:
+        return await self.provider.complete_async(messages, **kwargs)
+
+    async def make_single_prompt_request_async(
+        self,
+        prompt: str,
+        cache_prefix: str = "",
+        tool_schema: Optional[dict] = None,
+        json_mode: bool = False,
+        **kwargs,
+    ) -> tuple[Optional[Any], dict]:
+        messages = [{"role": "user", "content": prompt}]
+        return await self.provider.complete_async(
+            messages,
+            cache_prefix=cache_prefix,
+            tool_schema=tool_schema,
+            json_mode=json_mode,
+            **kwargs,
+        )
+
+    async def make_system_user_request_async(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        **kwargs,
+    ) -> tuple[Optional[Any], dict]:
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+        return await self.provider.complete_async(messages, **kwargs)
 
 
 # ---------------------------------------------------------------------------

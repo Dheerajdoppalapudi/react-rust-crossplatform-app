@@ -1,84 +1,54 @@
 """
-Tests for the atomic turn_index assignment in core/database.py insert_session().
+Tests for the atomic turn_index assignment in core.db_async.insert_session().
 
 Verifies that concurrent follow-up insertions into the same conversation
 produce unique, monotonically-increasing turn_index values.
+Uses asyncio.gather() to exercise the same atomicity as real concurrent requests.
 """
 
-import threading
+import asyncio
 import uuid
 
 import pytest
 
-from core.database import init_db, insert_session, get_db
+from core.db_async import insert_session
 
 
-@pytest.fixture(autouse=True)
-def isolated_db(tmp_path, monkeypatch):
-    """Each test gets a fresh in-memory-style SQLite DB."""
-    import core.config as cfg
-    cfg.DB_PATH = tmp_path / "test.sqlite"
-    init_db()
-    yield
-    cfg.DB_PATH = None  # let next fixture set it
-
-
-def _make_conv():
+def _conv():
     return uuid.uuid4().hex
 
 
-def _make_session():
+def _sid():
     return uuid.uuid4().hex
 
 
-def test_first_session_gets_turn_index_1(tmp_path):
-    conv_id = _make_conv()
-    user_id = "user1"
-    sid = _make_session()
-    idx = insert_session(sid, "hello", conv_id, turn_index=1, user_id=user_id, parent_session_id=None)
+async def test_first_session_gets_turn_index_1(clean_db):
+    conv_id = _conv()
+    idx = await insert_session(_sid(), "hello", conv_id, turn_index=1, user_id="user1")
     assert idx == 1
 
 
-def test_follow_up_increments_turn_index(tmp_path):
-    conv_id = _make_conv()
-    user_id = "user1"
+async def test_follow_up_increments_turn_index(clean_db):
+    conv_id = _conv()
 
-    sid1 = _make_session()
-    idx1 = insert_session(sid1, "q1", conv_id, turn_index=1, user_id=user_id, parent_session_id=None)
-
-    sid2 = _make_session()
-    idx2 = insert_session(sid2, "q2", conv_id, user_id=user_id, parent_session_id=None)
+    idx1 = await insert_session(_sid(), "q1", conv_id, turn_index=1, user_id="user1")
+    idx2 = await insert_session(_sid(), "q2", conv_id, user_id="user1")
 
     assert idx1 == 1
     assert idx2 == 2
 
 
-def test_concurrent_inserts_produce_unique_turn_indexes(tmp_path):
-    conv_id = _make_conv()
-    user_id = "userX"
-    results: list[int] = []
-    errors: list[Exception] = []
+async def test_concurrent_inserts_produce_unique_turn_indexes(clean_db):
+    conv_id = _conv()
 
-    # First session must be inserted before concurrent follow-ups so conv exists
-    sid0 = _make_session()
-    insert_session(sid0, "seed", conv_id, turn_index=1, user_id=user_id, parent_session_id=None)
+    # Seed turn 1 first so the conversation exists
+    await insert_session(_sid(), "seed", conv_id, turn_index=1, user_id="userX")
 
-    def _insert():
-        try:
-            sid = _make_session()
-            idx = insert_session(sid, "concurrent q", conv_id, user_id=user_id, parent_session_id=None)
-            results.append(idx)
-        except Exception as exc:
-            errors.append(exc)
+    # Fire 5 concurrent follow-ups — the MAX()+1 subquery must serialise correctly
+    results = await asyncio.gather(*[
+        insert_session(_sid(), "concurrent q", conv_id, user_id="userX")
+        for _ in range(5)
+    ])
 
-    threads = [threading.Thread(target=_insert) for _ in range(5)]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()
-
-    assert not errors, f"Errors during concurrent insert: {errors}"
-    # All turn_indexes must be unique
     assert len(set(results)) == len(results), f"Duplicate turn_indexes: {results}"
-    # All must be > 1 (seed was 1)
     assert all(r > 1 for r in results)

@@ -46,9 +46,14 @@ logger = structlog.get_logger(__name__)
 async def lifespan(app: FastAPI):
     await init_pool()
     await init_db()
-    swept = await mark_stale_pending_sessions(older_than_minutes=10)
-    if swept:
-        logger.warning("stale_sessions_swept", count=swept)
+    try:
+        swept = await mark_stale_pending_sessions(older_than_minutes=10)
+        if swept:
+            logger.warning("stale_sessions_swept", count=swept)
+    except Exception as exc:
+        # Fails if migration 002 (TEXT→TIMESTAMPTZ) has not been applied yet.
+        # Run `alembic upgrade head` before deploying this version.
+        logger.error("stale_session_sweep_failed", error=str(exc))
     logger.info("zenith_api_started")
     yield
     await close_pool()

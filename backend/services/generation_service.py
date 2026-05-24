@@ -24,6 +24,17 @@ from core.config import (
     BEAT_PIPELINE_ENABLED,
     BEAT_TTS_BACKEND,
 )
+from core.s3 import (
+    upload_frame as _s3_upload_frame,
+    upload_video as _s3_upload_video,
+    upload_frames_json as _s3_upload_frames_json,
+    upload_narration as _s3_upload_narration,
+    frames_json_key,
+    narration_key,
+    meta_key,
+    download_json as _s3_download_json,
+    download_text as _s3_download_text,
+)
 from core.db_async import get_async_db, collect_ancestor_chain
 from services.frame_generation.planner import (
     GenerationPlan,
@@ -154,6 +165,21 @@ def _append_summary_slide(
     return all_images, all_captions, all_narrations
 
 
+# ── S3 upload helpers ─────────────────────────────────────────────────────────
+
+async def _upload_frames_to_s3(local_paths: list, session_id: str) -> list:
+    """Upload frame PNGs to S3; return CDN URLs, falling back to local path on error."""
+    cdn = []
+    for i, path in enumerate(local_paths):
+        try:
+            url = await asyncio.to_thread(_s3_upload_frame, path, session_id, i)
+            cdn.append(url)
+        except Exception as exc:
+            logger.warning("s3_frame_upload_failed", session=session_id, index=i, error=str(exc))
+            cdn.append(path)
+    return cdn
+
+
 # ── Conversation context builders ─────────────────────────────────────────────
 
 async def build_conversation_context(
@@ -180,27 +206,36 @@ async def build_conversation_context(
 
     for i, turn in enumerate(prior_turns):
         output_dir = turn["output_dir"] or ""
+        session_id = turn["id"]
         is_last    = (i == len(prior_turns) - 1)
 
+        # Try S3 first, fall back to local filesystem
         captions: list[str] = []
-        frames_path = os.path.join(output_dir, "frames.json")
-        if os.path.exists(frames_path):
-            with open(frames_path) as f:
-                captions = json.load(f).get("captions", [])
+        frames_data = await asyncio.to_thread(_s3_download_json, frames_json_key(session_id))
+        if frames_data is None:
+            local_frames = os.path.join(output_dir, "frames.json")
+            if os.path.exists(local_frames):
+                with open(local_frames) as f:
+                    frames_data = json.load(f)
+        if frames_data:
+            captions = frames_data.get("captions", [])
 
         lines.append(f"Turn {turn['turn_index']}: \"{turn['prompt']}\"")
         if captions:
             lines.append(f"  Frames: {', '.join(captions)}")
 
         if is_last:
-            narration_path = os.path.join(output_dir, "narration.txt")
-            if os.path.exists(narration_path):
-                with open(narration_path) as f:
-                    full_narration = f.read().strip()
-                if full_narration:
-                    lines.append("  Full narration of this turn:")
-                    for narr_line in full_narration.splitlines():
-                        lines.append(f"    {narr_line}")
+            full_narration = await asyncio.to_thread(_s3_download_text, narration_key(session_id))
+            if full_narration is None:
+                narration_path = os.path.join(output_dir, "narration.txt")
+                if os.path.exists(narration_path):
+                    with open(narration_path) as f:
+                        full_narration = f.read()
+            if full_narration and full_narration.strip():
+                full_narration = full_narration.strip()
+                lines.append("  Full narration of this turn:")
+                for narr_line in full_narration.splitlines():
+                    lines.append(f"    {narr_line}")
 
         lines.append("")
 
@@ -258,14 +293,19 @@ async def build_interactive_context(
     ]
 
     for turn in prior_turns:
-        output_dir = turn["output_dir"] or ""
-        scene_ir_path = os.path.join(output_dir, "scene_ir.json")
+        output_dir    = turn["output_dir"] or ""
+        session_id    = turn["id"]
 
         lines.append(f"Turn {turn['turn_index']}: \"{turn['prompt']}\"")
 
-        if os.path.exists(scene_ir_path):
-            with open(scene_ir_path) as f:
-                scene = json.load(f)
+        scene = await asyncio.to_thread(_s3_download_json, meta_key(session_id, "scene_ir.json"))
+        if scene is None:
+            scene_ir_path = os.path.join(output_dir, "scene_ir.json")
+            if os.path.exists(scene_ir_path):
+                with open(scene_ir_path) as f:
+                    scene = json.load(f)
+
+        if scene:
 
             lines.append(f"  Title: {scene.get('title', '')}")
             lo = scene.get("learning_objective", "")
@@ -381,6 +421,11 @@ async def _run_beat_pipeline(
 
     assembled = await assemble_beats(mp4s, os.path.join(output_dir, "session_final.mp4"))
 
+    try:
+        assembled = await asyncio.to_thread(_s3_upload_video, assembled, session_id)
+    except Exception as exc:
+        logger.warning("s3_video_upload_failed", session=session_id, error=str(exc))
+
     yield {"type": "stage_done", "stage": "assembling", "duration_s": round(time.time() - t_assemble, 2)}
 
     # Persist frames.json for SessionView
@@ -396,6 +441,10 @@ async def _run_beat_pipeline(
         Path(os.path.join(output_dir, "frames.json")).write_text,
         frames_data, "utf-8",
     )
+    try:
+        await asyncio.to_thread(_s3_upload_frames_json, frames_data.encode(), session_id)
+    except Exception as exc:
+        logger.warning("s3_frames_json_upload_failed", session=session_id, error=str(exc))
 
     yield {
         "type":                "result",
@@ -505,6 +554,10 @@ async def run_video_pipeline_from_intent(
         Path(os.path.join(output_dir, "narration.txt")).write_text,
         _narration_content, "utf-8",
     )
+    try:
+        await asyncio.to_thread(_s3_upload_narration, _narration_content, session_id)
+    except Exception as exc:
+        logger.warning("s3_narration_upload_failed", session=session_id, error=str(exc))
 
     result_payload["ui_output_file"] = ui_output_file
     yield {"type": "result", "payload": result_payload}
@@ -546,6 +599,8 @@ async def _run_frame_generation(
             all_images, all_captions, all_narrations, notes, accent, output_dir
         )
 
+        all_images = await _upload_frames_to_s3(all_images, session_id)
+
         _manim_frames_data = json.dumps(
             {"render_path": "manim", "images": all_images, "captions": all_captions,
              "suggested_followups": suggested_followups, "notes": notes}, indent=2
@@ -554,6 +609,10 @@ async def _run_frame_generation(
             Path(os.path.join(output_dir, "frames.json")).write_text,
             _manim_frames_data, "utf-8",
         )
+        try:
+            await asyncio.to_thread(_s3_upload_frames_json, _manim_frames_data.encode(), session_id)
+        except Exception as exc:
+            logger.warning("s3_frames_json_upload_failed", session=session_id, error=str(exc))
 
         return {
             "session_id":          session_id,
@@ -589,6 +648,8 @@ async def _run_frame_generation(
         all_images, all_captions, all_narrations, notes, accent, output_dir
     )
 
+    all_images = await _upload_frames_to_s3(all_images, session_id)
+
     ui_output_file = os.path.join(output_dir, "final_output.json")
     _svg_frames_data = json.dumps(
         {"render_path": "svg", "images": all_images, "captions": all_captions,
@@ -601,6 +662,10 @@ async def _run_frame_generation(
         Path(os.path.join(output_dir, "frames.json")).write_text, _svg_frames_data, "utf-8"
     )
     await asyncio.to_thread(Path(ui_output_file).write_text, _svg_ui_data, "utf-8")
+    try:
+        await asyncio.to_thread(_s3_upload_frames_json, _svg_frames_data.encode(), session_id)
+    except Exception as exc:
+        logger.warning("s3_frames_json_upload_failed", session=session_id, error=str(exc))
 
     return {
         "session_id":          session_id,

@@ -13,13 +13,15 @@ import structlog
 import os
 import subprocess
 import tempfile
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from core.config import OUTPUTS_DIR
+from core.s3 import upload_merged_video as _s3_upload_merged_video
 from core.utils import safe_resolve
 from pydantic import BaseModel
 
@@ -91,14 +93,18 @@ async def list_conversations(
     Pass `cursor=<next_cursor from previous response>` to fetch the next page.
     Returns { items, next_cursor, has_more }.
     """
-    cursor_ts: Optional[str] = None
+    cursor_dt: Optional[datetime] = None
     cursor_id: Optional[str] = None
     if cursor:
         try:
             cursor_ts, cursor_id = cursor.split("|", 1)
         except ValueError:
-            # Tolerate old single-field cursors from clients that haven't updated
             cursor_ts = cursor
+            cursor_id = None
+        try:
+            cursor_dt = datetime.fromisoformat(cursor_ts).replace(tzinfo=timezone.utc)
+        except (ValueError, AttributeError):
+            cursor_dt = None
 
     _BASE_SELECT = """
         SELECT c.id, c.title, c.created_at, c.updated_at,
@@ -110,7 +116,7 @@ async def list_conversations(
     """
 
     async with get_async_db() as conn:
-        if cursor_ts and cursor_id:
+        if cursor_dt and cursor_id:
             rows = await conn.fetch(
                 _BASE_SELECT + """
                 WHERE c.user_id = $1 AND c.deleted_at IS NULL
@@ -119,9 +125,9 @@ async def list_conversations(
                 ORDER BY c.updated_at DESC, c.id DESC
                 LIMIT $4
                 """,
-                current_user.id, cursor_ts, cursor_id, limit + 1,
+                current_user.id, cursor_dt, cursor_id, limit + 1,
             )
-        elif cursor_ts:
+        elif cursor_dt:
             # Backwards-compatible path for old single-field cursors
             rows = await conn.fetch(
                 _BASE_SELECT + """
@@ -131,7 +137,7 @@ async def list_conversations(
                 ORDER BY c.updated_at DESC, c.id DESC
                 LIMIT $3
                 """,
-                current_user.id, cursor_ts, limit + 1,
+                current_user.id, cursor_dt, limit + 1,
             )
         else:
             rows = await conn.fetch(
@@ -147,7 +153,7 @@ async def list_conversations(
     has_more  = len(rows) > limit
     page_rows = rows[:limit]
     next_cursor = (
-        f"{page_rows[-1]['updated_at']}|{page_rows[-1]['id']}"
+        f"{page_rows[-1]['updated_at'].isoformat()}|{page_rows[-1]['id']}"
         if has_more and page_rows else None
     )
 
@@ -273,13 +279,21 @@ async def merge_conversation_videos(conversation_id: str, current_user: User = D
         if os.path.exists(concat_file):
             os.unlink(concat_file)
 
+    # Upload to S3 and store CDN URL; fall back to local path if S3 is unavailable.
+    stored_path = output_path
+    try:
+        cdn_url = await asyncio.to_thread(_s3_upload_merged_video, output_path, conversation_id)
+        stored_path = cdn_url
+    except Exception as exc:
+        logger.warning("s3_merged_video_upload_failed", conversation=conversation_id, error=str(exc))
+
     async with get_async_db() as conn:
         await conn.execute(
             "UPDATE conversations SET merged_video_path = $1 WHERE id = $2",
-            output_path, conversation_id,
+            stored_path, conversation_id,
         )
 
-    logger.info("merge_complete", conversation=conversation_id, sessions=len(video_paths), output=output_path)
+    logger.info("merge_complete", conversation=conversation_id, sessions=len(video_paths), output=stored_path)
     # M-1: Serialize through MergeResponse schema.
     merge = MergeResponse(
         merged_video_url=f"/api/conversations/{conversation_id}/merged_video",
@@ -317,7 +331,11 @@ async def get_merged_video(
     if not raw_path:
         raise HTTPException(status_code=404, detail="Merged video not found")
 
-    # CRIT-3: Validate path before serving.
+    # CDN URL — redirect; no path traversal risk.
+    if raw_path.startswith("https://"):
+        return RedirectResponse(url=raw_path, status_code=302)
+
+    # CRIT-3: Validate local path before serving.
     safe_path = safe_resolve(raw_path, label="merged_video")
     if not safe_path.exists():
         raise HTTPException(status_code=404, detail="Merged video not found")

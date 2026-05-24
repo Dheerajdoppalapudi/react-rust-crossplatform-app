@@ -179,10 +179,7 @@ async def _run_codegen_with_prompt(
     label = prompt_file.replace(".md", "")
     logger.info("llm_call", prompt=label, model=model, chars=len(prompt), cache="no")
     max_tokens = _CODEGEN_MAX_TOKENS.get(label, 4000)
-    raw = await asyncio.to_thread(
-        svc.make_single_prompt_request, prompt, "", None, False, max_tokens=max_tokens
-    )
-    result, usage = raw if isinstance(raw, tuple) else (raw, {})
+    result, usage = await svc.make_single_prompt_request_async(prompt, max_tokens=max_tokens)
     if result is None:
         raise RuntimeError("Codegen LLM returned None")
     _accumulate_tokens(usage or {})
@@ -232,8 +229,7 @@ async def _select_entities(
         _model = getattr(default_llm_service.provider, "model", "unknown")
         logger.info("llm_call", prompt="entity_selector", model=_model,
                     chars=len(selector_prompt) + len(user_msg), cache="no")
-        raw, _usage = await asyncio.to_thread(
-            default_llm_service.make_system_user_request,
+        raw, _usage = await default_llm_service.make_system_user_request_async(
             selector_prompt, user_msg, max_tokens=800
         )
         _accumulate_tokens(_usage or {})
@@ -294,8 +290,8 @@ async def _plan_scene(
     _model = getattr(svc.provider, "model", "unknown")
     logger.info("llm_call", prompt="scene_planner", model=_model,
                 chars=len(system_prompt) + len(user_msg), cache="no")
-    raw, _usage = await asyncio.to_thread(
-        svc.make_system_user_request, system_prompt, user_msg, max_tokens=SCENE_PLANNER_MAX_TOKENS
+    raw, _usage = await svc.make_system_user_request_async(
+        system_prompt, user_msg, max_tokens=SCENE_PLANNER_MAX_TOKENS
     )
     _accumulate_tokens(_usage or {})
     logger.info("llm_done", prompt="scene_planner", model=_model,
@@ -316,11 +312,18 @@ async def _plan_scene(
         raise
 
 
-def _save_scene_ir(scene: SceneIR, output_dir: str) -> None:
+def _save_scene_ir(scene: SceneIR, output_dir: str, session_id: str = "") -> None:
     os.makedirs(output_dir, exist_ok=True)
     path = os.path.join(output_dir, "scene_ir.json")
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(scene.dict(), f, indent=2)
+    data = json.dumps(scene.dict(), indent=2).encode()
+    with open(path, "wb") as f:
+        f.write(data)
+    if session_id:
+        try:
+            from core.s3 import upload_scene_ir
+            upload_scene_ir(data, session_id)
+        except Exception as exc:
+            logger.warning("scene_ir_s3_upload_failed", session=session_id, error=str(exc))
 
 
 async def run_interactive_pipeline(
@@ -411,7 +414,7 @@ async def run_interactive_pipeline(
 
     # Stage 5: Persist and finish
     try:
-        _save_scene_ir(scene, output_dir)
+        _save_scene_ir(scene, output_dir, session_id=session_id)
     except Exception as exc:
         logger.warning("scene_ir_save_failed", error=str(exc))
 

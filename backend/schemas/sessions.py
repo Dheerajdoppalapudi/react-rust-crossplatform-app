@@ -1,13 +1,19 @@
 """Pydantic schemas for session and conversation API responses."""
 
+from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, field_serializer
+
+
+def _iso(dt: datetime) -> str:
+    """Serialize datetime → ISO-8601 UTC string for JSON responses."""
+    return dt.isoformat()
 
 
 class SessionSummary(BaseModel):
     id:                str
     prompt:            str
-    created_at:        str
+    created_at:        datetime
     status:            str
     intent_type:       Optional[str]  = None
     render_path:       Optional[str]  = None
@@ -18,11 +24,15 @@ class SessionSummary(BaseModel):
     total_tokens:      Optional[int]  = None
     model_name:        Optional[str]  = None
 
+    @field_serializer("created_at")
+    def serialize_created_at(self, v: datetime) -> str:
+        return _iso(v)
+
 
 class SessionTurn(BaseModel):
     id:                 str
     prompt:             str
-    created_at:         str
+    created_at:         datetime
     status:             str
     intent_type:        Optional[str] = None
     render_path:        Optional[str] = None
@@ -35,24 +45,36 @@ class SessionTurn(BaseModel):
     sources_json:       Optional[str] = None
     synthesis_text:     Optional[str] = None
 
+    @field_serializer("created_at")
+    def serialize_created_at(self, v: datetime) -> str:
+        return _iso(v)
+
 
 class ConversationSummary(BaseModel):
     id:          str
     title:       str
-    created_at:  str
-    updated_at:  str
+    created_at:  datetime
+    updated_at:  datetime
     starred:     bool          = False
     turn_count:  int
     intent_type: Optional[str] = None
+
+    @field_serializer("created_at", "updated_at")
+    def serialize_timestamps(self, v: datetime) -> str:
+        return _iso(v)
 
 
 class ConversationDetail(BaseModel):
     id:                str
     title:             str
-    created_at:        str
-    updated_at:        str
+    created_at:        datetime
+    updated_at:        datetime
     merged_video_path: Optional[str]       = None
     turns:             list[SessionTurn]
+
+    @field_serializer("created_at", "updated_at")
+    def serialize_timestamps(self, v: datetime) -> str:
+        return _iso(v)
 
 
 class TreeNode(BaseModel):
