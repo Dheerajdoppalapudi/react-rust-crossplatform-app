@@ -1,26 +1,22 @@
 import { useState, useRef, useCallback } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { api } from '../services/api'
 import { normalizeFramesData, migrateOldSceneIR } from '../components/Studio/studioUtils'
 import { safeParse, RawConversationSchema } from '../services/schemas'
+
+const CONV_STALE_MS = 30_000 // serve from cache if fetched within last 30 s
 
 /**
  * Manages conversation loading, bootstrap animation state, and the
  * per-conversation load abort signal.
  *
- * Bootstrap state covers the first-turn loading experience: the full-screen
- * overlay that shows planning → generating → rendering → frames → video stages.
- * All fields are kept in one object so a single setState call atomically
- * transitions the overlay — no partial renders between setter calls.
+ * React Query is used as the cache layer: the first load for a conversation
+ * hits the network; subsequent loads within CONV_STALE_MS are served instantly
+ * from cache, eliminating the blank-screen flash on conversation switches.
  *
- * bootstrap shape: { stage: string, prompt: string, frames: object|null }
- * bootstrap === null means the overlay is not visible.
- *
- * @param {object}   params
- * @param {Function} params.setTurns               - React state setter for turns.
- * @param {Function} params.runVideoGenerationForTurn - From useVideoStream.
- * @param {Function} params.abortAllVideoStreams    - From useVideoStream.
- * @param {Function} params.scrollToTop             - Scrolls content area to top.
- * @param {object}   params.toast                   - Toast context (from useToast).
+ * The unified GET /api/conversations/:id endpoint now includes frames_meta
+ * inline on every turn, so the old Promise.allSettled parallel fetch loop
+ * is gone — each turn's metadata arrives in the initial response.
  */
 export function useConversation({
   setTurns,
@@ -29,6 +25,8 @@ export function useConversation({
   scrollToTop,
   toast,
 }) {
+  const queryClient = useQueryClient()
+
   // null = overlay hidden; object = overlay visible with current stage/prompt/frames.
   const [bootstrap, setBootstrap] = useState(null)
 
@@ -36,18 +34,10 @@ export function useConversation({
   // avoid redundant loads (e.g. when unrelated state causes a re-render).
   const loadedConvIdRef = useRef(null)
 
-  // AbortController for the active getConversation + getFramesMeta requests.
-  // Replaced on every new load so old loads are cleanly cancelled.
+  // AbortController for the active load — replaced on every new load so old
+  // loads are cleanly cancelled.
   const loadAbortRef = useRef(null)
 
-  /**
-   * Loads a conversation by id: fetches the session list, sets turns, then
-   * concurrently fetches per-turn frames metadata, and resumes any video
-   * streams that are still in a 'generating' state.
-   *
-   * Safe to call multiple times — each call cancels the previous in-flight load
-   * and aborts all active video streams before starting fresh.
-   */
   const loadConversationById = useCallback(async (convId) => {
     setTurns([])
     scrollToTop()
@@ -62,7 +52,15 @@ export function useConversation({
     abortAllVideoStreams()
 
     try {
-      const raw = await api.getConversation(convId, loadSignal)
+      // fetchQuery returns cached data if it's still fresh (< CONV_STALE_MS old),
+      // otherwise fetches from the network. Concurrent calls with the same key
+      // are automatically deduplicated by React Query.
+      const raw = await queryClient.fetchQuery({
+        queryKey: ['conversation', convId],
+        queryFn:  () => api.getConversation(convId, loadSignal),
+        staleTime: CONV_STALE_MS,
+      })
+
       if (loadSignal.aborted) return
       if (!raw) {
         toast.error('Could not load this conversation. It may have been deleted.')
@@ -71,64 +69,59 @@ export function useConversation({
 
       const { data, error } = safeParse(RawConversationSchema, raw)
       if (error) {
-        // Log and fall back to raw — schema mismatch should not block the user
         console.warn('[useConversation] schema mismatch, proceeding with raw data', error.issues)
       }
       const turns = (data ?? raw).turns ?? []
 
-      const loadedTurns = turns.map((t) => ({
-        tempId:           t.id,
-        id:               t.id,
-        prompt:           t.prompt,
-        intent_type:      t.intent_type,
-        render_path:      t.render_path,
-        frame_count:      t.frame_count,
-        isLoading:        false,
-        framesData:       null,
-        videoPhase:
-          t.render_path === 'text' || t.render_path === 'interactive'
-            ? 'disabled'
-            : (t.video_path ? 'ready' : (t.status === 'error' ? 'error' : 'generating')),
-        parentSessionId:  t.parent_session_id  ?? null,
-        parentFrameIndex: t.parent_frame_index ?? null,
-        // Finalize any stage left active in DB (e.g. from sessions before backend fix).
-        stages:  t.stages_json  ? JSON.parse(t.stages_json).map(s => s.status === 'active' ? { ...s, status: 'done' } : s)  : [],
-        sources: t.sources_json ? JSON.parse(t.sources_json) : [],
-        // Restore cited prose for the sources panel and citation chips
-        synthesisText:     t.synthesis_text ?? null,
-        synthesisComplete: t.synthesis_text ? true : false,
-        // Interactive turns: blocks populated after getFramesMeta resolves.
-        ...(t.render_path === 'interactive' && {
-          title:     '',
-          followUps: [],
-          blocks:    [],
-        }),
-      }))
+      const loadedTurns = turns.map((t) => {
+        // frames_meta is now inline from the unified endpoint — no separate fetch needed.
+        const framesMeta = t.frames_meta ?? null
+
+        // Interactive turns: scene IR content lives in frames_meta.
+        let interactiveFields = {}
+        if (t.render_path === 'interactive') {
+          if (framesMeta) {
+            const blocks = framesMeta.blocks ?? migrateOldSceneIR(framesMeta)
+            interactiveFields = {
+              title:     framesMeta.title     ?? '',
+              followUps: framesMeta.follow_ups ?? [],
+              blocks,
+            }
+          } else {
+            interactiveFields = { title: '', followUps: [], blocks: [] }
+          }
+        }
+
+        return {
+          tempId:           t.id,
+          id:               t.id,
+          prompt:           t.prompt,
+          intent_type:      t.intent_type,
+          render_path:      t.render_path,
+          frame_count:      t.frame_count,
+          isLoading:        false,
+          framesData:
+            framesMeta && t.render_path !== 'interactive'
+              ? normalizeFramesData(framesMeta)
+              : null,
+          videoPhase:
+            t.render_path === 'text' || t.render_path === 'interactive'
+              ? 'disabled'
+              : (t.video_path ? 'ready' : (t.status === 'error' ? 'error' : 'generating')),
+          parentSessionId:  t.parent_session_id  ?? null,
+          parentFrameIndex: t.parent_frame_index ?? null,
+          // Finalize any stage left active in DB (from sessions before backend fix).
+          stages:  t.stages_json
+            ? JSON.parse(t.stages_json).map(s => s.status === 'active' ? { ...s, status: 'done' } : s)
+            : [],
+          sources: t.sources_json ? JSON.parse(t.sources_json) : [],
+          synthesisText:     t.synthesis_text ?? null,
+          synthesisComplete: !!t.synthesis_text,
+          ...interactiveFields,
+        }
+      })
 
       setTurns(loadedTurns)
-
-      // Fetch all turns' frame metadata in parallel — failures are silently
-      // swallowed per turn (allSettled) so one bad session doesn't block others.
-      await Promise.allSettled(
-        loadedTurns.map(async (turn) => {
-          const raw = await api.getFramesMeta(turn.id, loadSignal)
-          if (loadSignal.aborted || !raw) return
-
-          if (turn.render_path === 'interactive') {
-            // raw is scene_ir.json — new format has blocks[], old has explanation+entities.
-            const blocks = raw.blocks ?? migrateOldSceneIR(raw)
-            setTurns((prev) => prev.map((t) => t.id === turn.id
-              ? { ...t, title: raw.title ?? '', followUps: raw.follow_ups ?? [], blocks }
-              : t
-            ))
-          } else {
-            setTurns((prev) => prev.map((t) => t.id === turn.id
-              ? { ...t, framesData: normalizeFramesData(raw) }
-              : t
-            ))
-          }
-        })
-      )
 
       if (loadSignal.aborted) return
 
@@ -143,7 +136,7 @@ export function useConversation({
         toast.error('Failed to load the conversation. Please try again.')
       }
     }
-  }, [runVideoGenerationForTurn, abortAllVideoStreams, scrollToTop, toast])
+  }, [queryClient, setTurns, runVideoGenerationForTurn, abortAllVideoStreams, scrollToTop, toast])
 
   return {
     bootstrap,

@@ -55,12 +55,19 @@ export const RawTurnSchema = z.object({
   stages_json:        z.string().nullable().optional(),
   sources_json:       z.string().nullable().optional(),
   synthesis_text:     z.string().nullable().optional(),
+  // Inline frames metadata from the unified endpoint (P1 backend change).
+  frames_meta:        z.record(z.unknown()).nullable().optional(),
 })
 
 export const RawConversationSchema = z.object({
   id:    z.string(),
   title: z.string().optional(),
   turns: z.array(RawTurnSchema).default([]),
+  // Inline notes from the unified endpoint (P2 backend change).
+  notes: z.object({
+    content:    z.string().nullable().optional(),
+    updated_at: z.string().nullable().optional(),
+  }).nullable().optional(),
 })
 
 export const ConversationSummarySchema = z.object({

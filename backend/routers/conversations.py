@@ -27,10 +27,10 @@ from pydantic import BaseModel
 
 from core.db_async import (
     get_async_db,
+    get_async_db_read,
     rename_conversation,
     toggle_star_conversation,
     soft_delete_conversation,
-    get_conversation_notes,
     upsert_conversation_notes,
 )
 from core.db_models import User
@@ -63,7 +63,7 @@ async def get_conversation_media_token(
     Used by the browser to authenticate <video src> for the merged video.
     The token expires in MEDIA_TOKEN_EXPIRE_MINUTES (default 5 min).
     """
-    async with get_async_db() as conn:
+    async with get_async_db_read() as conn:
         row = await conn.fetchrow(
             "SELECT id FROM conversations WHERE id = $1 AND user_id = $2",
             conversation_id, current_user.id,
@@ -115,7 +115,7 @@ async def list_conversations(
         LEFT JOIN sessions s ON s.conversation_id = c.id AND s.status = 'done'
     """
 
-    async with get_async_db() as conn:
+    async with get_async_db_read() as conn:
         if cursor_dt and cursor_id:
             rows = await conn.fetch(
                 _BASE_SELECT + """
@@ -163,9 +163,20 @@ async def list_conversations(
 
 @router.get("/api/conversations/{conversation_id}")
 async def get_conversation(conversation_id: str, current_user: User = Depends(get_current_user)):
-    async with get_async_db() as conn:
+    """
+    Unified conversation detail — ownership check, notes, and all session turns
+    (with frames_meta inline) in exactly 2 round-trips, no N+1 fetches.
+    """
+    async with get_async_db_read() as conn:
         conv = await conn.fetchrow(
-            "SELECT * FROM conversations WHERE id = $1 AND user_id = $2",
+            """
+            SELECT c.id, c.title, c.created_at, c.updated_at, c.merged_video_path,
+                   n.content AS notes_content, n.updated_at AS notes_updated_at
+            FROM conversations c
+            LEFT JOIN conversation_notes n
+              ON n.conversation_id = c.id AND n.user_id = $2
+            WHERE c.id = $1 AND c.user_id = $2 AND c.deleted_at IS NULL
+            """,
             conversation_id, current_user.id,
         )
         if not conv:
@@ -173,16 +184,28 @@ async def get_conversation(conversation_id: str, current_user: User = Depends(ge
         turns = await conn.fetch(
             "SELECT id, prompt, created_at, status, intent_type, render_path, "
             "frame_count, video_path, turn_index, parent_session_id, parent_frame_index, "
-            "stages_json, sources_json, synthesis_text "
+            "stages_json, sources_json, synthesis_text, frames_meta "
             "FROM sessions WHERE conversation_id = $1 ORDER BY turn_index ASC",
             conversation_id,
         )
 
-    conv_dict = dict(conv)
-    # M-1: Serialize through schema.
+    notes = None
+    if conv["notes_content"] is not None:
+        notes = {
+            "content": conv["notes_content"],
+            "updated_at": (
+                conv["notes_updated_at"].isoformat()
+                if conv["notes_updated_at"] else None
+            ),
+        }
+
     detail = ConversationDetail(
-        **{k: conv_dict[k] for k in ("id", "title", "created_at", "updated_at", "merged_video_path")
-           if k in conv_dict},
+        id=conv["id"],
+        title=conv["title"],
+        created_at=conv["created_at"],
+        updated_at=conv["updated_at"],
+        merged_video_path=conv["merged_video_path"],
+        notes=notes,
         turns=[SessionTurn(**dict(t)) for t in turns],
     )
     return success(detail.model_dump())
@@ -191,7 +214,7 @@ async def get_conversation(conversation_id: str, current_user: User = Depends(ge
 @router.get("/api/conversations/{conversation_id}/tree")
 async def get_conversation_tree(conversation_id: str, current_user: User = Depends(get_current_user)):
     """Lightweight endpoint for the canvas tree view — returns only node/edge fields."""
-    async with get_async_db() as conn:
+    async with get_async_db_read() as conn:
         conv = await conn.fetchrow(
             "SELECT id, title FROM conversations WHERE id = $1 AND user_id = $2",
             conversation_id, current_user.id,
@@ -318,7 +341,7 @@ async def get_merged_video(
     """
     current_user = await resolve_media_user(token, conversation_id, credentials)
 
-    async with get_async_db() as conn:
+    async with get_async_db_read() as conn:
         row = await conn.fetchrow(
             "SELECT merged_video_path FROM conversations WHERE id = $1 AND user_id = $2",
             conversation_id, current_user.id,
@@ -392,18 +415,23 @@ class NotesUpdateBody(BaseModel):
 
 @router.get("/api/conversations/{conversation_id}/notes")
 async def get_notes(conversation_id: str, current_user: User = Depends(get_current_user)):
-    async with get_async_db() as conn:
-        conv = await conn.fetchrow(
-            "SELECT id FROM conversations WHERE id = $1 AND user_id = $2",
+    # Single query: ownership check + notes fetch via LEFT JOIN — 1 RTT instead of 2.
+    async with get_async_db_read() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT n.content, n.updated_at
+            FROM conversations c
+            LEFT JOIN conversation_notes n
+              ON n.conversation_id = c.id AND n.user_id = $2
+            WHERE c.id = $1 AND c.user_id = $2 AND c.deleted_at IS NULL
+            """,
             conversation_id, current_user.id,
         )
-    if not conv:
+    if row is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
-
-    notes = await get_conversation_notes(conversation_id, current_user.id)
-    if notes is None:
+    if row["content"] is None:
         return success({"content": None, "updated_at": None})
-    return success(notes)
+    return success({"content": row["content"], "updated_at": row["updated_at"]})
 
 
 @router.put("/api/conversations/{conversation_id}/notes")

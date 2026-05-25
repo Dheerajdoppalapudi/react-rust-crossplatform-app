@@ -23,7 +23,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from core.db_async import get_async_db, update_session
+from core.db_async import get_async_db_read, update_session
 from core.s3 import upload_video as _s3_upload_video
 from core.db_models import User
 from core.responses import success
@@ -76,7 +76,7 @@ async def get_media_token(
 
     This keeps the main access JWT out of any URL / log.
     """
-    async with get_async_db() as conn:
+    async with get_async_db_read() as conn:
         row = await conn.fetchrow(
             "SELECT id FROM sessions WHERE id = $1 AND user_id = $2",
             session_id, current_user.id,
@@ -108,7 +108,7 @@ async def generate_video(
             detail="moviepy not installed — run: pip install moviepy",
         )
 
-    async with get_async_db() as conn:
+    async with get_async_db_read() as conn:
         row = await conn.fetchrow(
             "SELECT output_dir, frame_count, status, render_path, video_path FROM sessions "
             "WHERE id = $1 AND user_id = $2",
@@ -322,8 +322,19 @@ async def generate_video(
             _final_video = video_path
             try:
                 _final_video = await asyncio.to_thread(_s3_upload_video, video_path, session_id)
+                logger.info("video_path_resolved",
+                            session=session_id,
+                            storage="s3",
+                            video_path=_final_video)
             except Exception as exc:
-                logger.warning("s3_video_upload_failed", session=session_id, error=str(exc))
+                logger.warning("s3_video_upload_failed",
+                               session=session_id,
+                               error=str(exc),
+                               fallback_path=_final_video)
+                logger.warning("video_path_resolved",
+                               session=session_id,
+                               storage="local",
+                               video_path=_final_video)
             await update_session(session_id, video_path=_final_video)
 
             total = elapsed()
@@ -383,7 +394,7 @@ async def get_session_video(
     # for browser <video src> clients using ?token=).
     current_user = await resolve_media_user(token, session_id, credentials)
 
-    async with get_async_db() as conn:
+    async with get_async_db_read() as conn:
         row = await conn.fetchrow(
             "SELECT video_path FROM sessions WHERE id = $1 AND user_id = $2",
             session_id, current_user.id,

@@ -19,6 +19,7 @@
     "@mui/material": "^7.3.8",
     "@react-oauth/google": "^0.13.4",
     "@sentry/react": "^10.51.0",
+    "@tanstack/react-query": "^5.100.14",
     "@tauri-apps/api": "^2.10.1",
     "@tiptap/extension-bubble-menu": "^2.27.2",
     "@tiptap/extension-floating-menu": "^2.27.2",

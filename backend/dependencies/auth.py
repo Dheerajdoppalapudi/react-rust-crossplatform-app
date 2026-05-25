@@ -17,7 +17,6 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from core.config import JWT_ALGORITHM, JWT_SECRET_KEY, MEDIA_TOKEN_EXPIRE_MINUTES
-from core.db_async import get_user_by_id
 from core.db_models import User
 
 logger = structlog.get_logger(__name__)
@@ -28,7 +27,11 @@ _bearer = HTTPBearer(auto_error=False)
 # ── Token resolution ──────────────────────────────────────────────────────────
 
 async def _resolve_user(token_str: str) -> User:
-    """Decode a raw JWT string and return the User, or raise 401."""
+    """Decode a raw JWT string and return the User, or raise 401.
+
+    User fields are embedded in the JWT at login time so no DB round-trip
+    is needed here — saves ~1 RTT (~350ms) on every authenticated endpoint.
+    """
     try:
         payload = jwt.decode(token_str, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
     except jwt.ExpiredSignatureError:
@@ -51,13 +54,13 @@ async def _resolve_user(token_str: str) -> User:
             detail="Invalid token payload",
         )
 
-    user = await get_user_by_id(user_id)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
-        )
-    return user
+    return User(
+        id=user_id,
+        email=payload.get("email", ""),
+        name=payload.get("name", ""),
+        avatar=payload.get("avatar", ""),
+        auth_provider=payload.get("auth_provider", "google"),
+    )
 
 
 # ── Standard auth dependency ──────────────────────────────────────────────────
@@ -177,8 +180,4 @@ async def validate_media_token(token_str: str, expected_session_id: str) -> User
     if not user_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
 
-    user = await get_user_by_id(user_id)
-    if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
-
-    return user
+    return User(id=user_id, email="", name="", avatar="", auth_provider="")

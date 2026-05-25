@@ -34,16 +34,17 @@ class SessionTurn(BaseModel):
     prompt:             str
     created_at:         datetime
     status:             str
-    intent_type:        Optional[str] = None
-    render_path:        Optional[str] = None
-    frame_count:        Optional[int] = None
-    video_path:         Optional[str] = None
+    intent_type:        Optional[str]  = None
+    render_path:        Optional[str]  = None
+    frame_count:        Optional[int]  = None
+    video_path:         Optional[str]  = None
     turn_index:         int
-    parent_session_id:  Optional[str] = None
-    parent_frame_index: Optional[int] = None
-    stages_json:        Optional[str] = None
-    sources_json:       Optional[str] = None
-    synthesis_text:     Optional[str] = None
+    parent_session_id:  Optional[str]  = None
+    parent_frame_index: Optional[int]  = None
+    stages_json:        Optional[str]  = None
+    sources_json:       Optional[str]  = None
+    synthesis_text:     Optional[str]  = None
+    frames_meta:        Optional[dict] = None
 
     @field_serializer("created_at")
     def serialize_created_at(self, v: datetime) -> str:
@@ -70,6 +71,7 @@ class ConversationDetail(BaseModel):
     created_at:        datetime
     updated_at:        datetime
     merged_video_path: Optional[str]       = None
+    notes:             Optional[dict]      = None
     turns:             list[SessionTurn]
 
     @field_serializer("created_at", "updated_at")

@@ -418,4 +418,13 @@ async def run_interactive_pipeline(
     except Exception as exc:
         logger.warning("scene_ir_save_failed", error=str(exc))
 
+    # Write scene IR into DB so the unified conversation endpoint can serve it
+    # without a local-disk or S3 round-trip.
+    if session_id:
+        try:
+            from core.db_async import update_session
+            await update_session(session_id, frames_meta=scene.dict())
+        except Exception as exc:
+            logger.warning("scene_ir_db_write_failed", session=session_id, error=str(exc))
+
     yield {"type": "done", "session_id": session_id}

@@ -7,6 +7,7 @@ Fixes applied:
   M-1   : List endpoint serializes rows through SessionSummary schema.
 """
 
+import asyncio
 import json
 import structlog
 from pathlib import Path
@@ -16,9 +17,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from core.db_async import get_async_db
+from core.db_async import get_async_db_read as get_async_db
 from core.db_models import User
 from core.responses import success
+from core.s3 import meta_key, download_json as _s3_download_json
 from core.utils import safe_resolve, read_json_file
 from dependencies.auth import get_current_user, resolve_media_user
 from schemas.sessions import SessionSummary, SessionOutputResponse
@@ -90,31 +92,46 @@ async def get_session_log(session_id: str, current_user: User = Depends(get_curr
 async def get_session_frames_meta(session_id: str, current_user: User = Depends(get_current_user)):
     """Return the frames metadata for a session.
 
-    For video/text sessions this is frames.json.
-    For interactive sessions this is scene_ir.json (saved by interactive_service).
+    Read priority:
+      1. DB  — frames_meta JSONB column (zero file I/O, fastest path)
+      2. Local disk — output_dir/frames.json or scene_ir.json
+      3. S3  — meta/<session_id>/frames.json or scene_ir.json
+      4. 404
     """
     async with get_async_db() as conn:
         row = await conn.fetchrow(
-            "SELECT output_dir, render_path FROM sessions WHERE id = $1 AND user_id = $2",
+            "SELECT output_dir, render_path, frames_meta "
+            "FROM sessions WHERE id = $1 AND user_id = $2",
             session_id, current_user.id,
         )
 
-    if not row or not row["output_dir"]:
+    if not row:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    safe_dir = safe_resolve(row["output_dir"], label="output_dir")
+    # 1. DB fast path — already stored inline, no file I/O needed.
+    if row["frames_meta"] is not None:
+        return success(row["frames_meta"])
 
-    if row["render_path"] == "interactive":
-        scene_path = safe_dir / "scene_ir.json"
-        if not scene_path.exists():
-            raise HTTPException(status_code=404, detail="scene_ir.json not found")
-        return success(read_json_file(scene_path))
+    is_interactive = row["render_path"] == "interactive"
+    filename       = "scene_ir.json" if is_interactive else "frames.json"
 
-    frames_path = safe_dir / "frames.json"
-    if not frames_path.exists():
-        raise HTTPException(status_code=404, detail="frames.json not found")
+    # 2. Local disk fallback.
+    output_dir = row["output_dir"] or ""
+    if output_dir:
+        safe_dir   = safe_resolve(output_dir, label="output_dir")
+        local_path = safe_dir / filename
+        if local_path.exists():
+            return success(read_json_file(local_path))
 
-    return success(read_json_file(frames_path))
+    # 3. S3 fallback.
+    try:
+        data = await asyncio.to_thread(_s3_download_json, meta_key(session_id, filename))
+        if data:
+            return success(data)
+    except Exception as exc:
+        logger.warning("frames_meta_s3_fallback_failed", session=session_id[:8], error=str(exc))
+
+    raise HTTPException(status_code=404, detail="frames-meta not available")
 
 
 @router.get("/api/sessions/{session_id}/frame/{frame_index}")

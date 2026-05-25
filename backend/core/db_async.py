@@ -17,6 +17,7 @@ Usage:
     await update_session(session_id, status="done", render_path="svg")
 """
 
+import json
 import uuid
 import structlog
 from contextlib import asynccontextmanager
@@ -35,16 +36,34 @@ logger = structlog.get_logger(__name__)
 _pool: Optional[asyncpg.Pool] = None
 
 
+def _encode_jsonb(value):
+    return json.dumps(value)
+
+def _decode_jsonb(value):
+    return json.loads(value)
+
+async def _init_connection(conn) -> None:
+    """Register Python ↔ PostgreSQL JSONB codec on every new pool connection."""
+    await conn.set_type_codec(
+        "jsonb",
+        encoder=_encode_jsonb,
+        decoder=_decode_jsonb,
+        schema="pg_catalog",
+        format="text",
+    )
+
 async def init_pool() -> None:
     global _pool
     _pool = await asyncpg.create_pool(
         DATABASE_URL,
-        min_size=2,
+        min_size=3,
         max_size=50,
         command_timeout=30,
         statement_cache_size=100,
+        max_inactive_connection_lifetime=240,
+        init=_init_connection,
     )
-    logger.info("asyncpg_pool_created", max_size=50)
+    logger.info("asyncpg_pool_created", min_size=3, max_size=50)
 
 
 async def close_pool() -> None:
@@ -66,15 +85,24 @@ def _get_pool() -> asyncpg.Pool:
 async def get_async_db():
     """
     Yield an asyncpg Connection inside an implicit transaction.
+    Use for any endpoint that writes to the DB (INSERT/UPDATE/DELETE).
     Commits on success, rolls back on any exception, returns connection to pool.
-
-    Usage:
-        async with get_async_db() as conn:
-            await conn.execute("UPDATE ...", ...)
     """
     async with _get_pool().acquire(timeout=5.0) as conn:
         async with conn.transaction():
             yield conn
+
+
+@asynccontextmanager
+async def get_async_db_read():
+    """
+    Yield an asyncpg Connection WITHOUT a transaction — for SELECT-only endpoints.
+
+    Skipping BEGIN/COMMIT saves 2 RTTs (~700ms at India→us-east-1 latency)
+    per call vs get_async_db(). Never use this for writes.
+    """
+    async with _get_pool().acquire(timeout=5.0) as conn:
+        yield conn
 
 
 # ── Shared helpers ─────────────────────────────────────────────────────────────
@@ -90,6 +118,7 @@ _ALLOWED_SESSION_COLUMNS: frozenset[str] = frozenset({
     "ui_output_file", "api_call_count", "prompt_tokens", "completion_tokens",
     "total_tokens", "model_name", "video_path", "merged_video_path",
     "research_mode", "sources_json", "stages_json", "synthesis_text",
+    "frames_meta",
 })
 
 
@@ -419,7 +448,9 @@ async def init_db() -> None:
     """
     Create all tables and indexes if they don't exist.
     Safe to call on every startup — all statements use IF NOT EXISTS.
-    Uses asyncpg directly so the lifespan can await it without to_thread.
+
+    All DDL is batched into a single conn.execute() call so startup only
+    pays 1 round-trip to RDS instead of 14 (saves ~4.5s at India→us-east-1 latency).
     """
     async with get_async_db() as conn:
         await conn.execute("""
@@ -432,18 +463,16 @@ async def init_db() -> None:
                 last_login    TIMESTAMPTZ NOT NULL,
                 password_hash TEXT,
                 auth_provider TEXT DEFAULT 'google'
-            )
-        """)
-        await conn.execute("""
+            );
+
             CREATE TABLE IF NOT EXISTS refresh_tokens (
                 token      TEXT PRIMARY KEY,
                 user_id    TEXT NOT NULL,
                 expires_at TIMESTAMPTZ NOT NULL,
                 created_at TIMESTAMPTZ NOT NULL,
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-            )
-        """)
-        await conn.execute("""
+            );
+
             CREATE TABLE IF NOT EXISTS conversations (
                 id                TEXT PRIMARY KEY,
                 title             TEXT NOT NULL,
@@ -453,9 +482,8 @@ async def init_db() -> None:
                 user_id           TEXT,
                 starred           INTEGER DEFAULT 0,
                 deleted_at        TIMESTAMPTZ
-            )
-        """)
-        await conn.execute("""
+            );
+
             CREATE TABLE IF NOT EXISTS sessions (
                 id                 TEXT PRIMARY KEY,
                 prompt             TEXT NOT NULL,
@@ -480,10 +508,13 @@ async def init_db() -> None:
                 research_mode      TEXT DEFAULT 'instant',
                 sources_json       TEXT,
                 stages_json        TEXT,
-                synthesis_text     TEXT
-            )
-        """)
-        await conn.execute("""
+                synthesis_text     TEXT,
+                frames_meta        JSONB
+            );
+
+            -- Idempotent column addition for databases created before frames_meta existed.
+            ALTER TABLE sessions ADD COLUMN IF NOT EXISTS frames_meta JSONB;
+
             CREATE TABLE IF NOT EXISTS conversation_notes (
                 conversation_id  TEXT NOT NULL,
                 user_id          TEXT NOT NULL,
@@ -492,25 +523,21 @@ async def init_db() -> None:
                 PRIMARY KEY (conversation_id, user_id),
                 FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
                 FOREIGN KEY (user_id)         REFERENCES users(id)         ON DELETE CASCADE
-            )
-        """)
+            );
 
-        await conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)")
-        await conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_conversation_id ON sessions(conversation_id)")
-        await conn.execute("CREATE INDEX IF NOT EXISTS idx_conversations_user_id ON conversations(user_id)")
-        await conn.execute("CREATE INDEX IF NOT EXISTS idx_conversations_updated_at ON conversations(updated_at DESC)")
-        await conn.execute("CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id ON refresh_tokens(user_id)")
-        await conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status)")
-        await conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_created_at ON sessions(created_at DESC)")
-        await conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_conversations_deleted "
-            "ON conversations(deleted_at) WHERE deleted_at IS NOT NULL"
-        )
-        await conn.execute(
-            "CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_conv_turn_user "
-            "ON sessions(conversation_id, turn_index, user_id) "
-            "WHERE conversation_id IS NOT NULL"
-        )
+            CREATE INDEX IF NOT EXISTS idx_sessions_user_id          ON sessions(user_id);
+            CREATE INDEX IF NOT EXISTS idx_sessions_conversation_id  ON sessions(conversation_id);
+            CREATE INDEX IF NOT EXISTS idx_conversations_user_id     ON conversations(user_id);
+            CREATE INDEX IF NOT EXISTS idx_conversations_updated_at  ON conversations(updated_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id    ON refresh_tokens(user_id);
+            CREATE INDEX IF NOT EXISTS idx_sessions_status           ON sessions(status);
+            CREATE INDEX IF NOT EXISTS idx_sessions_created_at       ON sessions(created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_conversations_deleted
+                ON conversations(deleted_at) WHERE deleted_at IS NOT NULL;
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_conv_turn_user
+                ON sessions(conversation_id, turn_index, user_id)
+                WHERE conversation_id IS NOT NULL;
+        """)
 
     logger.info("database_initialised", backend="asyncpg")
 

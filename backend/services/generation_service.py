@@ -35,7 +35,7 @@ from core.s3 import (
     download_json as _s3_download_json,
     download_text as _s3_download_text,
 )
-from core.db_async import get_async_db, collect_ancestor_chain
+from core.db_async import get_async_db, collect_ancestor_chain, update_session
 from services.frame_generation.planner import (
     GenerationPlan,
     _vocab_plan_to_generation_plan,
@@ -168,16 +168,15 @@ def _append_summary_slide(
 # ── S3 upload helpers ─────────────────────────────────────────────────────────
 
 async def _upload_frames_to_s3(local_paths: list, session_id: str) -> list:
-    """Upload frame PNGs to S3; return CDN URLs, falling back to local path on error."""
-    cdn = []
-    for i, path in enumerate(local_paths):
+    """Upload frame PNGs to S3 in parallel; return CDN URLs, falling back to local path on error."""
+    async def _one(i: int, path: str) -> str:
         try:
-            url = await asyncio.to_thread(_s3_upload_frame, path, session_id, i)
-            cdn.append(url)
+            return await asyncio.to_thread(_s3_upload_frame, path, session_id, i)
         except Exception as exc:
             logger.warning("s3_frame_upload_failed", session=session_id, index=i, error=str(exc))
-            cdn.append(path)
-    return cdn
+            return path
+
+    return list(await asyncio.gather(*(_one(i, p) for i, p in enumerate(local_paths))))
 
 
 # ── Conversation context builders ─────────────────────────────────────────────
@@ -421,26 +420,40 @@ async def _run_beat_pipeline(
 
     assembled = await assemble_beats(mp4s, os.path.join(output_dir, "session_final.mp4"))
 
+    _local_assembled = assembled
     try:
         assembled = await asyncio.to_thread(_s3_upload_video, assembled, session_id)
+        logger.info("beat_video_path_resolved",
+                    session=session_id,
+                    storage="s3",
+                    video_path=assembled)
     except Exception as exc:
-        logger.warning("s3_video_upload_failed", session=session_id, error=str(exc))
+        logger.warning("s3_video_upload_failed",
+                       session=session_id,
+                       error=str(exc),
+                       fallback_path=_local_assembled)
+        logger.warning("beat_video_path_resolved",
+                       session=session_id,
+                       storage="local",
+                       video_path=assembled)
 
     yield {"type": "stage_done", "stage": "assembling", "duration_s": round(time.time() - t_assemble, 2)}
 
-    # Persist frames.json for SessionView
-    frames_data = json.dumps({
+    # Persist frames metadata — DB is the primary store; disk + S3 are backups.
+    _beats_frames_dict = {
         "render_path":         "beats",
         "video_path":          assembled,
         "captions":            captions,
         "suggested_followups": script.suggested_followups,
         "notes":               "\n".join(script.notes),
-    }, indent=2)
+    }
+    frames_data = json.dumps(_beats_frames_dict, indent=2)
     os.makedirs(output_dir, exist_ok=True)
     await asyncio.to_thread(
         Path(os.path.join(output_dir, "frames.json")).write_text,
         frames_data, "utf-8",
     )
+    await update_session(session_id, frames_meta=_beats_frames_dict)
     try:
         await asyncio.to_thread(_s3_upload_frames_json, frames_data.encode(), session_id)
     except Exception as exc:
@@ -600,15 +613,23 @@ async def _run_frame_generation(
         )
 
         all_images = await _upload_frames_to_s3(all_images, session_id)
+        _s3_count  = sum(1 for u in all_images if u.startswith("https://"))
+        logger.info("manim_frames_path_resolved",
+                    session=session_id,
+                    total=len(all_images),
+                    s3=_s3_count,
+                    local=len(all_images) - _s3_count)
 
-        _manim_frames_data = json.dumps(
-            {"render_path": "manim", "images": all_images, "captions": all_captions,
-             "suggested_followups": suggested_followups, "notes": notes}, indent=2
-        )
+        _manim_frames_dict = {
+            "render_path": "manim", "images": all_images, "captions": all_captions,
+            "suggested_followups": suggested_followups, "notes": notes,
+        }
+        _manim_frames_data = json.dumps(_manim_frames_dict, indent=2)
         await asyncio.to_thread(
             Path(os.path.join(output_dir, "frames.json")).write_text,
             _manim_frames_data, "utf-8",
         )
+        await update_session(session_id, frames_meta=_manim_frames_dict)
         try:
             await asyncio.to_thread(_s3_upload_frames_json, _manim_frames_data.encode(), session_id)
         except Exception as exc:
@@ -649,12 +670,19 @@ async def _run_frame_generation(
     )
 
     all_images = await _upload_frames_to_s3(all_images, session_id)
+    _s3_count  = sum(1 for u in all_images if u.startswith("https://"))
+    logger.info("svg_frames_path_resolved",
+                session=session_id,
+                total=len(all_images),
+                s3=_s3_count,
+                local=len(all_images) - _s3_count)
 
     ui_output_file = os.path.join(output_dir, "final_output.json")
-    _svg_frames_data = json.dumps(
-        {"render_path": "svg", "images": all_images, "captions": all_captions,
-         "suggested_followups": suggested_followups, "notes": notes}, indent=2
-    )
+    _svg_frames_dict = {
+        "render_path": "svg", "images": all_images, "captions": all_captions,
+        "suggested_followups": suggested_followups, "notes": notes,
+    }
+    _svg_frames_data = json.dumps(_svg_frames_dict, indent=2)
     _svg_ui_data = json.dumps(
         {"render_path": "svg", "images": all_images, "captions": all_captions}, indent=2
     )
@@ -662,6 +690,7 @@ async def _run_frame_generation(
         Path(os.path.join(output_dir, "frames.json")).write_text, _svg_frames_data, "utf-8"
     )
     await asyncio.to_thread(Path(ui_output_file).write_text, _svg_ui_data, "utf-8")
+    await update_session(session_id, frames_meta=_svg_frames_dict)
     try:
         await asyncio.to_thread(_s3_upload_frames_json, _svg_frames_data.encode(), session_id)
     except Exception as exc:

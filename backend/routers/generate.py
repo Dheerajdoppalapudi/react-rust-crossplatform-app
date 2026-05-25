@@ -525,7 +525,11 @@ async def _generate_stream(p: dict):
 
     except asyncio.CancelledError:
         logger.info("generate_cancelled", session=session_id)
-        await update_session(session_id, status="error")
+        # Fire-and-forget: don't await inside a CancelledError handler.
+        # Awaiting here races against the pool connections being torn down by
+        # the same request, causing acquire-timeout errors. create_task schedules
+        # the write after the current coroutine exits.
+        asyncio.create_task(update_session(session_id, status="error"))
         raise
 
     except Exception as exc:

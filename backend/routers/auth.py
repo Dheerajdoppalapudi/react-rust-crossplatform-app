@@ -57,9 +57,16 @@ class PasswordLoginRequest(BaseModel):
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _create_access_token(user_id: str) -> str:
+def _create_access_token(user: User) -> str:
     expire  = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    payload = {"sub": user_id, "exp": expire}
+    payload = {
+        "sub":           user.id,
+        "email":         user.email,
+        "name":          user.name,
+        "avatar":        user.avatar,
+        "auth_provider": user.auth_provider,
+        "exp":           expire,
+    }
     return jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
 
 
@@ -132,7 +139,7 @@ async def login_with_google(request: Request, body: GoogleLoginRequest, response
     )
     await upsert_user(user)
 
-    access_token  = _create_access_token(user.id)
+    access_token  = _create_access_token(user)
     refresh_token = await create_refresh_token(user.id)
     _set_refresh_cookie(response, refresh_token)
 
@@ -181,7 +188,7 @@ async def refresh_token(response: Response, refresh_token: str = Cookie(default=
             detail="User not found",
         )
 
-    access_token = _create_access_token(user_id)
+    access_token = _create_access_token(user)
     _set_refresh_cookie(response, new_refresh_token)
 
     return success({
@@ -246,7 +253,7 @@ async def register(request: Request, body: RegisterRequest, response: Response):
         password_hash=password_hash.decode(),
     )
 
-    access_token  = _create_access_token(user.id)
+    access_token  = _create_access_token(user)
     refresh_token = await create_refresh_token(user.id)
     _set_refresh_cookie(response, refresh_token)
 
@@ -301,7 +308,7 @@ async def login_with_password(request: Request, body: PasswordLoginRequest, resp
             detail="Invalid email or password",
         )
 
-    access_token  = _create_access_token(existing.id)
+    access_token  = _create_access_token(existing)
     refresh_token = await create_refresh_token(existing.id)
     _set_refresh_cookie(response, refresh_token)
 

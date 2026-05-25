@@ -1,4 +1,5 @@
 import { useRef, useCallback, useEffect } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { api } from '../services/api'
 import { createTempTurn, normalizeFramesData } from '../components/Studio/studioUtils'
 import { withSpan } from '../lib/sentry.js'
@@ -75,6 +76,7 @@ export function useGeneration({
   scrollToTop,
   toast,
 }) {
+  const queryClient        = useQueryClient()
   const generationIdRef    = useRef(0)
   const generationAbortRef = useRef(null)
   const lastSubmitRef      = useRef(0)
@@ -341,6 +343,8 @@ export function useGeneration({
       }
 
       await onConversationsRefresh()
+      // Mark cached conversation as stale so the next load gets fresh data.
+      queryClient.invalidateQueries({ queryKey: ['conversation', done.conversation_id] })
 
       if (videoEnabled) {
         if (isFirstTurn) {
@@ -377,7 +381,7 @@ export function useGeneration({
 
     }) // end withSpan
   }, [
-    isAnyGenerating, lastCompletedTurnId, activeConvId, notesEnabled, videoEnabled,
+    queryClient, isAnyGenerating, lastCompletedTurnId, activeConvId, notesEnabled, videoEnabled,
     pauseContext, selectedModel, selectedRenderMode, selectedMode, stagedFiles,
     onActiveConvIdChange, onConversationsRefresh, runVideoGenerationForTurn,
     scrollToTop, toast, loadedConvIdRef, setBootstrap, setPauseContext, setPrompt, setTurns,
@@ -466,6 +470,7 @@ export function useGeneration({
       } : t))
 
       await onConversationsRefresh()
+      queryClient.invalidateQueries({ queryKey: ['conversation', done.conversation_id] })
       if (effectiveVideoEnabled) runVideoGenerationForTurn(tempId, done.session_id)
 
     } catch (err) {
@@ -480,7 +485,7 @@ export function useGeneration({
       ))
     }
   }, [
-    activeConvId, notesEnabled, videoEnabled, selectedModel, selectedRenderMode,
+    queryClient, activeConvId, notesEnabled, videoEnabled, selectedModel, selectedRenderMode,
     onConversationsRefresh, runVideoGenerationForTurn, toast, setTurns,
   ])
 
@@ -557,6 +562,7 @@ export function useGeneration({
       } : t))
 
       await onConversationsRefresh()
+      queryClient.invalidateQueries({ queryKey: ['conversation', done.conversation_id] })
       if (videoEnabled) runVideoGenerationForTurn(turn.tempId, done.session_id)
 
     } catch (err) {
@@ -574,7 +580,7 @@ export function useGeneration({
       ))
     }
   }, [
-    activeConvId, notesEnabled, videoEnabled, selectedModel, selectedRenderMode,
+    queryClient, activeConvId, notesEnabled, videoEnabled, selectedModel, selectedRenderMode,
     onConversationsRefresh, runVideoGenerationForTurn, toast, setTurns,
   ])
 
