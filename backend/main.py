@@ -27,6 +27,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -77,6 +78,7 @@ try:
 except ImportError:
     logger.warning("prometheus-client not installed — /metrics endpoint unavailable")
 
+app.add_middleware(GZipMiddleware, minimum_size=500)  # compress responses > 500 bytes
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
@@ -101,17 +103,10 @@ async def security_headers_middleware(request: Request, call_next):
     response.headers["Referrer-Policy"]         = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"]      = "camera=(), microphone=(), geolocation=()"
     response.headers["Content-Security-Policy"] = (
-        "default-src 'self'; "
-        # Interactive mode embeds P5.js / Prism / Chart.js via CDN inside srcdoc iframes
-        "script-src 'self' 'unsafe-inline' "
-        "https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://unpkg.com; "
-        "style-src 'self' 'unsafe-inline' "
-        "https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://fonts.googleapis.com; "
-        "font-src 'self' https://fonts.gstatic.com; "
+        # Pure API backend — serves JSON/SSE only, no HTML pages.
+        # script-src and style-src are omitted; default-src 'none' covers them.
+        "default-src 'none'; "
         "connect-src 'self'; "
-        "media-src 'self' blob:; "
-        "img-src 'self' data: blob:; "
-        "frame-src 'self' blob:; "
         "frame-ancestors 'none'"
     )
     if COOKIE_SECURE:
@@ -142,13 +137,13 @@ async def request_id_middleware(request: Request, call_next):
 
 # ── Routers ───────────────────────────────────────────────────────────────────
 
-app.include_router(auth.router)
-app.include_router(generate.router)
-app.include_router(conversations.router)
-app.include_router(sessions.router)
-app.include_router(video.router)
-app.include_router(upload.router)
-app.include_router(export.router)
+app.include_router(auth.router)                                    # /auth/...
+app.include_router(generate.router,       prefix="/api/v1")        # /api/v1/generate
+app.include_router(conversations.router,  prefix="/api/v1")        # /api/v1/conversations/...
+app.include_router(sessions.router,       prefix="/api/v1")        # /api/v1/sessions/...
+app.include_router(video.router,          prefix="/api/v1")        # /api/v1/sessions/.../video
+app.include_router(upload.router,         prefix="/api/v1")        # /api/v1/upload
+app.include_router(export.router,         prefix="/api/v1")        # /api/v1/export/...
 
 # ── Exception handlers ────────────────────────────────────────────────────────
 # All error responses follow the same envelope: { "status": "error", "error": "..." }

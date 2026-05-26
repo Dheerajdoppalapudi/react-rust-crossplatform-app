@@ -159,7 +159,7 @@ async def toggle_star_conversation(conv_id: str, user_id: str) -> Optional[bool]
     async with get_async_db() as conn:
         row = await conn.fetchrow(
             "UPDATE conversations "
-            "SET starred = 1 - COALESCE(starred, 0), updated_at = $1 "
+            "SET starred = NOT COALESCE(starred, false), updated_at = $1 "
             "WHERE id = $2 AND user_id = $3 AND deleted_at IS NULL "
             "RETURNING starred",
             _now(), conv_id, user_id,
@@ -184,7 +184,7 @@ async def soft_delete_conversation(conv_id: str, user_id: str) -> bool:
 async def get_conversation_notes(
     conversation_id: str, user_id: str
 ) -> Optional[dict]:
-    async with get_async_db() as conn:
+    async with get_async_db_read() as conn:
         row = await conn.fetchrow(
             "SELECT content, updated_at FROM conversation_notes "
             "WHERE conversation_id = $1 AND user_id = $2",
@@ -247,6 +247,11 @@ async def insert_session(
                 parent_session_id, parent_frame_index, user_id,
             )
             turn_index = row["turn_index"] if row else 1
+        if conversation_id:
+            await conn.execute(
+                "UPDATE conversations SET turn_count = turn_count + 1 WHERE id = $1",
+                conversation_id,
+            )
     return turn_index or 1
 
 
@@ -287,7 +292,7 @@ async def upsert_user(user: User) -> None:
 
 
 async def get_user_by_id(user_id: str) -> Optional[User]:
-    async with get_async_db() as conn:
+    async with get_async_db_read() as conn:
         row = await conn.fetchrow(
             "SELECT * FROM users WHERE id = $1", user_id
         )
@@ -297,7 +302,7 @@ async def get_user_by_id(user_id: str) -> Optional[User]:
 
 
 async def get_user_by_email(email: str) -> Optional[User]:
-    async with get_async_db() as conn:
+    async with get_async_db_read() as conn:
         row = await conn.fetchrow(
             "SELECT * FROM users WHERE email = $1", email
         )
@@ -307,7 +312,7 @@ async def get_user_by_email(email: str) -> Optional[User]:
 
 
 async def get_user_password_hash(email: str) -> Optional[str]:
-    async with get_async_db() as conn:
+    async with get_async_db_read() as conn:
         row = await conn.fetchrow(
             "SELECT password_hash FROM users WHERE email = $1", email
         )
@@ -416,7 +421,7 @@ async def collect_ancestor_chain(
     if not parent_session_id:
         return []
 
-    async with get_async_db() as conn:
+    async with get_async_db_read() as conn:
         rows = await conn.fetch(
             """
             WITH RECURSIVE chain AS (
@@ -480,7 +485,8 @@ async def init_db() -> None:
                 updated_at        TIMESTAMPTZ NOT NULL,
                 merged_video_path TEXT,
                 user_id           TEXT,
-                starred           INTEGER DEFAULT 0,
+                starred           BOOLEAN DEFAULT false,
+                turn_count        INTEGER DEFAULT 0,
                 deleted_at        TIMESTAMPTZ
             );
 
@@ -500,20 +506,21 @@ async def init_db() -> None:
                 total_tokens       INTEGER DEFAULT 0,
                 model_name         TEXT,
                 video_path         TEXT,
-                conversation_id    TEXT,
+                conversation_id    TEXT REFERENCES conversations(id) ON DELETE SET NULL,
                 turn_index         INTEGER DEFAULT 1,
                 parent_session_id  TEXT,
                 parent_frame_index INTEGER,
-                user_id            TEXT,
+                user_id            TEXT REFERENCES users(id) ON DELETE CASCADE,
                 research_mode      TEXT DEFAULT 'instant',
-                sources_json       TEXT,
-                stages_json        TEXT,
+                sources_json       JSONB,
+                stages_json        JSONB,
                 synthesis_text     TEXT,
                 frames_meta        JSONB
             );
 
-            -- Idempotent column addition for databases created before frames_meta existed.
+            -- Idempotent column additions for databases created before these columns existed.
             ALTER TABLE sessions ADD COLUMN IF NOT EXISTS frames_meta JSONB;
+            ALTER TABLE conversations ADD COLUMN IF NOT EXISTS turn_count INTEGER DEFAULT 0;
 
             CREATE TABLE IF NOT EXISTS conversation_notes (
                 conversation_id  TEXT NOT NULL,
@@ -532,6 +539,9 @@ async def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id    ON refresh_tokens(user_id);
             CREATE INDEX IF NOT EXISTS idx_sessions_status           ON sessions(status);
             CREATE INDEX IF NOT EXISTS idx_sessions_created_at       ON sessions(created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_sessions_user_created     ON sessions(user_id, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_sessions_parent           ON sessions(parent_session_id);
+            CREATE INDEX IF NOT EXISTS idx_refresh_expires           ON refresh_tokens(expires_at);
             CREATE INDEX IF NOT EXISTS idx_conversations_deleted
                 ON conversations(deleted_at) WHERE deleted_at IS NOT NULL;
             CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_conv_turn_user

@@ -52,11 +52,11 @@ export const RawTurnSchema = z.object({
   intent_type:        z.string().nullable().optional(),
   parent_session_id:  z.string().nullable().optional(),
   parent_frame_index: z.number().nullable().optional(),
-  stages_json:        z.string().nullable().optional(),
-  sources_json:       z.string().nullable().optional(),
+  stages_json:        z.array(z.any()).nullable().optional(),
+  sources_json:       z.array(z.any()).nullable().optional(),
   synthesis_text:     z.string().nullable().optional(),
-  // Inline frames metadata from the unified endpoint (P1 backend change).
-  frames_meta:        z.record(z.unknown()).nullable().optional(),
+  // True when DB has frames_meta stored — client should call /sessions/:id/frames-meta.
+  has_frames_meta:    z.boolean().optional(),
 })
 
 export const RawConversationSchema = z.object({

@@ -10,7 +10,7 @@
  *
  * Usage:
  *   const token = await getSessionMediaToken(sessionId)
- *   const url = `${API_BASE}/api/sessions/${sessionId}/video?token=${token}`
+ *   const url = `${API_BASE}/api/v1/sessions/${sessionId}/video?token=${token}`
  */
 
 import { API_BASE } from '../constants/api.js'
@@ -91,7 +91,7 @@ async function _getToken(cacheKey, endpoint) {
 export function getSessionMediaToken(sessionId) {
   return _getToken(
     `session:${sessionId}`,
-    `/api/sessions/${sessionId}/media-token`,
+    `/api/v1/sessions/${sessionId}/media-token`,
   )
 }
 
@@ -105,7 +105,7 @@ export function getSessionMediaToken(sessionId) {
 export function getConversationMediaToken(conversationId) {
   return _getToken(
     `conv:${conversationId}`,
-    `/api/conversations/${conversationId}/media-token`,
+    `/api/v1/conversations/${conversationId}/media-token`,
   )
 }
 

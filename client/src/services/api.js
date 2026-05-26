@@ -274,7 +274,7 @@ export const api = {
     const token = getAccessToken()
     let res
     try {
-      res = await fetch(`${API_BASE}/api/generate`, {
+      res = await fetch(`${API_BASE}/api/v1/generate`, {
         method: 'POST',
         credentials: 'include',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -303,14 +303,14 @@ export const api = {
   uploadFiles: async (files) => {
     const form = new FormData()
     files.forEach(f => form.append('files', f))
-    return _request(`${API_BASE}/api/upload`, { method: 'POST', body: form, timeout: null })
+    return _request(`${API_BASE}/api/v1/upload`, { method: 'POST', body: form, timeout: null })
   },
 
   chatWithFiles: async (message, files = []) => {
     const formData = new FormData()
     formData.append('message', message)
     files.forEach((file) => formData.append('files', file))
-    return _request(`${API_BASE}/api/chat-with-files`, { method: 'POST', body: formData })
+    return _request(`${API_BASE}/api/v1/chat-with-files`, { method: 'POST', body: formData })
   },
 
   // ── Conversations ─────────────────────────────────────────────────────────────
@@ -318,8 +318,8 @@ export const api = {
   // Returns { items, next_cursor, has_more } — paginated, 30 per page.
   getConversations: async ({ cursor } = {}) => {
     const url = cursor
-      ? `${API_BASE}/api/conversations?cursor=${encodeURIComponent(cursor)}`
-      : `${API_BASE}/api/conversations`
+      ? `${API_BASE}/api/v1/conversations?cursor=${encodeURIComponent(cursor)}`
+      : `${API_BASE}/api/v1/conversations`
     return _request(url)
   },
 
@@ -327,7 +327,7 @@ export const api = {
   // signal: optional AbortSignal to cancel the request (e.g. on conversation switch).
   getConversation: async (convId, signal = null) => {
     try {
-      return await _request(`${API_BASE}/api/conversations/${convId}`, { signal })
+      return await _request(`${API_BASE}/api/v1/conversations/${convId}`, { signal })
     } catch (err) {
       if (err?.name === 'AbortError') throw err   // re-throw so caller can detect cancellation
       return null
@@ -337,18 +337,18 @@ export const api = {
   // Returns the conversation tree or null on any error.
   getConversationTree: async (convId) => {
     try {
-      return await _request(`${API_BASE}/api/conversations/${convId}/tree`)
+      return await _request(`${API_BASE}/api/v1/conversations/${convId}/tree`)
     } catch {
       return null
     }
   },
 
   mergeConversation: async (convId) => {
-    return _request(`${API_BASE}/api/conversations/${convId}/merge`, { method: 'POST' })
+    return _request(`${API_BASE}/api/v1/conversations/${convId}/merge`, { method: 'POST' })
   },
 
   renameConversation: async (convId, title) => {
-    return _request(`${API_BASE}/api/conversations/${convId}`, {
+    return _request(`${API_BASE}/api/v1/conversations/${convId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title }),
@@ -356,24 +356,24 @@ export const api = {
   },
 
   starConversation: async (convId) => {
-    return _request(`${API_BASE}/api/conversations/${convId}/star`, { method: 'POST' })
+    return _request(`${API_BASE}/api/v1/conversations/${convId}/star`, { method: 'POST' })
   },
 
   deleteConversation: async (convId) => {
-    return _request(`${API_BASE}/api/conversations/${convId}`, { method: 'DELETE' })
+    return _request(`${API_BASE}/api/v1/conversations/${convId}`, { method: 'DELETE' })
   },
 
   // Returns { content, updated_at } or null on error.
   getConversationNotes: async (convId) => {
     try {
-      return await _request(`${API_BASE}/api/conversations/${convId}/notes`)
+      return await _request(`${API_BASE}/api/v1/conversations/${convId}/notes`)
     } catch {
       return null
     }
   },
 
   updateConversationNotes: async (convId, content) => {
-    return _request(`${API_BASE}/api/conversations/${convId}/notes`, {
+    return _request(`${API_BASE}/api/v1/conversations/${convId}/notes`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ content }),
@@ -386,7 +386,7 @@ export const api = {
   // signal: optional AbortSignal to cancel (e.g. when loading a different conversation).
   getFramesMeta: async (sessionId, signal = null) => {
     try {
-      return await _request(`${API_BASE}/api/sessions/${sessionId}/frames-meta`, { signal })
+      return await _request(`${API_BASE}/api/v1/sessions/${sessionId}/frames-meta`, { signal })
     } catch (err) {
       if (err?.name === 'AbortError') return null   // cancelled — caller checks loadSignal.aborted
       return null
@@ -410,7 +410,7 @@ export const api = {
     const token = getAccessToken()
     let res
     try {
-      res = await fetch(`${API_BASE}/api/generate_video/${sessionId}?use_openai_tts=true`, {
+      res = await fetch(`${API_BASE}/api/v1/generate_video/${sessionId}?use_openai_tts=true`, {
         method: 'POST',
         credentials: 'include',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -442,12 +442,12 @@ export const api = {
   // to handle caching and auto-refresh automatically.
 
   getSessionMediaToken: (sessionId) => {
-    return _request(`${API_BASE}/api/sessions/${sessionId}/media-token`, { method: 'POST' })
+    return _request(`${API_BASE}/api/v1/sessions/${sessionId}/media-token`, { method: 'POST' })
       .then((data) => data.media_token)
   },
 
   getConversationMediaToken: (conversationId) => {
-    return _request(`${API_BASE}/api/conversations/${conversationId}/media-token`, { method: 'POST' })
+    return _request(`${API_BASE}/api/v1/conversations/${conversationId}/media-token`, { method: 'POST' })
       .then((data) => data.media_token)
   },
 }

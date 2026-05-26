@@ -63,13 +63,13 @@ export function useMediaUrl(sessionId) {
   }, [sessionId, fetchToken])
 
   const videoUrl = sessionId && token
-    ? `${API_BASE}/api/sessions/${sessionId}/video?token=${token}`
+    ? `${API_BASE}/api/v1/sessions/${sessionId}/video?token=${token}`
     : ''
 
   const getFrameUrl = useCallback(
     (frameIndex) =>
       sessionId && token
-        ? `${API_BASE}/api/sessions/${sessionId}/frame/${frameIndex}?token=${token}`
+        ? `${API_BASE}/api/v1/sessions/${sessionId}/frame/${frameIndex}?token=${token}`
         : '',
     [sessionId, token],
   )

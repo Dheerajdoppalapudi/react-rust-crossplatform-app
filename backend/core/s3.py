@@ -21,6 +21,7 @@ The DB stores video_ready: bool (sessions) or a CDN URL (merged_video_path on co
 
 import io
 import json
+import re
 from pathlib import Path
 from typing import Any, Optional
 
@@ -69,8 +70,15 @@ def narration_key(session_id: str) -> str:
 def activity_log_key(session_id: str) -> str:
     return meta_key(session_id, "activity_log.json")
 
+def _sanitize_filename(filename: str) -> str:
+    """Strip path components and remove all characters except alphanumerics, dash, underscore, dot."""
+    name = Path(filename).name  # strip any directory traversal attempt
+    name = re.sub(r"[^\w.\-]", "_", name)  # allow only safe chars
+    return name[:200] or "upload"           # cap length; never return empty string
+
+
 def upload_key(user_id: str, upload_id: str, filename: str) -> str:
-    return f"{user_id}/{upload_id}_{filename}"
+    return f"{user_id}/{upload_id}_{_sanitize_filename(filename)}"
 
 def cdn_url(key: str) -> str:
     return f"https://{CLOUDFRONT_DOMAIN}/{key}"

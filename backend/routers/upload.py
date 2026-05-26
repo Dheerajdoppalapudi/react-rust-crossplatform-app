@@ -45,7 +45,7 @@ def _user_upload_dir(user_id: str):
     return d
 
 
-@router.post("/api/upload")
+@router.post("/upload")
 @limiter.limit("20/minute", key_func=get_user_key)
 async def upload_files(
     request: Request,
@@ -88,7 +88,7 @@ async def upload_files(
     return success({"files": saved})
 
 
-@router.post("/api/chat-with-files")
+@router.post("/chat-with-files")
 @limiter.limit("20/minute", key_func=get_user_key)
 async def chat_with_files(
     request: Request,

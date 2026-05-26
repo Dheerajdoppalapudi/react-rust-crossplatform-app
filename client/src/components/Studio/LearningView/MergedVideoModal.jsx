@@ -49,7 +49,7 @@ export default function MergedVideoModal({ open, onClose, mergedVideoUrl, sessio
         const token = await getSessionMediaToken(s.id)
         if (cancelled) return
         const url = token
-          ? `${API_BASE}/api/sessions/${s.id}/video?token=${token}`
+          ? `${API_BASE}/api/v1/sessions/${s.id}/video?token=${token}`
           : ''
         if (!url) { finish(i, 0); return }
         const v   = document.createElement('video')

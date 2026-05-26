@@ -2,7 +2,7 @@
 Video router — SSE-streamed video generation and video download.
 
 Fixes applied:
-  CRIT-2: POST /api/sessions/{session_id}/media-token issues a short-lived,
+  CRIT-2: POST /sessions/{session_id}/media-token issues a short-lived,
           session-scoped token. The video download endpoint accepts either
           Authorization: Bearer <access_jwt> (programmatic clients) or
           ?token=<media_token> (browser <video src>) — the main access JWT
@@ -17,6 +17,7 @@ import asyncio
 import json
 import structlog
 import time
+import weakref
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -37,11 +38,11 @@ logger = structlog.get_logger(__name__)
 
 router = APIRouter()
 
-# Per-session asyncio locks — prevents duplicate ffmpeg runs if the user clicks
-# "Generate video" twice before the first assembly completes. asyncio.Lock is
-# coroutine-safe within a single worker process. For multi-process deployments,
-# replace with a Redis-backed distributed lock.
-_session_locks: dict[str, asyncio.Lock] = {}
+# Per-session asyncio locks — prevents duplicate ffmpeg runs for the same session.
+# WeakValueDictionary: the Lock is automatically removed once no coroutine holds
+# a reference to it (i.e. after assembly completes), so this dict never leaks.
+# For multi-process deployments, replace with a Redis-backed distributed lock.
+_session_locks: weakref.WeakValueDictionary[str, asyncio.Lock] = weakref.WeakValueDictionary()
 
 # Used by media download endpoints that accept ?token= without Authorization header.
 _bearer = HTTPBearer(auto_error=False)
@@ -60,7 +61,7 @@ def _sse(payload: dict) -> str:
 
 # ── Media token endpoint (CRIT-2) ─────────────────────────────────────────────
 
-@router.post("/api/sessions/{session_id}/media-token")
+@router.post("/sessions/{session_id}/media-token")
 async def get_media_token(
     session_id:   str,
     current_user: User = Depends(get_current_user),
@@ -90,7 +91,7 @@ async def get_media_token(
 
 # ── Video generation (SSE) ────────────────────────────────────────────────────
 
-@router.post("/api/generate_video/{session_id}")
+@router.post("/generate_video/{session_id}")
 async def generate_video(
     session_id:     str,
     use_openai_tts: bool = True,
@@ -285,7 +286,13 @@ async def generate_video(
                 "label": "Assembling video…", "elapsed_s": elapsed(),
             })
 
-            session_lock = _session_locks.setdefault(session_id, asyncio.Lock())
+            # Get existing lock or create a new one. The local variable `session_lock`
+            # holds a strong reference for the duration of this coroutine, keeping
+            # the WeakValueDictionary entry alive until assembly finishes.
+            session_lock = _session_locks.get(session_id)
+            if session_lock is None:
+                session_lock = asyncio.Lock()
+                _session_locks[session_id] = session_lock
             if session_lock.locked():
                 logger.warning("assembly_duplicate_blocked", session=session_id)
                 yield _sse({
@@ -372,7 +379,7 @@ async def generate_video(
 
 # ── Video download (CRIT-2, CRIT-3) ──────────────────────────────────────────
 
-@router.get("/api/sessions/{session_id}/video")
+@router.get("/sessions/{session_id}/video")
 async def get_session_video(
     session_id:  str,
     request:     Request,
@@ -385,7 +392,7 @@ async def get_session_video(
     CRIT-2: Accepts EITHER:
       - ?token=<media_token> query param — for browser <video src> elements that
         cannot set Authorization headers. The media token is short-lived (5 min)
-        and session-scoped, issued by POST /api/sessions/{id}/media-token.
+        and session-scoped, issued by POST /sessions/{id}/media-token.
       - Authorization: Bearer <access_jwt> — for programmatic / API clients.
 
     CRIT-3: video_path from DB is validated against OUTPUTS_DIR before serving.

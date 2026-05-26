@@ -4,6 +4,7 @@ import {
   useTheme, useMediaQuery, Drawer,
 } from '@mui/material'
 import EditNoteIcon from '@mui/icons-material/EditNote'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit    from '@tiptap/starter-kit'
@@ -31,18 +32,31 @@ const SAVED_RESET   = 3000  // ms before 'saved' reverts to 'idle'
 
 // ─── UserNotesPanel ───────────────────────────────────────────────────────────
 export default function UserNotesPanel({ conversationId, isOpen }) {
-  const theme    = useTheme()
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
-  const toast     = useToast()
+  const theme       = useTheme()
+  const isMobile    = useMediaQuery(theme.breakpoints.down('sm'))
+  const toast       = useToast()
+  const queryClient = useQueryClient()
 
   const [saveStatus,  setSaveStatus]  = useState('idle')    // 'idle'|'unsaved'|'saving'|'saved'|'error'
   const [lastSavedAt, setLastSavedAt] = useState(null)
-  const [isLoading,   setIsLoading]   = useState(false)
 
-  const debounceRef  = useRef(null)
+  const debounceRef   = useRef(null)
   const savedResetRef = useRef(null)
-  const pendingRef   = useRef(false)     // true while unsaved changes exist
-  const convIdRef    = useRef(null)      // tracks the convId in-flight saves belong to
+  const pendingRef    = useRef(false)  // true while unsaved changes exist
+  const convIdRef     = useRef(null)   // tracks which convId in-flight saves belong to
+  // Tracks which convId we have already loaded into the editor, so we don't
+  // overwrite the user's current edits when the query re-renders.
+  const editorConvIdRef = useRef(null)
+
+  // Subscribe to the same query key used by useConversation.
+  // React Query deduplicates the request — only one HTTP call is ever made.
+  // Notes are embedded in the unified conversation response (no separate fetch).
+  const { data: convData, isLoading } = useQuery({
+    queryKey: ['conversation', conversationId],
+    queryFn:  () => api.getConversation(conversationId),
+    enabled:  !!conversationId,
+    staleTime: 30_000,
+  })
 
   // ── TipTap editor ─────────────────────────────────────────────────────────────
   const editor = useEditor({
@@ -79,59 +93,62 @@ export default function UserNotesPanel({ conversationId, isOpen }) {
     try {
       const json = JSON.stringify(editorInstance.getJSON())
       const result = await api.updateConversationNotes(targetConvId, json)
-      if (result?.updated_at) {
-        setLastSavedAt(result.updated_at)
-      }
+      const savedAt = result?.updated_at ?? null
+      if (savedAt) setLastSavedAt(savedAt)
       setSaveStatus('saved')
       pendingRef.current = false
       clearTimeout(savedResetRef.current)
       savedResetRef.current = setTimeout(() => setSaveStatus('idle'), SAVED_RESET)
+      // Keep the cache in sync so switching back to this conversation shows the latest content.
+      queryClient.setQueryData(['conversation', targetConvId], (old) =>
+        old ? { ...old, notes: { content: json, updated_at: savedAt } } : old
+      )
     } catch {
       setSaveStatus('error')
       toast.error('Could not save notes. Please try again.')
     }
-  }, [toast])
+  }, [toast, queryClient])
 
   const scheduleSave = useCallback((editorInstance) => {
     clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => performSave(editorInstance), DEBOUNCE_MS)
   }, [performSave])
 
-  // ── Load notes when conversation changes ─────────────────────────────────────
+  // ── Flush + reset when conversation changes ───────────────────────────────────
   useEffect(() => {
-    // Flush any pending save for the previous conversation before switching
     if (pendingRef.current && debounceRef.current && convIdRef.current && editor) {
       clearTimeout(debounceRef.current)
       performSave(editor)
     }
-
-    // Reset
     clearTimeout(debounceRef.current)
     clearTimeout(savedResetRef.current)
     setSaveStatus('idle')
     setLastSavedAt(null)
-    pendingRef.current = false
-    convIdRef.current  = conversationId
+    pendingRef.current    = false
+    convIdRef.current     = conversationId
+    editorConvIdRef.current = null   // allow editor to be repopulated for new conversation
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversationId])
 
-    if (!conversationId || !editor) return
+  // ── Populate editor when query data arrives ────────────────────────────────────
+  // Fires once per conversation (editorConvIdRef guard prevents overwriting user edits
+  // on unrelated re-renders or background refetches).
+  useEffect(() => {
+    if (!editor || !convData || editorConvIdRef.current === conversationId) return
+    editorConvIdRef.current = conversationId
 
-    setIsLoading(true)
-    api.getConversationNotes(conversationId).then((data) => {
-      setIsLoading(false)
-      if (!data || data.content === null) {
-        editor.commands.setContent('')
-        return
-      }
+    const notesData = convData.notes
+    if (notesData?.content) {
       try {
-        const json = JSON.parse(data.content)
-        editor.commands.setContent(json, false) // false = don't trigger onUpdate
-        setLastSavedAt(data.updated_at)
+        editor.commands.setContent(JSON.parse(notesData.content), false)
+        setLastSavedAt(notesData.updated_at ?? null)
       } catch {
         editor.commands.setContent('')
       }
-    })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conversationId])
+    } else {
+      editor.commands.setContent('')
+    }
+  }, [convData, conversationId, editor])
 
   // Flush on unmount
   useEffect(() => {

@@ -35,10 +35,10 @@ export const handlers = [
   ),
 
   // Conversations
-  http.get(`${BASE}/api/conversations`, () =>
+  http.get(`${BASE}/api/v1/conversations`, () =>
     HttpResponse.json({ status: 'success', data: [fixtures.conversation] })
   ),
-  http.get(`${BASE}/api/conversations/:convId`, ({ params }) =>
+  http.get(`${BASE}/api/v1/conversations/:convId`, ({ params }) =>
     HttpResponse.json({
       status: 'success',
       data: {
@@ -48,18 +48,18 @@ export const handlers = [
       },
     })
   ),
-  http.patch(`${BASE}/api/conversations/:convId`, () =>
+  http.patch(`${BASE}/api/v1/conversations/:convId`, () =>
     HttpResponse.json({ status: 'success', data: { title: 'Renamed' } })
   ),
-  http.delete(`${BASE}/api/conversations/:convId`, () =>
+  http.delete(`${BASE}/api/v1/conversations/:convId`, () =>
     HttpResponse.json({ status: 'success', data: {} })
   ),
-  http.post(`${BASE}/api/conversations/:convId/star`, () =>
+  http.post(`${BASE}/api/v1/conversations/:convId/star`, () =>
     HttpResponse.json({ status: 'success', data: { starred: true } })
   ),
 
   // Sessions
-  http.get(`${BASE}/api/sessions/:sessionId/frames-meta`, () =>
+  http.get(`${BASE}/api/v1/sessions/:sessionId/frames-meta`, () =>
     HttpResponse.json({
       status: 'success',
       data: { captions: ['Frame 1', 'Frame 2'], images: [], frame_count: 2 },
@@ -67,7 +67,7 @@ export const handlers = [
   ),
 
   // Generation (unified SSE endpoint)
-  http.post(`${BASE}/api/generate`, () =>
+  http.post(`${BASE}/api/v1/generate`, () =>
     new HttpResponse(
       'data: {"type":"done","session_id":"sess-new","conversation_id":"conv-1","turn_index":1,"render_path":"interactive"}\n\n',
       { headers: { 'Content-Type': 'text/event-stream' } }

@@ -10,6 +10,7 @@ Fixes applied:
 import asyncio
 import json
 import structlog
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -32,20 +33,70 @@ logger = structlog.get_logger(__name__)
 router = APIRouter()
 
 
-@router.get("/api/sessions")
-async def list_sessions(current_user: User = Depends(get_current_user)):
+@router.get("/sessions")
+async def list_sessions(
+    current_user: User = Depends(get_current_user),
+    limit: int = Query(default=30, ge=1, le=100),
+    cursor: Optional[str] = Query(
+        default=None,
+        description="Opaque cursor from previous page's next_cursor field",
+    ),
+):
+    """
+    Paginated session list ordered by (created_at DESC, id DESC).
+    Pass cursor=<next_cursor> from the previous response to get the next page.
+    """
+    cursor_dt: Optional[datetime] = None
+    cursor_id: Optional[str] = None
+    if cursor:
+        try:
+            cursor_ts, cursor_id = cursor.split("|", 1)
+        except ValueError:
+            cursor_ts = cursor
+            cursor_id = None
+        try:
+            cursor_dt = datetime.fromisoformat(cursor_ts).replace(tzinfo=timezone.utc)
+        except (ValueError, AttributeError):
+            cursor_dt = None
+
+    _COLS = (
+        "id, prompt, created_at, status, intent_type, render_path, frame_count, "
+        "api_call_count, prompt_tokens, completion_tokens, total_tokens, model_name"
+    )
     async with get_async_db() as conn:
-        rows = await conn.fetch(
-            "SELECT id, prompt, created_at, status, intent_type, render_path, frame_count, "
-            "api_call_count, prompt_tokens, completion_tokens, total_tokens, model_name "
-            "FROM sessions WHERE user_id = $1 ORDER BY created_at DESC",
-            current_user.id,
-        )
-    # M-1: Serialize through schema so the response shape is contract-enforced.
-    return success([SessionSummary(**dict(r)).model_dump() for r in rows])
+        if cursor_dt and cursor_id:
+            rows = await conn.fetch(
+                f"SELECT {_COLS} FROM sessions WHERE user_id = $1 "
+                "AND (created_at < $2 OR (created_at = $2 AND id < $3)) "
+                "ORDER BY created_at DESC, id DESC LIMIT $4",
+                current_user.id, cursor_dt, cursor_id, limit + 1,
+            )
+        elif cursor_dt:
+            rows = await conn.fetch(
+                f"SELECT {_COLS} FROM sessions WHERE user_id = $1 "
+                "AND created_at < $2 "
+                "ORDER BY created_at DESC, id DESC LIMIT $3",
+                current_user.id, cursor_dt, limit + 1,
+            )
+        else:
+            rows = await conn.fetch(
+                f"SELECT {_COLS} FROM sessions WHERE user_id = $1 "
+                "ORDER BY created_at DESC, id DESC LIMIT $2",
+                current_user.id, limit + 1,
+            )
+
+    has_more  = len(rows) > limit
+    page_rows = rows[:limit]
+    next_cursor = (
+        f"{page_rows[-1]['created_at'].isoformat()}|{page_rows[-1]['id']}"
+        if has_more and page_rows else None
+    )
+
+    items = [SessionSummary(**dict(r)).model_dump() for r in page_rows]
+    return success({"items": items, "next_cursor": next_cursor, "has_more": has_more})
 
 
-@router.get("/api/sessions/{session_id}/output")
+@router.get("/sessions/{session_id}/output")
 async def get_session_output(session_id: str, current_user: User = Depends(get_current_user)):
     async with get_async_db() as conn:
         row = await conn.fetchrow(
@@ -68,7 +119,7 @@ async def get_session_output(session_id: str, current_user: User = Depends(get_c
     return success(SessionOutputResponse(file_type=file_type, content=content).model_dump())
 
 
-@router.get("/api/sessions/{session_id}/log")
+@router.get("/sessions/{session_id}/log")
 async def get_session_log(session_id: str, current_user: User = Depends(get_current_user)):
     async with get_async_db() as conn:
         row = await conn.fetchrow(
@@ -82,13 +133,15 @@ async def get_session_log(session_id: str, current_user: User = Depends(get_curr
     # CRIT-3: validate the directory, then build a child path
     safe_dir  = safe_resolve(row["output_dir"], label="output_dir")
     log_path  = safe_dir / "activity_log.json"
-    if not log_path.exists():
+    log_exists = await asyncio.to_thread(log_path.exists)
+    if not log_exists:
         raise HTTPException(status_code=404, detail="Log not available")
 
-    return success({"log": json.loads(log_path.read_text())})
+    raw = await asyncio.to_thread(log_path.read_text, encoding="utf-8")
+    return success({"log": json.loads(raw)})
 
 
-@router.get("/api/sessions/{session_id}/frames-meta")
+@router.get("/sessions/{session_id}/frames-meta")
 async def get_session_frames_meta(session_id: str, current_user: User = Depends(get_current_user)):
     """Return the frames metadata for a session.
 
@@ -134,7 +187,7 @@ async def get_session_frames_meta(session_id: str, current_user: User = Depends(
     raise HTTPException(status_code=404, detail="frames-meta not available")
 
 
-@router.get("/api/sessions/{session_id}/frame/{frame_index}")
+@router.get("/sessions/{session_id}/frame/{frame_index}")
 async def get_session_frame(
     session_id:  str,
     frame_index: int,

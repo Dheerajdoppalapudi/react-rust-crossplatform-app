@@ -56,8 +56,9 @@ export default defineConfig({
             ? after.split('/').slice(0, 2).join('/')   // @scope/name
             : after.split('/')[0]                       // name
 
-          // Core React runtime only (not react-* ecosystem packages)
-          if (['react', 'react-dom', 'react-router', 'react-router-dom', 'scheduler'].includes(pkg)) {
+          // Core React runtime + state management utilities
+          if (['react', 'react-dom', 'react-router', 'react-router-dom', 'scheduler',
+               '@tanstack/react-query', '@tanstack/query-core'].includes(pkg)) {
             return 'vendor-react'
           }
           // MUI + Emotion — must stay together (MUI imports @emotion at runtime)

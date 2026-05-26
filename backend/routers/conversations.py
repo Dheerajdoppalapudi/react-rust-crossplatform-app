@@ -53,7 +53,7 @@ router = APIRouter()
 _bearer = HTTPBearer(auto_error=False)
 
 
-@router.post("/api/conversations/{conversation_id}/media-token")
+@router.post("/conversations/{conversation_id}/media-token")
 async def get_conversation_media_token(
     conversation_id: str,
     current_user: User = Depends(get_current_user),
@@ -76,7 +76,7 @@ async def get_conversation_media_token(
     return success({"media_token": token})
 
 
-@router.get("/api/conversations")
+@router.get("/conversations")
 async def list_conversations(
     current_user: User = Depends(get_current_user),
     limit: int = Query(default=30, ge=1, le=100),
@@ -108,11 +108,11 @@ async def list_conversations(
 
     _BASE_SELECT = """
         SELECT c.id, c.title, c.created_at, c.updated_at,
-               COALESCE(c.starred, 0) AS starred,
-               COUNT(s.id) AS turn_count,
-               MIN(s.intent_type) AS intent_type
+               COALESCE(c.starred, false) AS starred,
+               COALESCE(c.turn_count, 0) AS turn_count,
+               (SELECT MIN(s.intent_type) FROM sessions s
+                WHERE s.conversation_id = c.id AND s.status = 'done') AS intent_type
         FROM conversations c
-        LEFT JOIN sessions s ON s.conversation_id = c.id AND s.status = 'done'
     """
 
     async with get_async_db_read() as conn:
@@ -121,7 +121,6 @@ async def list_conversations(
                 _BASE_SELECT + """
                 WHERE c.user_id = $1 AND c.deleted_at IS NULL
                   AND (c.updated_at < $2 OR (c.updated_at = $2 AND c.id < $3))
-                GROUP BY c.id
                 ORDER BY c.updated_at DESC, c.id DESC
                 LIMIT $4
                 """,
@@ -133,7 +132,6 @@ async def list_conversations(
                 _BASE_SELECT + """
                 WHERE c.user_id = $1 AND c.deleted_at IS NULL
                   AND c.updated_at < $2
-                GROUP BY c.id
                 ORDER BY c.updated_at DESC, c.id DESC
                 LIMIT $3
                 """,
@@ -143,7 +141,6 @@ async def list_conversations(
             rows = await conn.fetch(
                 _BASE_SELECT + """
                 WHERE c.user_id = $1 AND c.deleted_at IS NULL
-                GROUP BY c.id
                 ORDER BY c.updated_at DESC, c.id DESC
                 LIMIT $2
                 """,
@@ -161,11 +158,14 @@ async def list_conversations(
     return success({"items": items, "next_cursor": next_cursor, "has_more": has_more})
 
 
-@router.get("/api/conversations/{conversation_id}")
+@router.get("/conversations/{conversation_id}")
 async def get_conversation(conversation_id: str, current_user: User = Depends(get_current_user)):
     """
-    Unified conversation detail — ownership check, notes, and all session turns
-    (with frames_meta inline) in exactly 2 round-trips, no N+1 fetches.
+    Conversation detail — 2 queries, small payload.
+
+    frames_meta is intentionally excluded here (it can be 10–40 KB per turn).
+    has_frames_meta: bool tells the client whether to call GET /sessions/:id/frames-meta,
+    which now reads directly from the DB column (zero disk I/O, one RTT).
     """
     async with get_async_db_read() as conn:
         conv = await conn.fetchrow(
@@ -184,7 +184,8 @@ async def get_conversation(conversation_id: str, current_user: User = Depends(ge
         turns = await conn.fetch(
             "SELECT id, prompt, created_at, status, intent_type, render_path, "
             "frame_count, video_path, turn_index, parent_session_id, parent_frame_index, "
-            "stages_json, sources_json, synthesis_text, frames_meta "
+            "stages_json, sources_json, synthesis_text, "
+            "(frames_meta IS NOT NULL) AS has_frames_meta "
             "FROM sessions WHERE conversation_id = $1 ORDER BY turn_index ASC",
             conversation_id,
         )
@@ -211,7 +212,7 @@ async def get_conversation(conversation_id: str, current_user: User = Depends(ge
     return success(detail.model_dump())
 
 
-@router.get("/api/conversations/{conversation_id}/tree")
+@router.get("/conversations/{conversation_id}/tree")
 async def get_conversation_tree(conversation_id: str, current_user: User = Depends(get_current_user)):
     """Lightweight endpoint for the canvas tree view — returns only node/edge fields."""
     async with get_async_db_read() as conn:
@@ -228,13 +229,19 @@ async def get_conversation_tree(conversation_id: str, current_user: User = Depen
             conversation_id,
         )
 
+    async def _video_ready(video_path: Optional[str]) -> bool:
+        if not video_path:
+            return False
+        if video_path.startswith("https://"):
+            return True
+        return await asyncio.to_thread(os.path.exists, video_path)
+
+    ready_flags = await asyncio.gather(*[_video_ready(n["video_path"]) for n in nodes])
+
     # M-1: Serialize through TreeNode schema.
     tree_nodes = [
-        TreeNode(
-            **dict(n),
-            video_ready=bool(n["video_path"] and os.path.exists(n["video_path"])),
-        )
-        for n in nodes
+        TreeNode(**dict(n), video_ready=ready)
+        for n, ready in zip(nodes, ready_flags)
     ]
     tree = ConversationTree(
         conversation_id=conv["id"],
@@ -244,7 +251,7 @@ async def get_conversation_tree(conversation_id: str, current_user: User = Depen
     return success(tree.model_dump())
 
 
-@router.post("/api/conversations/{conversation_id}/merge")
+@router.post("/conversations/{conversation_id}/merge")
 async def merge_conversation_videos(conversation_id: str, current_user: User = Depends(get_current_user)):
     async with get_async_db() as conn:
         # Verify ownership first
@@ -319,14 +326,14 @@ async def merge_conversation_videos(conversation_id: str, current_user: User = D
     logger.info("merge_complete", conversation=conversation_id, sessions=len(video_paths), output=stored_path)
     # M-1: Serialize through MergeResponse schema.
     merge = MergeResponse(
-        merged_video_url=f"/api/conversations/{conversation_id}/merged_video",
+        merged_video_url=f"/conversations/{conversation_id}/merged_video",
         session_count=len(ordered_sessions),
         sessions=ordered_sessions,
     )
     return success(merge.model_dump())
 
 
-@router.get("/api/conversations/{conversation_id}/merged_video")
+@router.get("/conversations/{conversation_id}/merged_video")
 async def get_merged_video(
     conversation_id: str,
     token:           str = Query(default=""),
@@ -337,7 +344,7 @@ async def get_merged_video(
 
     CRIT-2: Accepts ?token=<media_token> (browser <video src>) or
     Authorization: Bearer <jwt> (programmatic clients).
-    The conversation media token is issued by POST /api/conversations/{id}/media-token.
+    The conversation media token is issued by POST /conversations/{id}/media-token.
     """
     current_user = await resolve_media_user(token, conversation_id, credentials)
 
@@ -376,7 +383,7 @@ class RenameBody(BaseModel):
     title: str
 
 
-@router.patch("/api/conversations/{conversation_id}")
+@router.patch("/conversations/{conversation_id}")
 async def rename_conv(
     conversation_id: str,
     body: RenameBody,
@@ -391,7 +398,7 @@ async def rename_conv(
     return success({"title": title})
 
 
-@router.post("/api/conversations/{conversation_id}/star")
+@router.post("/conversations/{conversation_id}/star")
 async def star_conv(conversation_id: str, current_user: User = Depends(get_current_user)):
     new_starred = await toggle_star_conversation(conversation_id, current_user.id)
     if new_starred is None:
@@ -399,7 +406,7 @@ async def star_conv(conversation_id: str, current_user: User = Depends(get_curre
     return success({"starred": new_starred})
 
 
-@router.delete("/api/conversations/{conversation_id}")
+@router.delete("/conversations/{conversation_id}")
 async def delete_conv(conversation_id: str, current_user: User = Depends(get_current_user)):
     deleted = await soft_delete_conversation(conversation_id, current_user.id)
     if not deleted:
@@ -413,7 +420,7 @@ class NotesUpdateBody(BaseModel):
     content: str  # TipTap JSONContent serialized as a string by the client
 
 
-@router.get("/api/conversations/{conversation_id}/notes")
+@router.get("/conversations/{conversation_id}/notes")
 async def get_notes(conversation_id: str, current_user: User = Depends(get_current_user)):
     # Single query: ownership check + notes fetch via LEFT JOIN — 1 RTT instead of 2.
     async with get_async_db_read() as conn:
@@ -434,7 +441,7 @@ async def get_notes(conversation_id: str, current_user: User = Depends(get_curre
     return success({"content": row["content"], "updated_at": row["updated_at"]})
 
 
-@router.put("/api/conversations/{conversation_id}/notes")
+@router.put("/conversations/{conversation_id}/notes")
 async def update_notes(
     conversation_id: str,
     body: NotesUpdateBody,

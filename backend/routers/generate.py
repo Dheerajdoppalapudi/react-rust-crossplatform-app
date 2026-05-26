@@ -108,7 +108,7 @@ def _write_activity_log(output_dir: str, lifecycle_log: list, session_id: str = 
         logger.warning("activity_log_write_failed", output_dir=output_dir, error=str(exc))
 
 
-@router.post("/api/generate")
+@router.post("/generate")
 @_limiter.limit("10/minute", key_func=get_user_key)
 async def generate(
     request:             Request,
@@ -495,6 +495,7 @@ async def _generate_stream(p: dict):
             frame_count=result_payload.get("frame_count"),
             output_dir=output_dir,
             ui_output_file=result_payload.pop("ui_output_file", None),
+            frames_meta=result_payload.pop("frames_meta", None),
             # Beat pipeline assembles session_final.mp4 directly — save it so the
             # video router can serve it without re-assembling with TTS.
             video_path=result_payload.get("video_path") or None,
@@ -504,8 +505,8 @@ async def _generate_stream(p: dict):
             total_tokens=final_usage.get("total_tokens", 0),
             model_name=model_name,
             research_mode=research_mode,
-            sources_json=json.dumps(sources) if sources else None,
-            stages_json=json.dumps(stages_log) if stages_log else None,
+            sources_json=sources or None,
+            stages_json=stages_log or None,
             synthesis_text=synthesis_text or None,
         )
 

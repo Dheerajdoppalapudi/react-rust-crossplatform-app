@@ -1,7 +1,7 @@
 """Pydantic schemas for session and conversation API responses."""
 
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 from pydantic import BaseModel, field_serializer
 
 
@@ -41,10 +41,10 @@ class SessionTurn(BaseModel):
     turn_index:         int
     parent_session_id:  Optional[str]  = None
     parent_frame_index: Optional[int]  = None
-    stages_json:        Optional[str]  = None
-    sources_json:       Optional[str]  = None
+    stages_json:        Optional[Any]  = None
+    sources_json:       Optional[Any]  = None
     synthesis_text:     Optional[str]  = None
-    frames_meta:        Optional[dict] = None
+    has_frames_meta:    bool           = False
 
     @field_serializer("created_at")
     def serialize_created_at(self, v: datetime) -> str:

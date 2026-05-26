@@ -41,7 +41,7 @@ class PptxExportRequest(BaseModel):
     title: str = "Presentation"
 
 
-@router.post("/api/export/pptx")
+@router.post("/export/pptx")
 @limiter.limit("5/minute")
 async def export_to_pptx(payload: PptxExportRequest, request: Request):
     """

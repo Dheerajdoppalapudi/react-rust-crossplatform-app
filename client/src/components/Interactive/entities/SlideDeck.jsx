@@ -388,7 +388,7 @@ export default function SlideDeck({ entityId, html, title, spec, caption }) {
     const ctrl = new AbortController()
     pptxAbortRef.current = ctrl
     try {
-      const res = await fetch(`${API_BASE}/api/export/pptx`, {
+      const res = await fetch(`${API_BASE}/api/v1/export/pptx`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ html: src, title: presentationTitle }),

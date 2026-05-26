@@ -35,7 +35,7 @@ from core.s3 import (
     download_json as _s3_download_json,
     download_text as _s3_download_text,
 )
-from core.db_async import get_async_db, collect_ancestor_chain, update_session
+from core.db_async import get_async_db_read, collect_ancestor_chain
 from services.frame_generation.planner import (
     GenerationPlan,
     _vocab_plan_to_generation_plan,
@@ -212,10 +212,9 @@ async def build_conversation_context(
         captions: list[str] = []
         frames_data = await asyncio.to_thread(_s3_download_json, frames_json_key(session_id))
         if frames_data is None:
-            local_frames = os.path.join(output_dir, "frames.json")
-            if os.path.exists(local_frames):
-                with open(local_frames) as f:
-                    frames_data = json.load(f)
+            local_frames = Path(output_dir) / "frames.json"
+            if await asyncio.to_thread(local_frames.exists):
+                frames_data = json.loads(await asyncio.to_thread(local_frames.read_text, "utf-8"))
         if frames_data:
             captions = frames_data.get("captions", [])
 
@@ -226,10 +225,9 @@ async def build_conversation_context(
         if is_last:
             full_narration = await asyncio.to_thread(_s3_download_text, narration_key(session_id))
             if full_narration is None:
-                narration_path = os.path.join(output_dir, "narration.txt")
-                if os.path.exists(narration_path):
-                    with open(narration_path) as f:
-                        full_narration = f.read()
+                narration_path = Path(output_dir) / "narration.txt"
+                if await asyncio.to_thread(narration_path.exists):
+                    full_narration = await asyncio.to_thread(narration_path.read_text, "utf-8")
             if full_narration and full_narration.strip():
                 full_narration = full_narration.strip()
                 lines.append("  Full narration of this turn:")
@@ -240,14 +238,13 @@ async def build_conversation_context(
 
     if pause_session_id and pause_frame_index is not None:
         pause_narration_text = ""
-        async with get_async_db() as conn:
+        async with get_async_db_read() as conn:
             pause_row = await conn.fetchrow(
                 "SELECT output_dir FROM sessions WHERE id = $1", pause_session_id
             )
         if pause_row and pause_row["output_dir"]:
-            narrations = _parse_narrations_from_file(
-                os.path.join(pause_row["output_dir"], "narration.txt")
-            )
+            _narration_file = os.path.join(pause_row["output_dir"], "narration.txt")
+            narrations = await asyncio.to_thread(_parse_narrations_from_file, _narration_file)
             if pause_frame_index < len(narrations):
                 pause_narration_text = narrations[pause_frame_index]
 
@@ -299,10 +296,9 @@ async def build_interactive_context(
 
         scene = await asyncio.to_thread(_s3_download_json, meta_key(session_id, "scene_ir.json"))
         if scene is None:
-            scene_ir_path = os.path.join(output_dir, "scene_ir.json")
-            if os.path.exists(scene_ir_path):
-                with open(scene_ir_path) as f:
-                    scene = json.load(f)
+            scene_ir_path = Path(output_dir) / "scene_ir.json"
+            if await asyncio.to_thread(scene_ir_path.exists):
+                scene = json.loads(await asyncio.to_thread(scene_ir_path.read_text, "utf-8"))
 
         if scene:
 
@@ -453,7 +449,6 @@ async def _run_beat_pipeline(
         Path(os.path.join(output_dir, "frames.json")).write_text,
         frames_data, "utf-8",
     )
-    await update_session(session_id, frames_meta=_beats_frames_dict)
     try:
         await asyncio.to_thread(_s3_upload_frames_json, frames_data.encode(), session_id)
     except Exception as exc:
@@ -472,6 +467,7 @@ async def _run_beat_pipeline(
             "ui_file_type":        "video",
             "suggested_followups": script.suggested_followups,
             "notes":               "\n".join(script.notes),
+            "frames_meta":         _beats_frames_dict,
         },
     }
 
@@ -629,7 +625,6 @@ async def _run_frame_generation(
             Path(os.path.join(output_dir, "frames.json")).write_text,
             _manim_frames_data, "utf-8",
         )
-        await update_session(session_id, frames_meta=_manim_frames_dict)
         try:
             await asyncio.to_thread(_s3_upload_frames_json, _manim_frames_data.encode(), session_id)
         except Exception as exc:
@@ -645,6 +640,7 @@ async def _run_frame_generation(
             "ui_file_type":        "python",
             "suggested_followups": suggested_followups,
             "notes":               notes,
+            "frames_meta":         _manim_frames_dict,
         }, ui_output_file, all_narrations
 
     # ── SVG ───────────────────────────────────────────────────────────────────
@@ -690,7 +686,6 @@ async def _run_frame_generation(
         Path(os.path.join(output_dir, "frames.json")).write_text, _svg_frames_data, "utf-8"
     )
     await asyncio.to_thread(Path(ui_output_file).write_text, _svg_ui_data, "utf-8")
-    await update_session(session_id, frames_meta=_svg_frames_dict)
     try:
         await asyncio.to_thread(_s3_upload_frames_json, _svg_frames_data.encode(), session_id)
     except Exception as exc:
@@ -706,4 +701,5 @@ async def _run_frame_generation(
         "ui_file_type":        "images",
         "suggested_followups": suggested_followups,
         "notes":               notes,
+        "frames_meta":         _svg_frames_dict,
     }, ui_output_file, all_narrations

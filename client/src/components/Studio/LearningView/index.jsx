@@ -45,7 +45,7 @@ export default function LearningView({ turns, conversationId, onExit, onAskFromL
       setMergeResult(result)
       setShowMergedModal(true)
       const token = await getConversationMediaToken(conversationId)
-      setMergedVideoUrl(`${API_BASE}/api/conversations/${conversationId}/merged_video?token=${token}`)
+      setMergedVideoUrl(`${API_BASE}/api/v1/conversations/${conversationId}/merged_video?token=${token}`)
     } catch (e) {
       setMergeError(e.message || 'Merge failed')
     } finally {

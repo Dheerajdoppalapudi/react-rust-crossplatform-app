@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { api } from '../services/api'
 import { normalizeFramesData, migrateOldSceneIR } from '../components/Studio/studioUtils'
 import { safeParse, RawConversationSchema } from '../services/schemas'
+import { getSessionMediaToken } from '../services/mediaToken'
 
 const CONV_STALE_MS = 30_000 // serve from cache if fetched within last 30 s
 
@@ -73,57 +74,70 @@ export function useConversation({
       }
       const turns = (data ?? raw).turns ?? []
 
-      const loadedTurns = turns.map((t) => {
-        // frames_meta is now inline from the unified endpoint — no separate fetch needed.
-        const framesMeta = t.frames_meta ?? null
-
-        // Interactive turns: scene IR content lives in frames_meta.
-        let interactiveFields = {}
-        if (t.render_path === 'interactive') {
-          if (framesMeta) {
-            const blocks = framesMeta.blocks ?? migrateOldSceneIR(framesMeta)
-            interactiveFields = {
-              title:     framesMeta.title     ?? '',
-              followUps: framesMeta.follow_ups ?? [],
-              blocks,
-            }
-          } else {
-            interactiveFields = { title: '', followUps: [], blocks: [] }
-          }
-        }
-
-        return {
-          tempId:           t.id,
-          id:               t.id,
-          prompt:           t.prompt,
-          intent_type:      t.intent_type,
-          render_path:      t.render_path,
-          frame_count:      t.frame_count,
-          isLoading:        false,
-          framesData:
-            framesMeta && t.render_path !== 'interactive'
-              ? normalizeFramesData(framesMeta)
-              : null,
-          videoPhase:
-            t.render_path === 'text' || t.render_path === 'interactive'
-              ? 'disabled'
-              : (t.video_path ? 'ready' : (t.status === 'error' ? 'error' : 'generating')),
-          parentSessionId:  t.parent_session_id  ?? null,
-          parentFrameIndex: t.parent_frame_index ?? null,
-          // Finalize any stage left active in DB (from sessions before backend fix).
-          stages:  t.stages_json
-            ? JSON.parse(t.stages_json).map(s => s.status === 'active' ? { ...s, status: 'done' } : s)
-            : [],
-          sources: t.sources_json ? JSON.parse(t.sources_json) : [],
-          synthesisText:     t.synthesis_text ?? null,
-          synthesisComplete: !!t.synthesis_text,
-          ...interactiveFields,
-        }
-      })
+      const loadedTurns = turns.map((t) => ({
+        tempId:           t.id,
+        id:               t.id,
+        prompt:           t.prompt,
+        intent_type:      t.intent_type,
+        render_path:      t.render_path,
+        frame_count:      t.frame_count,
+        isLoading:        false,
+        framesData:       null,
+        videoPhase:
+          t.render_path === 'text' || t.render_path === 'interactive'
+            ? 'disabled'
+            : (t.video_path ? 'ready' : (t.status === 'error' ? 'error' : 'generating')),
+        parentSessionId:  t.parent_session_id  ?? null,
+        parentFrameIndex: t.parent_frame_index ?? null,
+        stages:  Array.isArray(t.stages_json)
+          ? t.stages_json.map(s => s.status === 'active' ? { ...s, status: 'done' } : s)
+          : [],
+        sources: Array.isArray(t.sources_json) ? t.sources_json : [],
+        synthesisText:     t.synthesis_text ?? null,
+        synthesisComplete: !!t.synthesis_text,
+        // Interactive shell — populated after frames-meta fetch below.
+        ...(t.render_path === 'interactive' && { title: '', followUps: [], blocks: [] }),
+      }))
 
       setTurns(loadedTurns)
 
       if (loadSignal.aborted) return
+
+      // Fetch frames-meta in parallel for turns that have it stored.
+      // Each request hits the DB column directly (no disk I/O) so latency ≈ 1 RTT.
+      // has_frames_meta: bool lets us skip turns with no data without a round-trip.
+      await Promise.allSettled(
+        turns
+          .filter((t) => t.has_frames_meta)
+          .map(async (t) => {
+            const raw = await api.getFramesMeta(t.id, loadSignal)
+            if (loadSignal.aborted || !raw) return
+
+            if (t.render_path === 'interactive') {
+              const blocks = raw.blocks ?? migrateOldSceneIR(raw)
+              setTurns((prev) => prev.map((pt) => pt.id === t.id
+                ? { ...pt, title: raw.title ?? '', followUps: raw.follow_ups ?? [], blocks }
+                : pt
+              ))
+            } else {
+              setTurns((prev) => prev.map((pt) => pt.id === t.id
+                ? { ...pt, framesData: normalizeFramesData(raw) }
+                : pt
+              ))
+            }
+          })
+      )
+
+      if (loadSignal.aborted) return
+
+      // Prefetch media tokens for all video-ready turns so the token cache is
+      // warm before video players mount — avoids a 3s RTT on first playback.
+      // Fire-and-forget: failures are non-fatal (token will be fetched on demand).
+      for (const turn of loadedTurns) {
+        if (turn.videoPhase === 'ready') {
+          getSessionMediaToken(turn.id).catch(() => {})
+        }
+      }
 
       // Resume any video streams that were in-progress when the user last left.
       for (const turn of loadedTurns) {
