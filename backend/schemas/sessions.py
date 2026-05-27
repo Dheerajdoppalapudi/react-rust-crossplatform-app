@@ -44,7 +44,7 @@ class SessionTurn(BaseModel):
     stages_json:        Optional[Any]  = None
     sources_json:       Optional[Any]  = None
     synthesis_text:     Optional[str]  = None
-    has_frames_meta:    bool           = False
+    frames_meta:        Optional[dict] = None
 
     @field_serializer("created_at")
     def serialize_created_at(self, v: datetime) -> str:

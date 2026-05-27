@@ -132,6 +132,7 @@ def _codegen(beat_description: str, prompt_template: str) -> str:
         2800,
         "manim_codegen_prompt.md",
         _STATIC_PREFIX,
+        task="beat_codegen",
     )
     code = _extract_code(raw)
     code, fixes = _sanitize_manim_code(code)

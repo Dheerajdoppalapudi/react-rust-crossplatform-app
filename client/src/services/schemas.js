@@ -55,8 +55,7 @@ export const RawTurnSchema = z.object({
   stages_json:        z.array(z.any()).nullable().optional(),
   sources_json:       z.array(z.any()).nullable().optional(),
   synthesis_text:     z.string().nullable().optional(),
-  // True when DB has frames_meta stored — client should call /sessions/:id/frames-meta.
-  has_frames_meta:    z.boolean().optional(),
+  frames_meta:        z.record(z.unknown()).nullable().optional(),
 })
 
 export const RawConversationSchema = z.object({

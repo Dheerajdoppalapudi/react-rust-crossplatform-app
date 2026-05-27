@@ -7,7 +7,6 @@ import VideocamOutlinedIcon  from '@mui/icons-material/VideocamOutlined'
 import VideocamOffOutlined   from '@mui/icons-material/VideocamOffOutlined'
 import NotesOutlinedIcon     from '@mui/icons-material/NotesOutlined'
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown'
-import { PALETTE } from '../../../theme/tokens.js'
 import { MODELS, DEFAULT_MODEL } from '../constants'
 
 const ASK_NODE_W = 340
@@ -56,11 +55,15 @@ export default function AskNode({ data }) {
         width: ASK_NODE_W,
         borderRadius: '12px',
         border: `1.5px solid ${borderCol}`,
-        bgcolor: isDark ? PALETTE.darkSurface : PALETTE.ivory,
+        bgcolor: isDark ? '#1a1a2e' : '#ffffff',
         overflow: 'hidden',
         boxShadow: isDark
           ? '0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04)'
           : '0 8px 32px rgba(0,0,0,0.1), 0 0 0 1px rgba(0,0,0,0.04)',
+        '&:focus-within': {
+          borderColor: isDark ? `${primary}88` : `${primary}66`,
+        },
+        transition: 'border-color 0.15s',
       }}>
         <Box sx={{ height: 2, background: `linear-gradient(90deg, transparent, ${primary}77, transparent)` }} />
 
@@ -100,7 +103,7 @@ export default function AskNode({ data }) {
               '& .MuiOutlinedInput-root': {
                 fontSize: 13, borderRadius: '8px',
                 bgcolor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)',
-                color: isDark ? PALETTE.warmSilver : PALETTE.nearBlackText,
+                color: theme.palette.text.primary,
                 '& fieldset': { borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)' },
                 '&:hover fieldset': { borderColor: `${primary}55` },
                 '&.Mui-focused fieldset': { borderColor: `${primary}99` },

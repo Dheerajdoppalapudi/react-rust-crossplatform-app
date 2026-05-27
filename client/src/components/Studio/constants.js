@@ -75,6 +75,14 @@ export const MODELS = [
     id: 'gpt-4o-mini', provider: 'openai', model: 'gpt-4o-mini',
     label: 'GPT-4o mini', short: '4o mini', description: 'Fastest OpenAI',
   },
+  {
+    id: 'gemini-2.0-flash', provider: 'gemini', model: 'gemini-2.0-flash',
+    label: 'Gemini Flash 2.0', short: 'Flash 2.0', description: '40× cheaper · very fast',
+  },
+  {
+    id: 'gemini-1.5-pro', provider: 'gemini', model: 'gemini-1.5-pro',
+    label: 'Gemini Pro 1.5', short: 'Pro 1.5', description: 'Google flagship',
+  },
 ]
 
 export const DEFAULT_MODEL = MODELS[0]

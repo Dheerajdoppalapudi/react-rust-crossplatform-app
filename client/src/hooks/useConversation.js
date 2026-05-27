@@ -1,9 +1,9 @@
 import { useState, useRef, useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { api } from '../services/api'
 import { normalizeFramesData, migrateOldSceneIR } from '../components/Studio/studioUtils'
 import { safeParse, RawConversationSchema } from '../services/schemas'
 import { getSessionMediaToken } from '../services/mediaToken'
+
 
 const CONV_STALE_MS = 30_000 // serve from cache if fetched within last 30 s
 
@@ -31,6 +31,9 @@ export function useConversation({
   // null = overlay hidden; object = overlay visible with current stage/prompt/frames.
   const [bootstrap, setBootstrap] = useState(null)
 
+  // true while a conversation is being fetched — prevents EmptyView flash during switch
+  const [isLoadingConversation, setIsLoadingConversation] = useState(false)
+
   // Tracks which conversation is currently loaded so the switch effect can
   // avoid redundant loads (e.g. when unrelated state causes a re-render).
   const loadedConvIdRef = useRef(null)
@@ -42,6 +45,7 @@ export function useConversation({
   const loadConversationById = useCallback(async (convId) => {
     setTurns([])
     scrollToTop()
+    setIsLoadingConversation(true)
 
     // Cancel any prior load in flight.
     loadAbortRef.current?.abort()
@@ -74,59 +78,42 @@ export function useConversation({
       }
       const turns = (data ?? raw).turns ?? []
 
-      const loadedTurns = turns.map((t) => ({
-        tempId:           t.id,
-        id:               t.id,
-        prompt:           t.prompt,
-        intent_type:      t.intent_type,
-        render_path:      t.render_path,
-        frame_count:      t.frame_count,
-        isLoading:        false,
-        framesData:       null,
-        videoPhase:
-          t.render_path === 'text' || t.render_path === 'interactive'
-            ? 'disabled'
-            : (t.video_path ? 'ready' : (t.status === 'error' ? 'error' : 'generating')),
-        parentSessionId:  t.parent_session_id  ?? null,
-        parentFrameIndex: t.parent_frame_index ?? null,
-        stages:  Array.isArray(t.stages_json)
-          ? t.stages_json.map(s => s.status === 'active' ? { ...s, status: 'done' } : s)
-          : [],
-        sources: Array.isArray(t.sources_json) ? t.sources_json : [],
-        synthesisText:     t.synthesis_text ?? null,
-        synthesisComplete: !!t.synthesis_text,
-        // Interactive shell — populated after frames-meta fetch below.
-        ...(t.render_path === 'interactive' && { title: '', followUps: [], blocks: [] }),
-      }))
+      const loadedTurns = turns.map((t) => {
+        const meta = t.frames_meta ?? null
+        const isInteractive = t.render_path === 'interactive'
+
+        const interactiveFields = isInteractive ? {
+          title:     meta?.title      ?? '',
+          followUps: meta?.follow_ups ?? [],
+          blocks:    meta ? (meta.blocks ?? migrateOldSceneIR(meta)) : [],
+        } : {}
+
+        return {
+          tempId:           t.id,
+          id:               t.id,
+          prompt:           t.prompt,
+          intent_type:      t.intent_type,
+          render_path:      t.render_path,
+          frame_count:      t.frame_count,
+          isLoading:        false,
+          framesData:       (!isInteractive && meta) ? normalizeFramesData(meta) : null,
+          videoPhase:
+            t.render_path === 'text' || isInteractive
+              ? 'disabled'
+              : (t.video_path ? 'ready' : (t.status === 'error' ? 'error' : 'generating')),
+          parentSessionId:  t.parent_session_id  ?? null,
+          parentFrameIndex: t.parent_frame_index ?? null,
+          stages:  Array.isArray(t.stages_json)
+            ? t.stages_json.map(s => s.status === 'active' ? { ...s, status: 'done' } : s)
+            : [],
+          sources: Array.isArray(t.sources_json) ? t.sources_json : [],
+          synthesisText:     t.synthesis_text ?? null,
+          synthesisComplete: !!t.synthesis_text,
+          ...interactiveFields,
+        }
+      })
 
       setTurns(loadedTurns)
-
-      if (loadSignal.aborted) return
-
-      // Fetch frames-meta in parallel for turns that have it stored.
-      // Each request hits the DB column directly (no disk I/O) so latency ≈ 1 RTT.
-      // has_frames_meta: bool lets us skip turns with no data without a round-trip.
-      await Promise.allSettled(
-        turns
-          .filter((t) => t.has_frames_meta)
-          .map(async (t) => {
-            const raw = await api.getFramesMeta(t.id, loadSignal)
-            if (loadSignal.aborted || !raw) return
-
-            if (t.render_path === 'interactive') {
-              const blocks = raw.blocks ?? migrateOldSceneIR(raw)
-              setTurns((prev) => prev.map((pt) => pt.id === t.id
-                ? { ...pt, title: raw.title ?? '', followUps: raw.follow_ups ?? [], blocks }
-                : pt
-              ))
-            } else {
-              setTurns((prev) => prev.map((pt) => pt.id === t.id
-                ? { ...pt, framesData: normalizeFramesData(raw) }
-                : pt
-              ))
-            }
-          })
-      )
 
       if (loadSignal.aborted) return
 
@@ -149,12 +136,16 @@ export function useConversation({
       if (err?.name !== 'AbortError' && !loadSignal.aborted) {
         toast.error('Failed to load the conversation. Please try again.')
       }
+    } finally {
+      if (!loadSignal.aborted) setIsLoadingConversation(false)
     }
   }, [queryClient, setTurns, runVideoGenerationForTurn, abortAllVideoStreams, scrollToTop, toast])
 
   return {
     bootstrap,
     setBootstrap,
+    isLoadingConversation,
+    setIsLoadingConversation,
     loadedConvIdRef,
     loadAbortRef,
     loadConversationById,

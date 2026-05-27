@@ -173,6 +173,7 @@ def call_llm(
     override_service: LLMService = None,
     tool_schema: dict = None,
     json_mode: bool = False,
+    task: str = "",
 ) -> str:
     """
     Single entry point for all LLM calls in the pipeline.
@@ -195,7 +196,8 @@ def call_llm(
         unless a specific call is known to fail JSON parsing.
     """
     label = prompt_name or "unknown"
-    svc = override_service or request_llm_service.get() or default_llm_service
+    from services.llm_service import get_task_service
+    svc = override_service or request_llm_service.get() or (get_task_service(task) if task else default_llm_service)
     model = getattr(svc.provider, "model", "unknown")
     logger.info("llm_call", prompt=label, model=model, chars=len(prompt), cache="yes" if cache_prefix else "no")
     result, usage = svc.make_single_prompt_request(
@@ -232,6 +234,7 @@ async def call_llm_async(
     override_service: LLMService = None,
     tool_schema: dict = None,
     json_mode: bool = False,
+    task: str = "",
 ) -> str:
     """
     Async version of call_llm() — uses provider.complete_async() so the event
@@ -239,7 +242,8 @@ async def call_llm_async(
     Drop-in replacement for `await asyncio.to_thread(call_llm, ...)`.
     """
     label = prompt_name or "unknown"
-    svc   = override_service or request_llm_service.get() or default_llm_service
+    from services.llm_service import get_task_service
+    svc   = override_service or request_llm_service.get() or (get_task_service(task) if task else default_llm_service)
     model = getattr(svc.provider, "model", "unknown")
     logger.info("llm_call", prompt=label, model=model, chars=len(prompt), cache="yes" if cache_prefix else "no")
     result, usage = await svc.make_single_prompt_request_async(
@@ -433,13 +437,15 @@ produce from training data alone. Never add search_queries if needs_search is fa
   "domain": "physics|cs|chemistry|biology|math|history|economics|general",
   "enriched_prompt": "<2-4 sentence specific learning spec with mechanisms and numbers>",
   "suggested_followups": ["<q1>", "<q2>", "<q3>"],
-  "search_queries": ["<precise query 1>", "<q2>", "<q3>", "<q4>", "<q5>"],
-  "sub_questions": ["<deeper angle 1>", "<deeper angle 2>"]
+  "search_queries": ["<precise query 1>", "<q2>", "<q3>", "<q4>", "<q5>"]
 }
-Quality rules:
-- search_queries: write like a researcher — precise terminology, avoid vague "what is X" phrasing
-- If prior conversation context is given: target queries at NEW information not already covered
-- sub_questions: angles the main queries might miss; used only if round-1 finds < 5 results""",
+Query quality rules — write like a domain expert searching primary literature:
+- Each query targets a DIFFERENT facet: mechanism, quantitative data, recent advances, applications, failure modes
+- Use precise technical vocabulary — no "what is X" / "how does Y work" / "explain Z"
+- Include specific terminology, named protocols, algorithms, compounds, or metrics where relevant
+- BAD: "how does HTTPS work" → GOOD: "TLS 1.3 handshake certificate chain asymmetric key exchange"
+- BAD: "bitcoin mining explained" → GOOD: "proof-of-work SHA-256 hashrate difficulty adjustment bitcoin"
+- If prior conversation context is given: target queries at NEW gaps, never repeat covered concepts""",
 
     ("instant", True): """\
 ## Output schema (JSON only — no prose, no markdown fences)
@@ -465,11 +471,15 @@ Set needs_search=true and add "search_queries":["q1","q2","q3"] for current data
   "notes": ["<key fact 1>", "<fact 2>", "<fact 3>", "<fact 4>", "<fact 5>"],
   "enriched_prompt": "<2-4 sentence learning spec>",
   "suggested_followups": ["<q1>", "<q2>", "<q3>"],
-  "search_queries": ["<precise query 1>", "<q2>", "<q3>", "<q4>", "<q5>"],
-  "sub_questions": ["<deeper angle 1>", "<deeper angle 2>"]
+  "search_queries": ["<precise query 1>", "<q2>", "<q3>", "<q4>", "<q5>"]
 }
 Frame count: math(2-5), process/timeline(3-5), others(2-4). Biology → illustration.
-search_queries: precise terminology, write like a researcher.""",
+Query quality rules — write like a domain expert searching primary literature:
+- Each query targets a DIFFERENT facet: mechanism, quantitative data, applications, failure modes
+- Use precise technical vocabulary — no "what is X" / "how does Y work" / "explain Z"
+- Include specific terminology, named protocols, algorithms, compounds, or metrics where relevant
+- BAD: "how does HTTPS work" → GOOD: "TLS 1.3 handshake certificate chain asymmetric key exchange"
+- If prior conversation context is given: target queries at NEW gaps only""",
 }
 
 
@@ -484,7 +494,7 @@ async def plan_and_classify(
     Unified first Haiku call — single intent classification + search planning call.
 
     Returns a dict with all fields needed by the generation pipeline:
-      Interactive: domain, enriched_prompt, suggested_followups, needs_search?, search_queries?, sub_questions?
+      Interactive: domain, enriched_prompt, suggested_followups, needs_search?, search_queries?
       Video:       + intent_type, frame_count, notes
     Always uses Haiku (_classify_service) regardless of the per-request model.
     """
@@ -523,7 +533,6 @@ async def plan_and_classify(
         "suggested_followups": data.get("suggested_followups", []),
         "needs_search":        bool(data.get("needs_search", False)),
         "search_queries":      data.get("search_queries", []),
-        "sub_questions":       data.get("sub_questions", []),
     }
     if video_enabled:
         result["intent_type"] = data.get("intent_type", "process")
@@ -591,6 +600,7 @@ async def create_vocab_plan(
         prompt_name=prompt_file,
         cache_prefix=cache_prefix,
         json_mode=True,
+        task="vocab_plan",
     )
 
     plan_dict = _extract_json(raw)

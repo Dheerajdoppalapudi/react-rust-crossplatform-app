@@ -664,7 +664,6 @@ export default function LoadingView({
   stages           = null,
   stage            = null,
   compact          = false,
-  synthesisText    = '',
   sources          = [],
   defaultOpen      = true,
   beatTitles       = null,
@@ -685,7 +684,6 @@ export default function LoadingView({
   const [masterOpen, setMasterOpen] = useState(defaultOpen)
 
   const subduedColor = isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.28)'
-  const synthColor   = isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.52)'
 
   return (
     <Box
@@ -754,24 +752,6 @@ export default function LoadingView({
         <ZenithSpinner />
       )}
 
-      {/* Streaming synthesis preview */}
-      {synthesisText && (
-        <Box sx={{
-          mt: 1.5,
-          borderLeft: `1.5px solid ${isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)'}`,
-          pl: 1.5, ml: 0.25,
-        }}>
-          <Typography sx={{
-            fontSize: 13, color: synthColor, lineHeight: 1.7,
-            whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-          }}>
-            {synthesisText.length > 400
-              ? `…${synthesisText.slice(-400)}`
-              : synthesisText
-            }
-          </Typography>
-        </Box>
-      )}
     </Box>
   )
 }

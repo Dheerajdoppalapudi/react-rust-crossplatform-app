@@ -5,6 +5,7 @@ Architecture:
   - LLMProvider (base)  — defines the interface every provider must implement
   - OpenAIProvider      — calls OpenAI Chat Completions API
   - ClaudeProvider      — Anthropic Claude (default)
+  - GeminiProvider      — Google Gemini via OpenAI-compatible endpoint
   - LLMService          — thin wrapper used across the app; delegates to a provider
 
 To switch providers, change the `provider=` argument when constructing
@@ -47,6 +48,10 @@ _openai_client = None
 _anthropic_client = None
 _async_openai_client = None
 _async_anthropic_client = None
+_gemini_client = None
+_async_gemini_client = None
+
+_GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 
 
 def _get_openai_client():
@@ -79,6 +84,24 @@ def _get_async_anthropic_client():
         import anthropic
         _async_anthropic_client = anthropic.AsyncAnthropic()
     return _async_anthropic_client
+
+
+def _get_gemini_client():
+    global _gemini_client
+    if _gemini_client is None:
+        from openai import OpenAI
+        from core.config import GEMINI_API_KEY
+        _gemini_client = OpenAI(api_key=GEMINI_API_KEY, base_url=_GEMINI_BASE_URL)
+    return _gemini_client
+
+
+def _get_async_gemini_client():
+    global _async_gemini_client
+    if _async_gemini_client is None:
+        from openai import AsyncOpenAI
+        from core.config import GEMINI_API_KEY
+        _async_gemini_client = AsyncOpenAI(api_key=GEMINI_API_KEY, base_url=_GEMINI_BASE_URL)
+    return _async_gemini_client
 
 
 # ---------------------------------------------------------------------------
@@ -438,6 +461,86 @@ class ClaudeProvider(LLMProvider):
 
 
 # ---------------------------------------------------------------------------
+# Gemini provider — OpenAI-compatible endpoint
+# ---------------------------------------------------------------------------
+
+class GeminiProvider(LLMProvider):
+    """
+    Google Gemini via the OpenAI-compatible endpoint.
+
+    Uses the same OpenAI SDK with a custom base_url and GEMINI_API_KEY.
+    Prompt caching and tool_schema are silently ignored (not supported).
+    Reads GEMINI_API_KEY from the environment (set in .env via python-dotenv).
+    """
+
+    def __init__(self, model: str = None):
+        from core.config import GEMINI_MODEL
+        self.model = model or GEMINI_MODEL
+
+    def complete(self, messages: List[Dict[str, str]], **kwargs) -> tuple[Optional[str], dict]:
+        kwargs.pop("cache_prefix", None)
+        kwargs.pop("tool_schema", None)
+        json_mode: bool = kwargs.pop("json_mode", False)
+        if json_mode:
+            kwargs["response_format"] = {"type": "json_object"}
+
+        client = _get_gemini_client()
+        for attempt in range(_MAX_RETRIES):
+            try:
+                response = client.chat.completions.create(
+                    model=self.model,
+                    messages=messages,
+                    **kwargs,
+                )
+                usage = response.usage
+                usage_dict = {
+                    "prompt_tokens":     usage.prompt_tokens,
+                    "completion_tokens": usage.completion_tokens,
+                    "total_tokens":      usage.total_tokens,
+                } if usage else {}
+                return response.choices[0].message.content, usage_dict
+
+            except Exception as e:
+                logger.error("gemini_request_failed", error=str(e), attempt=attempt + 1)
+                if attempt == _MAX_RETRIES - 1:
+                    return None, {}
+                time.sleep(2.0 * (attempt + 1))
+
+        return None, {}
+
+    async def complete_async(self, messages: List[Dict[str, str]], **kwargs) -> tuple[Optional[str], dict]:
+        kwargs.pop("cache_prefix", None)
+        kwargs.pop("tool_schema", None)
+        json_mode: bool = kwargs.pop("json_mode", False)
+        if json_mode:
+            kwargs["response_format"] = {"type": "json_object"}
+
+        client = _get_async_gemini_client()
+        for attempt in range(_MAX_RETRIES):
+            try:
+                response = await client.chat.completions.create(
+                    model=self.model,
+                    messages=messages,
+                    **kwargs,
+                )
+                usage = response.usage
+                usage_dict = {
+                    "prompt_tokens":     usage.prompt_tokens,
+                    "completion_tokens": usage.completion_tokens,
+                    "total_tokens":      usage.total_tokens,
+                } if usage else {}
+                return response.choices[0].message.content, usage_dict
+
+            except Exception as e:
+                logger.error("gemini_request_failed", error=str(e), attempt=attempt + 1)
+                if attempt == _MAX_RETRIES - 1:
+                    return None, {}
+                await asyncio.sleep(2.0 * (attempt + 1))
+
+        return None, {}
+
+
+# ---------------------------------------------------------------------------
 # LLMService — thin wrapper used across the app
 # ---------------------------------------------------------------------------
 
@@ -553,13 +656,54 @@ class LLMService:
 
 default_llm_service = LLMService(provider=OpenAIProvider(model="gpt-4.1"))
 
+# ---------------------------------------------------------------------------
+# Per-task model factory — returns a cached LLMService for a task name.
+# Task → model mapping is read from TASK_MODELS in config.py.
+# Call sites use: get_task_service("vocab_plan") etc.
+# ---------------------------------------------------------------------------
+
+_service_cache: Dict[str, "LLMService"] = {}
+
+
+def _make_service_for_model(model_str: str) -> "LLMService":
+    """Create an LLMService from a model string. Routing by prefix convention."""
+    if not model_str:
+        return default_llm_service
+    if model_str.startswith("claude-"):
+        return LLMService(provider=ClaudeProvider(model=model_str))
+    if model_str.startswith("gemini-"):
+        return LLMService(provider=GeminiProvider(model=model_str))
+    return LLMService(provider=OpenAIProvider(model=model_str))
+
+
+def get_task_service(task: str) -> "LLMService":
+    """
+    Return the LLMService configured for this pipeline task.
+
+    Reads TASK_MODELS from config.py; result is cached per model string
+    so we never create more than one client per model.
+
+    Tasks: entity_selector, scene_planner, vocab_plan, svg_frame,
+           beat_planner, beat_codegen, synthesiser, codegen
+    """
+    from core.config import TASK_MODELS
+    model_str = TASK_MODELS.get(task, "")
+    if not model_str:
+        return default_llm_service
+    if model_str not in _service_cache:
+        _service_cache[model_str] = _make_service_for_model(model_str)
+    return _service_cache[model_str]
+
+
 # ── Startup diagnostic ────────────────────────────────────────────────────────
 def _log_startup() -> None:
-    from core.config import PROMPT_CACHE_ENABLED, CLAUDE_MODEL, CLASSIFY_MODEL
+    from core.config import PROMPT_CACHE_ENABLED, CLAUDE_MODEL, CLASSIFY_MODEL, GEMINI_MODEL, TASK_MODELS
     logger.info(
         "llm_service_ready",
         default_model=CLAUDE_MODEL,
         classify_model=CLASSIFY_MODEL,
+        gemini_model=GEMINI_MODEL,
+        task_models=TASK_MODELS,
         prompt_cache="ENABLED" if PROMPT_CACHE_ENABLED else "DISABLED",
     )
 

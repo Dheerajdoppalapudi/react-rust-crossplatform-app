@@ -6,12 +6,15 @@ import SendIcon               from '@mui/icons-material/Send'
 import StopRoundedIcon        from '@mui/icons-material/StopRounded'
 import AddIcon                from '@mui/icons-material/Add'
 import CloseIcon              from '@mui/icons-material/Close'
-import PauseCircleOutlineIcon from '@mui/icons-material/PauseCircleOutline'
+import FormatQuoteRoundedIcon from '@mui/icons-material/FormatQuoteRounded'
 import KeyboardArrowDownIcon  from '@mui/icons-material/KeyboardArrowDown'
 import ZenithLogo             from '../common/ZenithLogo'
 import FunctionsOutlinedIcon  from '@mui/icons-material/FunctionsOutlined'
 import BrushOutlinedIcon      from '@mui/icons-material/BrushOutlined'
 import AttachFileIcon         from '@mui/icons-material/AttachFile'
+import NotesOutlinedIcon      from '@mui/icons-material/NotesOutlined'
+import VideocamOutlinedIcon   from '@mui/icons-material/VideocamOutlined'
+import VideocamOffOutlined    from '@mui/icons-material/VideocamOffOutlined'
 import { useTheme } from '@mui/material'
 import { MODELS, RENDER_MODES, MODES } from './constants'
 import { BRAND, PALETTE } from '../../theme/tokens.js'
@@ -115,6 +118,8 @@ function PromptBar({
   onNewConversation,
   pauseContext,
   onClearPauseContext,
+  selectedTextContext,
+  onClearSelectedText,
   selectedModel,
   onModelChange,
   selectedRenderMode,
@@ -124,6 +129,10 @@ function PromptBar({
   stagedFiles     = [],
   onAddFiles      = () => {},
   onRemoveFile    = () => {},
+  notesEnabled    = false,
+  onToggleNotes   = () => {},
+  videoEnabled    = true,
+  onToggleVideo   = () => {},
   // When true: no outer horizontal padding (used inside EmptyView for width alignment)
   embedded        = false,
 }) {
@@ -205,39 +214,6 @@ function PromptBar({
         onChange={handleFilesSelected}
       />
 
-      {/* Pause context banner */}
-      {pauseContext && (
-        <Box sx={embedded ? { pb: 1 } : { px: { xs: 1.5, sm: 3 }, pt: 1.5, pb: 0 }}>
-          <Box sx={{
-            display: 'flex', alignItems: 'center', gap: 1,
-            px: 1.5, py: 0.75, borderRadius: '10px',
-            backgroundColor: isDark ? 'rgba(75,114,255,0.10)' : `${BRAND.primary}0d`,
-            border: `1px solid ${isDark ? 'rgba(75,114,255,0.25)' : `${BRAND.primary}30`}`,
-          }}>
-            <PauseCircleOutlineIcon sx={{ fontSize: 14, color: theme.palette.primary.main, flexShrink: 0 }} />
-            <Typography sx={{ fontSize: 12, color: theme.palette.primary.main, fontWeight: 500, flexShrink: 0 }}>
-              Paused at:
-            </Typography>
-            <Typography sx={{
-              fontSize: 12, color: theme.palette.primary.main,
-              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1,
-            }}>
-              {pauseContext.caption || `Frame ${pauseContext.frameIndex + 1}`}
-            </Typography>
-            <Tooltip title="Clear pause context">
-              <IconButton
-                size="small"
-                onClick={onClearPauseContext}
-                aria-label="Clear pause context"
-                sx={{ p: 0.25, color: theme.palette.primary.main, opacity: 0.6, flexShrink: 0, '&:hover': { opacity: 1 } }}
-              >
-                <CloseIcon sx={{ fontSize: 12 }} />
-              </IconButton>
-            </Tooltip>
-          </Box>
-        </Box>
-      )}
-
       <Box sx={outerSx}>
         <Box sx={innerSx}>
           <Box sx={{
@@ -252,6 +228,61 @@ function PromptBar({
             },
             transition: 'border-color 0.15s, box-shadow 0.15s',
           }}>
+
+            {/* Pause context banner — flush inside card top */}
+            {pauseContext && (
+              <Box sx={{
+                display: 'flex', alignItems: 'stretch',
+                borderBottom: `1px solid ${isDark ? 'rgba(75,114,255,0.20)' : `${BRAND.primary}25`}`,
+                backgroundColor: isDark ? 'rgba(75,114,255,0.08)' : `${BRAND.primary}07`,
+              }}>
+                <Box sx={{ width: 3, flexShrink: 0, bgcolor: theme.palette.primary.main }} />
+                <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 0.9, minWidth: 0 }}>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography sx={{ fontSize: 9.5, fontWeight: 700, color: theme.palette.primary.main, letterSpacing: '0.06em', textTransform: 'uppercase', lineHeight: 1.2, mb: 0.2 }}>
+                      Paused at
+                    </Typography>
+                    <Typography sx={{ fontSize: 12.5, color: theme.palette.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.4 }}>
+                      {pauseContext.caption || `Frame ${pauseContext.frameIndex + 1}`}
+                    </Typography>
+                  </Box>
+                  <Tooltip title="Clear">
+                    <IconButton size="small" onClick={onClearPauseContext} aria-label="Clear pause context"
+                      sx={{ p: 0.4, color: theme.palette.text.disabled, flexShrink: 0, '&:hover': { color: theme.palette.text.secondary } }}>
+                      <CloseIcon sx={{ fontSize: 13 }} />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
+              </Box>
+            )}
+
+            {/* Selected text context banner — flush inside card top */}
+            {selectedTextContext && (
+              <Box sx={{
+                display: 'flex', alignItems: 'stretch',
+                borderBottom: `1px solid ${isDark ? 'rgba(139,92,246,0.20)' : 'rgba(124,58,237,0.15)'}`,
+                backgroundColor: isDark ? 'rgba(139,92,246,0.07)' : 'rgba(124,58,237,0.04)',
+              }}>
+                <Box sx={{ width: 3, flexShrink: 0, bgcolor: isDark ? '#a78bfa' : '#7c3aed' }} />
+                <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 0.9, minWidth: 0 }}>
+                  <FormatQuoteRoundedIcon sx={{ fontSize: 15, color: isDark ? '#a78bfa' : '#7c3aed', flexShrink: 0, opacity: 0.85 }} />
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography sx={{ fontSize: 9.5, fontWeight: 700, color: isDark ? '#a78bfa' : '#7c3aed', letterSpacing: '0.06em', textTransform: 'uppercase', lineHeight: 1.2, mb: 0.2 }}>
+                      Selected text
+                    </Typography>
+                    <Typography sx={{ fontSize: 12.5, color: theme.palette.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.4 }}>
+                      {selectedTextContext}
+                    </Typography>
+                  </Box>
+                  <Tooltip title="Clear">
+                    <IconButton size="small" onClick={onClearSelectedText} aria-label="Clear selected text context"
+                      sx={{ p: 0.4, color: theme.palette.text.disabled, flexShrink: 0, '&:hover': { color: theme.palette.text.secondary } }}>
+                      <CloseIcon sx={{ fontSize: 13 }} />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
+              </Box>
+            )}
 
             {/* Text input — taller padding when embedded for more presence */}
             <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, px: 2, pt: embedded ? 2 : 1.5, pb: 0.5 }}>
@@ -448,6 +479,51 @@ function PromptBar({
                     </MenuItem>
                   ))}
                 </Menu>
+                {/* Notes toggle */}
+                <Tooltip title={notesEnabled ? 'AI Notes on' : 'AI Notes off'}>
+                  <IconButton
+                    size="small"
+                    onClick={onToggleNotes}
+                    aria-pressed={notesEnabled}
+                    aria-label={notesEnabled ? 'AI Notes on' : 'AI Notes off'}
+                    sx={{
+                      borderRadius: '7px', p: 0.55,
+                      border: `1px solid ${notesEnabled
+                        ? (isDark ? `${BRAND.accent}72` : `${BRAND.primary}33`)
+                        : (isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.14)')}`,
+                      color: notesEnabled ? theme.palette.primary.main : theme.palette.text.secondary,
+                      bgcolor: notesEnabled ? (isDark ? `${BRAND.accent}1a` : `${BRAND.primary}0d`) : 'transparent',
+                      transition: 'all 0.15s',
+                      '&:hover': { borderColor: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.22)' },
+                    }}
+                  >
+                    <NotesOutlinedIcon sx={{ fontSize: 14 }} />
+                  </IconButton>
+                </Tooltip>
+
+                {/* Video toggle */}
+                <Tooltip title={videoEnabled ? 'Video on' : 'Video off'}>
+                  <IconButton
+                    size="small"
+                    onClick={onToggleVideo}
+                    aria-pressed={videoEnabled}
+                    aria-label={videoEnabled ? 'Video on' : 'Video off'}
+                    sx={{
+                      borderRadius: '7px', p: 0.55,
+                      border: `1px solid ${videoEnabled
+                        ? (isDark ? `${BRAND.accent}72` : `${BRAND.primary}33`)
+                        : (isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.14)')}`,
+                      color: videoEnabled ? theme.palette.primary.main : theme.palette.text.secondary,
+                      bgcolor: videoEnabled ? (isDark ? `${BRAND.accent}1a` : `${BRAND.primary}0d`) : 'transparent',
+                      transition: 'all 0.15s',
+                      '&:hover': { borderColor: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.22)' },
+                    }}
+                  >
+                    {videoEnabled
+                      ? <VideocamOutlinedIcon sx={{ fontSize: 14 }} />
+                      : <VideocamOffOutlined  sx={{ fontSize: 14 }} />}
+                  </IconButton>
+                </Tooltip>
               </Box>
 
               {/* RIGHT: model | send/stop */}
@@ -614,27 +690,33 @@ const modeShape = PropTypes.shape({
 })
 
 PromptBar.propTypes = {
-  prompt:              PropTypes.string.isRequired,
-  onPromptChange:      PropTypes.func.isRequired,
-  onSubmit:            PropTypes.func.isRequired,
-  onStop:              PropTypes.func.isRequired,
-  onKeyDown:           PropTypes.func.isRequired,
-  inputRef:            PropTypes.object.isRequired,
-  isGenerating:        PropTypes.bool.isRequired,
-  activeConversation:  PropTypes.shape({ id: PropTypes.string, intent_type: PropTypes.string }),
-  onNewConversation:   PropTypes.func.isRequired,
-  pauseContext:        PropTypes.shape({ sessionId: PropTypes.string, frameIndex: PropTypes.number, caption: PropTypes.string }),
-  onClearPauseContext: PropTypes.func.isRequired,
-  selectedModel:       modelShape.isRequired,
-  onModelChange:       PropTypes.func.isRequired,
-  selectedRenderMode:  renderModeShape,
-  onRenderModeChange:  PropTypes.func.isRequired,
-  selectedMode:        modeShape,
-  onModeChange:        PropTypes.func,
-  stagedFiles:         PropTypes.arrayOf(PropTypes.shape({ id: PropTypes.string, name: PropTypes.string, type: PropTypes.string })),
-  onAddFiles:          PropTypes.func,
-  onRemoveFile:        PropTypes.func,
-  embedded:            PropTypes.bool,
+  prompt:               PropTypes.string.isRequired,
+  onPromptChange:       PropTypes.func.isRequired,
+  onSubmit:             PropTypes.func.isRequired,
+  onStop:               PropTypes.func.isRequired,
+  onKeyDown:            PropTypes.func.isRequired,
+  inputRef:             PropTypes.object.isRequired,
+  isGenerating:         PropTypes.bool.isRequired,
+  activeConversation:   PropTypes.shape({ id: PropTypes.string, intent_type: PropTypes.string }),
+  onNewConversation:    PropTypes.func.isRequired,
+  pauseContext:         PropTypes.shape({ sessionId: PropTypes.string, frameIndex: PropTypes.number, caption: PropTypes.string }),
+  onClearPauseContext:  PropTypes.func.isRequired,
+  selectedTextContext:  PropTypes.string,
+  onClearSelectedText:  PropTypes.func,
+  selectedModel:        modelShape.isRequired,
+  onModelChange:        PropTypes.func.isRequired,
+  selectedRenderMode:   renderModeShape,
+  onRenderModeChange:   PropTypes.func.isRequired,
+  selectedMode:         modeShape,
+  onModeChange:         PropTypes.func,
+  stagedFiles:          PropTypes.arrayOf(PropTypes.shape({ id: PropTypes.string, name: PropTypes.string, type: PropTypes.string })),
+  onAddFiles:           PropTypes.func,
+  onRemoveFile:         PropTypes.func,
+  notesEnabled:         PropTypes.bool,
+  onToggleNotes:        PropTypes.func,
+  videoEnabled:         PropTypes.bool,
+  onToggleVideo:        PropTypes.func,
+  embedded:             PropTypes.bool,
 }
 
 export default memo(PromptBar)

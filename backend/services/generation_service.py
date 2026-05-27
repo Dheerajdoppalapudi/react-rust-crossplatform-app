@@ -179,6 +179,27 @@ async def _upload_frames_to_s3(local_paths: list, session_id: str) -> list:
     return list(await asyncio.gather(*(_one(i, p) for i, p in enumerate(local_paths))))
 
 
+async def _frame_to_deliverable(img: str, session_id: str, index: int) -> str:
+    """
+    Return a CloudFront URL if already a URL; otherwise base64-encode the local
+    file so the client can display it without a separate media endpoint call.
+
+    This handles the rare case where S3 upload fails — the fallback local path
+    is unreadable by the browser, so we embed the content inline.
+    """
+    if img.startswith("https://"):
+        return img
+    import base64
+    try:
+        ext  = Path(img).suffix.lstrip(".") or "png"
+        mime = "video/mp4" if ext == "mp4" else f"image/{ext}"
+        data = await asyncio.to_thread(Path(img).read_bytes)
+        return f"data:{mime};base64,{base64.b64encode(data).decode()}"
+    except Exception as exc:
+        logger.warning("frame_b64_encode_failed", session=session_id, index=index, error=str(exc))
+        return img
+
+
 # ── Conversation context builders ─────────────────────────────────────────────
 
 async def build_conversation_context(
@@ -542,7 +563,8 @@ async def run_video_pipeline_from_intent(
     )
 
     for i, (img, cap) in enumerate(zip(result_payload["images"], result_payload["captions"])):
-        yield {"type": "frame", "index": i, "image": img, "caption": cap}
+        deliverable = await _frame_to_deliverable(img, session_id, i)
+        yield {"type": "frame", "index": i, "image": deliverable, "caption": cap}
 
     yield {
         "type":       "stage_done",

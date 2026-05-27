@@ -10,7 +10,6 @@ import asyncio
 import structlog
 from pathlib import Path
 
-from services.llm_service import LLMService, OpenAIProvider
 from services.frame_generation.planner import call_llm, _extract_json, _log
 from .beat_types import BeatScript
 
@@ -18,8 +17,6 @@ logger = structlog.get_logger(__name__)
 
 _PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
 _PROMPT_TEMPLATE: str = (_PROMPTS_DIR / "planning_beats.md").read_text(encoding="utf-8")
-
-_planner_service = LLMService(provider=OpenAIProvider(model="gpt-4.1"))
 
 # Static portion of the prompt (everything before the TOPIC substitution) is
 # eligible for Anthropic prompt caching — saves ~90% on repeated topics.
@@ -30,10 +27,14 @@ _STATIC_PREFIX = _PROMPT_TEMPLATE[:_idx] if _idx != -1 else ""
 
 async def plan_beats(user_prompt: str, conversation_context: str = "") -> BeatScript:
     """
-    Call the Sonnet planner and return a validated BeatScript.
+    Call the configured beat_planner model and return a validated BeatScript.
 
     Raises ValueError if the LLM returns malformed JSON or beat_count is out of range.
     """
+    from services.llm_service import get_task_service
+    from services.frame_generation.planner import request_llm_service
+    planner_svc = request_llm_service.get() or get_task_service("beat_planner")
+
     prompt = (
         _PROMPT_TEMPLATE
         .replace("{{USER_PROMPT}}", user_prompt)
@@ -48,7 +49,7 @@ async def plan_beats(user_prompt: str, conversation_context: str = "") -> BeatSc
         9000,
         "planning_beats.md",
         _STATIC_PREFIX,
-        _planner_service,
+        planner_svc,   # override_service — already resolved above
     )
 
     plan_dict = _extract_json(raw)

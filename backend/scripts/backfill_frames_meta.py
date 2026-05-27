@@ -94,7 +94,7 @@ async def backfill(batch_size: int = 50) -> None:
                 if meta:
                     await pool.execute(
                         "UPDATE sessions SET frames_meta = $1 WHERE id = $2",
-                        json.dumps(meta), session_id,
+                        meta, session_id,
                     )
                     updated += 1
                     logger.info("backfill_session_updated", session=session_id[:8])

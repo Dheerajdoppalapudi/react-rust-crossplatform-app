@@ -1,8 +1,9 @@
 import { useState, useCallback } from 'react'
-import { Box, IconButton, Typography, Tooltip, useTheme, Button, CircularProgress } from '@mui/material'
+import { Box, IconButton, Typography, Tooltip, useTheme, Button, CircularProgress, TextField } from '@mui/material'
 import ArrowBackIcon  from '@mui/icons-material/ArrowBack'
 import MergeIcon      from '@mui/icons-material/MergeType'
 import EditNoteIcon   from '@mui/icons-material/EditNote'
+import SendIcon       from '@mui/icons-material/Send'
 import Canvas         from './Canvas'
 import NodeModal      from './NodeModal'
 import MergedVideoModal   from './MergedVideoModal'
@@ -22,6 +23,7 @@ export default function LearningView({ turns, conversationId, onExit, onAskFromL
   const [showMergedModal, setShowMergedModal] = useState(false)
   const [mergeError,      setMergeError]      = useState(null)
   const [mergedVideoUrl,  setMergedVideoUrl]  = useState(null)
+  const [emptyInput,      setEmptyInput]      = useState('')
 
   const handleNodeClick = useCallback((node) => {
     const fresh = turns.find((t) => t.id === node.id || t.tempId === node.tempId) || node
@@ -36,6 +38,13 @@ export default function LearningView({ turns, conversationId, onExit, onAskFromL
   const handleCanvasAsk = useCallback(({ question, sessionId, model, videoEnabled, notesEnabled: askNotesEnabled }) => {
     onGenerateFromCanvas?.({ question, sessionId, model, videoEnabled, notesEnabled: askNotesEnabled })
   }, [onGenerateFromCanvas])
+
+  const handleEmptySubmit = () => {
+    const q = emptyInput.trim()
+    if (!q) return
+    setEmptyInput('')
+    handleCanvasAsk({ question: q })
+  }
 
   const handleMerge = useCallback(async () => {
     setMerging(true)
@@ -54,6 +63,7 @@ export default function LearningView({ turns, conversationId, onExit, onAskFromL
   }, [conversationId])
 
   const readyCount = turns.filter((t) => t.id && t.videoPhase === 'ready').length
+  const isEmpty    = turns.length === 0
 
   return (
     <Box sx={{
@@ -63,6 +73,7 @@ export default function LearningView({ turns, conversationId, onExit, onAskFromL
       display:       'flex',
       flexDirection: 'column',
     }}>
+      {/* ── Top-left bar: back + label + notes + merge ─────────────────────── */}
       <Box sx={{
         position: 'absolute', top: 16, left: 16, zIndex: 10,
         display: 'flex', alignItems: 'center', gap: 1,
@@ -99,29 +110,13 @@ export default function LearningView({ turns, conversationId, onExit, onAskFromL
             Learning Canvas
           </Typography>
         </Box>
-      </Box>
 
-      <Box sx={{
-        position:       'absolute', bottom: 20, left: '50%',
-        transform:      'translateX(-50%)', zIndex: 10,
-        px: 2, py: 0.6,
-        bgcolor:        isDark ? 'rgba(0,0,0,0.45)' : 'rgba(255,255,255,0.8)',
-        border:         `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : '#e2e8f0'}`,
-        borderRadius:   '20px',
-        backdropFilter: 'blur(8px)',
-        pointerEvents:  'none',
-      }}>
-        <Typography sx={{ fontSize: 11, color: theme.palette.text.secondary }}>
-          Click a node to explore · Drag to reposition · Scroll to zoom
-        </Typography>
-      </Box>
-
-      <Box sx={{ position: 'absolute', top: 16, right: 16, zIndex: 10, display: 'flex', alignItems: 'center', gap: 1 }}>
         {mergeError && (
           <Typography sx={{ fontSize: 11, color: '#f87171', bgcolor: 'rgba(239,68,68,0.12)', px: 1.5, py: 0.5, borderRadius: '6px', border: '1px solid rgba(239,68,68,0.3)' }}>
             {mergeError}
           </Typography>
         )}
+
         <Tooltip title="My Notes" placement="bottom">
           <IconButton
             size="small"
@@ -144,6 +139,7 @@ export default function LearningView({ turns, conversationId, onExit, onAskFromL
             <EditNoteIcon sx={{ fontSize: 16 }} />
           </IconButton>
         </Tooltip>
+
         <Button
           onClick={mergeResult ? () => setShowMergedModal(true) : handleMerge}
           disabled={merging}
@@ -157,13 +153,123 @@ export default function LearningView({ turns, conversationId, onExit, onAskFromL
             boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
           }}
         >
-          {merging ? 'Merging\u2026' : mergeResult ? 'View Merged' : 'Merge Videos'}
+          {merging ? 'Merging…' : mergeResult ? 'View Merged' : 'Merge Videos'}
         </Button>
       </Box>
 
+      {/* ── Bottom hint pill ──────────────────────────────────────────────────── */}
+      {!isEmpty && (
+        <Box sx={{
+          position:       'absolute', bottom: 20, left: '50%',
+          transform:      'translateX(-50%)', zIndex: 10,
+          px: 2, py: 0.6,
+          bgcolor:        isDark ? 'rgba(0,0,0,0.45)' : 'rgba(255,255,255,0.8)',
+          border:         `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : '#e2e8f0'}`,
+          borderRadius:   '20px',
+          backdropFilter: 'blur(8px)',
+          pointerEvents:  'none',
+        }}>
+          <Typography sx={{ fontSize: 11, color: theme.palette.text.secondary }}>
+            Click a node to explore · Drag to reposition · Scroll to zoom
+          </Typography>
+        </Box>
+      )}
+
       <Canvas turns={turns} onNodeClick={handleNodeClick} onAsk={handleCanvasAsk} defaultModel={defaultModel} defaultVideoEnabled={defaultVideoEnabled} defaultNotesEnabled={notesEnabled} />
 
-      {/* My Notes slide-over — overlays the canvas from the right */}
+      {/* ── Empty state overlay ──────────────────────────────────────────────── */}
+      {isEmpty && (
+        <Box sx={{
+          position: 'absolute', inset: 0, zIndex: 8,
+          display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center',
+          pointerEvents: 'none',
+        }}>
+          <Box sx={{ pointerEvents: 'auto', width: '100%', maxWidth: 520, px: 3 }}>
+            <Typography sx={{
+              fontSize: 22, fontWeight: 700, mb: 0.75, textAlign: 'center',
+              color: theme.palette.text.primary,
+            }}>
+              What do you want to learn?
+            </Typography>
+            <Typography sx={{
+              fontSize: 13.5, mb: 2.5, textAlign: 'center',
+              color: theme.palette.text.secondary,
+            }}>
+              Start a topic and watch it grow into an interactive knowledge tree.
+            </Typography>
+
+            <Box sx={{
+              border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.12)' : '#e2e8f0'}`,
+              borderRadius: '12px',
+              overflow: 'hidden',
+              bgcolor: isDark ? '#1a1a2e' : '#ffffff',
+              boxShadow: isDark
+                ? '0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04)'
+                : '0 8px 32px rgba(0,0,0,0.1)',
+              '&:focus-within': {
+                borderColor: isDark ? 'rgba(79,110,255,0.55)' : 'rgba(79,110,255,0.45)',
+              },
+              transition: 'border-color 0.15s',
+            }}>
+              <TextField
+                autoFocus
+                value={emptyInput}
+                onChange={(e) => setEmptyInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault()
+                    handleEmptySubmit()
+                  }
+                }}
+                placeholder="Ask anything…"
+                multiline
+                maxRows={4}
+                fullWidth
+                variant="standard"
+                InputProps={{ disableUnderline: true }}
+                sx={{
+                  px: 2, pt: 1.75, pb: 1,
+                  '& .MuiInputBase-root': {
+                    fontSize: 14.5,
+                    color: theme.palette.text.primary,
+                    lineHeight: 1.6,
+                  },
+                  '& .MuiInputBase-input::placeholder': {
+                    color: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.35)',
+                    opacity: 1,
+                  },
+                }}
+              />
+              <Box sx={{ display: 'flex', justifyContent: 'flex-end', px: 1.5, pb: 1.25 }}>
+                <Tooltip title="Generate (Enter)">
+                  <span>
+                    <IconButton
+                      size="small"
+                      disabled={!emptyInput.trim()}
+                      onClick={handleEmptySubmit}
+                      sx={{
+                        width: 30, height: 30,
+                        bgcolor: emptyInput.trim() ? theme.palette.primary.main : 'transparent',
+                        color: emptyInput.trim() ? '#fff' : (isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)'),
+                        border: `1.5px solid ${emptyInput.trim() ? theme.palette.primary.main : (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)')}`,
+                        borderRadius: '8px',
+                        transition: 'all 0.15s',
+                        '&:hover': { bgcolor: theme.palette.primary.dark, color: '#fff', borderColor: theme.palette.primary.dark },
+                        '&.Mui-disabled': { opacity: 0.3 },
+                      }}
+                    >
+                      <SendIcon sx={{ fontSize: 13 }} />
+                    </IconButton>
+                  </span>
+                </Tooltip>
+              </Box>
+            </Box>
+          </Box>
+        </Box>
+      )}
+
+      {/* ── My Notes slide-over ──────────────────────────────────────────────── */}
       <Box sx={{
         position: 'absolute', top: 0, right: 0, bottom: 0,
         width: userNotesOpen ? 440 : 0,

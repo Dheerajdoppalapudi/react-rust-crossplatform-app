@@ -40,10 +40,12 @@ CLOUDFRONT_DOMAIN: str = os.getenv("CLOUDFRONT_DOMAIN", "")
 # ── LLM API keys ─────────────────────────────────────────────────────────────
 ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
 OPENAI_API_KEY: str    = os.getenv("OPENAI_API_KEY", "")
+GEMINI_API_KEY: str    = os.getenv("GEMINI_API_KEY", "")
 
 # ── LLM models ────────────────────────────────────────────────────────────────
 OPENAI_MODEL: str  = os.getenv("OPENAI_MODEL",  "gpt-4.1")
 CLAUDE_MODEL: str  = os.getenv("CLAUDE_MODEL",  "claude-haiku-4-5-20251001")
+GEMINI_MODEL: str  = os.getenv("GEMINI_MODEL",  "gemini-2.0-flash")
 # Cheap/fast model used only for intent classification (~300 tokens, simple task).
 # Always uses Haiku regardless of the user's chosen model.
 CLASSIFY_MODEL: str = os.getenv("CLASSIFY_MODEL", "claude-haiku-4-5-20251001")
@@ -61,6 +63,30 @@ ALLOWED_OPENAI_MODELS: frozenset[str] = frozenset({
     "gpt-4o",
     "gpt-4o-mini",
 })
+ALLOWED_GEMINI_MODELS: frozenset[str] = frozenset({
+    "gemini-2.0-flash",
+    "gemini-1.5-pro",
+    "gemini-1.5-flash",
+})
+
+# ── Per-task model routing ─────────────────────────────────────────────────────
+# When the user selects "Auto" in the UI, each pipeline step uses its own model.
+# Override any task via env var (e.g. MODEL_SCENE_PLANNER=gpt-4.1).
+#
+# Cost rationale for defaults:
+#   Gemini Flash 2.0 : $0.075/$0.30 per 1M tokens  — simple structured tasks
+#   Claude Sonnet 4.6: $3/$15 per 1M tokens         — complex reasoning
+#   Haiku 4.5        : $0.80/$4 per 1M tokens       — synthesis streaming (native support)
+TASK_MODELS: dict = {
+    "entity_selector": os.getenv("MODEL_ENTITY_SELECTOR", "gemini-2.0-flash"),
+    "scene_planner":   os.getenv("MODEL_SCENE_PLANNER",   "claude-sonnet-4-6"),
+    "vocab_plan":      os.getenv("MODEL_VOCAB_PLAN",       "gemini-2.0-flash"),
+    "svg_frame":       os.getenv("MODEL_SVG_FRAME",        "gemini-2.0-flash"),
+    "beat_planner":    os.getenv("MODEL_BEAT_PLANNER",     "claude-sonnet-4-6"),
+    "beat_codegen":    os.getenv("MODEL_BEAT_CODEGEN",     "gemini-2.0-flash"),
+    "synthesiser":     os.getenv("MODEL_SYNTHESISER",      "claude-haiku-4-5-20251001"),
+    "codegen":         os.getenv("MODEL_CODEGEN",          "gemini-2.0-flash"),
+}
 
 # ── Refresh token bounding ────────────────────────────────────────────────────
 # Old tokens beyond this limit are pruned (oldest-first) on each new issuance.

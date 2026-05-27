@@ -56,14 +56,14 @@ async def init_pool() -> None:
     global _pool
     _pool = await asyncpg.create_pool(
         DATABASE_URL,
-        min_size=3,
+        min_size=10,
         max_size=50,
         command_timeout=30,
         statement_cache_size=100,
         max_inactive_connection_lifetime=240,
         init=_init_connection,
     )
-    logger.info("asyncpg_pool_created", min_size=3, max_size=50)
+    logger.info("asyncpg_pool_created", min_size=10, max_size=50)
 
 
 async def close_pool() -> None:

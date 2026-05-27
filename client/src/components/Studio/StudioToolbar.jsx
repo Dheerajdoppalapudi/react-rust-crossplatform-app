@@ -1,10 +1,7 @@
 import { memo } from 'react'
 import PropTypes from 'prop-types'
 import { Box, Tooltip, IconButton, useTheme } from '@mui/material'
-import NotesOutlinedIcon    from '@mui/icons-material/NotesOutlined'
-import EditNoteIcon         from '@mui/icons-material/EditNote'
-import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined'
-import VideocamOffOutlined  from '@mui/icons-material/VideocamOffOutlined'
+import EditNoteIcon from '@mui/icons-material/EditNote'
 import { BRAND } from '../../theme/tokens.js'
 
 const VIEWS = ['Chat', 'Learn']
@@ -16,10 +13,6 @@ const VIEWS = ['Chat', 'Learn']
  *   compact          — true in the mobile slot (no Tooltips, tighter border colors)
  *   viewMode         — 'chat' | 'learn'
  *   onViewModeChange — (mode: string) => void
- *   notesEnabled     — boolean
- *   onToggleNotes    — () => void
- *   videoEnabled     — boolean
- *   onToggleVideo    — () => void
  *   userNotesOpen    — boolean
  *   onToggleUserNotes — () => void
  */
@@ -27,10 +20,6 @@ function StudioToolbar({
   compact = false,
   viewMode,
   onViewModeChange,
-  notesEnabled,
-  onToggleNotes,
-  videoEnabled,
-  onToggleVideo,
   userNotesOpen,
   onToggleUserNotes,
 }) {
@@ -92,26 +81,6 @@ function StudioToolbar({
     </Box>
   )
 
-  const notesBtn = (
-    <IconButton size="small" onClick={onToggleNotes} aria-pressed={notesEnabled}
-      aria-label={notesEnabled ? 'AI Notes on' : 'AI Notes off'}
-      sx={btnSx(notesEnabled)}
-    >
-      <NotesOutlinedIcon sx={{ fontSize: 15 }} />
-    </IconButton>
-  )
-
-  const videoBtn = (
-    <IconButton size="small" onClick={onToggleVideo} aria-pressed={videoEnabled}
-      aria-label={videoEnabled ? 'Video on' : 'Video off'}
-      sx={btnSx(videoEnabled)}
-    >
-      {videoEnabled
-        ? <VideocamOutlinedIcon sx={{ fontSize: 15 }} />
-        : <VideocamOffOutlined  sx={{ fontSize: 15 }} />}
-    </IconButton>
-  )
-
   const userNotesBtn = (
     <IconButton size="small" onClick={onToggleUserNotes} aria-pressed={userNotesOpen}
       aria-label="My Notes"
@@ -122,37 +91,27 @@ function StudioToolbar({
   )
 
   if (compact) {
-    // Mobile slot: no Tooltips, plain buttons
     return (
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
         {viewToggle}
-        {notesBtn}
-        {videoBtn}
         {userNotesBtn}
       </Box>
     )
   }
 
-  // Desktop: wrap icon buttons with Tooltips
   return (
     <>
       {viewToggle}
-      <Tooltip title={notesEnabled ? 'AI Notes on' : 'AI Notes off'}>{notesBtn}</Tooltip>
-      <Tooltip title={videoEnabled ? 'Video on' : 'Video off'}>{videoBtn}</Tooltip>
       <Tooltip title={`My Notes (${isMac ? '⇧⌘N' : 'Ctrl+Shift+N'})`}>{userNotesBtn}</Tooltip>
     </>
   )
 }
 
 StudioToolbar.propTypes = {
-  compact:          PropTypes.bool,
-  viewMode:         PropTypes.oneOf(['chat', 'learn']).isRequired,
-  onViewModeChange: PropTypes.func.isRequired,
-  notesEnabled:     PropTypes.bool.isRequired,
-  onToggleNotes:    PropTypes.func.isRequired,
-  videoEnabled:     PropTypes.bool.isRequired,
-  onToggleVideo:    PropTypes.func.isRequired,
-  userNotesOpen:    PropTypes.bool.isRequired,
+  compact:           PropTypes.bool,
+  viewMode:          PropTypes.oneOf(['chat', 'learn']).isRequired,
+  onViewModeChange:  PropTypes.func.isRequired,
+  userNotesOpen:     PropTypes.bool.isRequired,
   onToggleUserNotes: PropTypes.func.isRequired,
 }
 

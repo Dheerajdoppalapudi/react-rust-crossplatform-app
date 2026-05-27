@@ -236,6 +236,7 @@ export const api = {
     message,
     conversationId   = null,
     pauseContext     = null,
+    selectedText     = null,    // user-highlighted text for follow-up context
     notesEnabled     = false,
     provider         = 'claude',
     model            = null,
@@ -257,6 +258,7 @@ export const api = {
     if (renderMode)       form.append('render_mode',       renderMode)
     if (uploadedFileIds)  form.append('uploaded_file_ids', uploadedFileIds)
     if (researchContext)  form.append('research_context',  researchContext)
+    if (selectedText)     form.append('selected_text',     selectedText)
     if (pauseContext) {
       form.append('pause_session_id',  pauseContext.sessionId)
       if (pauseContext.frameIndex != null) {

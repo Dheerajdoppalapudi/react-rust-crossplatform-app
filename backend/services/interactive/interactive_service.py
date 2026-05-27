@@ -79,9 +79,9 @@ class SelectionResult:
 
 
 def _get_llm_service(model: str) -> LLMService:
-    if model == "gpt-4.1":
-        return LLMService(provider=OpenAIProvider(model="gpt-4.1"))
-    return default_llm_service
+    """Map an entity-selector model recommendation to an LLMService."""
+    from services.llm_service import _make_service_for_model
+    return _make_service_for_model(model) if model else default_llm_service
 
 
 _DOMAINS_DIR = os.path.join(_PROMPTS_DIR, "domains")
@@ -226,10 +226,12 @@ async def _select_entities(
     user_msg = f"{context_block}Domain: {domain}\n\nQuestion: {original_message}"
 
     try:
-        _model = getattr(default_llm_service.provider, "model", "unknown")
+        from services.llm_service import get_task_service
+        entity_svc = request_llm_service.get() or get_task_service("entity_selector")
+        _model = getattr(entity_svc.provider, "model", "unknown")
         logger.info("llm_call", prompt="entity_selector", model=_model,
                     chars=len(selector_prompt) + len(user_msg), cache="no")
-        raw, _usage = await default_llm_service.make_system_user_request_async(
+        raw, _usage = await entity_svc.make_system_user_request_async(
             selector_prompt, user_msg, max_tokens=800
         )
         _accumulate_tokens(_usage or {})
@@ -286,7 +288,8 @@ async def _plan_scene(
     sources_block = _build_sources_block(sources)
     user_msg = f"{context_block}{sources_block}USER QUESTION: {enriched_prompt}"
 
-    svc = svc or default_llm_service
+    from services.llm_service import get_task_service
+    svc = svc or get_task_service("scene_planner")
     _model = getattr(svc.provider, "model", "unknown")
     logger.info("llm_call", prompt="scene_planner", model=_model,
                 chars=len(system_prompt) + len(user_msg), cache="no")
@@ -357,9 +360,14 @@ async def run_interactive_pipeline(
     yield {"type": "stage_done", "stage": "widgets", "duration_s": round(time.monotonic() - _t0, 1)}
     yield {"type": "entities_selected", "entities": selection.entities}
 
-    # Honour per-request model override; fall back to entity selector recommendation
+    # Honour per-request model override; fall back to entity selector recommendation;
+    # final fallback to task-configured codegen service.
+    from services.llm_service import get_task_service
     user_forced_svc = request_llm_service.get()
-    downstream_svc  = user_forced_svc if user_forced_svc else _get_llm_service(selection.model)
+    if user_forced_svc:
+        downstream_svc = user_forced_svc
+    else:
+        downstream_svc = _get_llm_service(selection.model) or get_task_service("codegen")
 
     # Stage 2: Plan scene IR — enriched prompt + sources for grounded citations
     plan_topic = _short_topic(selection.enriched_prompt.split('.')[0])

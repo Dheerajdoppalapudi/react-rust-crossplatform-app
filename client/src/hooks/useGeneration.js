@@ -68,6 +68,9 @@ export function useGeneration({
   // Pause context
   pauseContext,
   setPauseContext,
+  // Text selection context
+  selectedTextContext,
+  setSelectedTextContext,
   // Bootstrap overlay
   setBootstrap,
   // Video stream
@@ -124,8 +127,10 @@ export function useGeneration({
       ? null
       : (pauseContext?.sessionId ?? lastCompletedTurnId)
 
-    const capturedPauseContext = pauseContext
+    const capturedPauseContext   = pauseContext
+    const capturedSelectedText   = selectedTextContext ?? null
     setPauseContext(null)
+    setSelectedTextContext(null)
 
     const researchMode    = selectedMode?.id ?? 'instant'
     const renderModeId    = selectedRenderMode?.id !== 'auto' ? selectedRenderMode?.id : null
@@ -178,6 +183,7 @@ export function useGeneration({
           message:         submittedPrompt,
           conversationId:  activeConvId,
           pauseContext:    capturedPauseContext,
+          selectedText:    capturedSelectedText,
           notesEnabled,
           provider:        selectedModel.provider,
           model:           selectedModel.model,
@@ -382,9 +388,9 @@ export function useGeneration({
     }) // end withSpan
   }, [
     queryClient, isAnyGenerating, lastCompletedTurnId, activeConvId, notesEnabled, videoEnabled,
-    pauseContext, selectedModel, selectedRenderMode, selectedMode, stagedFiles,
+    pauseContext, selectedTextContext, selectedModel, selectedRenderMode, selectedMode, stagedFiles,
     onActiveConvIdChange, onConversationsRefresh, runVideoGenerationForTurn,
-    scrollToTop, toast, loadedConvIdRef, setBootstrap, setPauseContext, setPrompt, setTurns,
+    scrollToTop, toast, loadedConvIdRef, setBootstrap, setPauseContext, setSelectedTextContext, setPrompt, setTurns,
   ])
 
   // ── handleLearnGenerate ───────────────────────────────────────────────────

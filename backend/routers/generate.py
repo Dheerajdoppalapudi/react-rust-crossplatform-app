@@ -45,6 +45,7 @@ from fastapi.responses import StreamingResponse
 from core.config import (
     ALLOWED_CLAUDE_MODELS,
     ALLOWED_OPENAI_MODELS,
+    ALLOWED_GEMINI_MODELS,
     CONVERSATION_TITLE_MAX_CHARS,
     DEEP_SEARCH_SOURCES,
     DEEP_SOURCES_IN_ANSWER,
@@ -77,7 +78,7 @@ from services.generation_service import (
     build_interactive_context,
     run_video_pipeline_from_intent,
 )
-from services.llm_service import LLMService, OpenAIProvider, ClaudeProvider
+from services.llm_service import LLMService, OpenAIProvider, ClaudeProvider, GeminiProvider
 from services.research.file_extractor import extract_urls_from_text, extract_text
 from services.research.search_provider import SearchResult, tavily
 from services.research.source_processor import rank_and_deduplicate
@@ -126,6 +127,7 @@ async def generate(
     video_enabled:       bool          = Form(False),
     research_mode:       str           = Form("instant"),   # "instant" | "deep_research"
     uploaded_file_ids:   Optional[str] = Form(None),
+    selected_text:       Optional[str] = Form(None),        # user-highlighted text for follow-up context
     current_user:        User          = Depends(get_current_user),
 ):
     # ── Input validation ──────────────────────────────────────────────────────
@@ -140,7 +142,14 @@ async def generate(
     if render_mode is not None and render_mode not in ("manim", "svg"):
         raise _HTTPException(status_code=422, detail=f"invalid render_mode: {render_mode!r}")
     if model:
-        _allowed = ALLOWED_CLAUDE_MODELS if provider == "claude" else ALLOWED_OPENAI_MODELS
+        if provider == "claude":
+            _allowed = ALLOWED_CLAUDE_MODELS
+        elif provider == "openai":
+            _allowed = ALLOWED_OPENAI_MODELS
+        elif provider == "gemini":
+            _allowed = ALLOWED_GEMINI_MODELS
+        else:
+            _allowed = frozenset()
         if model not in _allowed:
             raise _HTTPException(status_code=422, detail=f"unsupported model: {model!r}")
 
@@ -175,12 +184,13 @@ async def generate(
     await touch_conversation(conversation_id)
 
     # ── LLM provider ─────────────────────────────────────────────────────────
-    _llm_provider = (
-        OpenAIProvider(model=model) if provider == "openai" else ClaudeProvider(model=model)
-    ) if model else (
-        OpenAIProvider() if provider == "openai" else ClaudeProvider()
-    )
-    model_name = _llm_provider.model
+    if provider == "openai":
+        _llm_provider = OpenAIProvider(model=model) if model else OpenAIProvider()
+    elif provider == "gemini":
+        _llm_provider = GeminiProvider(model=model) if model else GeminiProvider()
+    else:
+        _llm_provider = ClaudeProvider(model=model) if model else ClaudeProvider()
+    model_name = _llm_provider.model if model else "auto"
 
     _params = dict(
         session_id=session_id,
@@ -202,6 +212,7 @@ async def generate(
         start_time=start_time,
         llm_provider=_llm_provider,
         current_user=current_user,
+        selected_text=selected_text,
     )
 
     return StreamingResponse(
@@ -231,6 +242,7 @@ async def _generate_stream(p: dict):
     start_time        = p["start_time"]
     llm_provider      = p["llm_provider"]
     current_user      = p["current_user"]
+    selected_text     = p.get("selected_text") or None
 
     # ContextVars must be set inside the generator
     lifecycle_log: list = []
@@ -240,7 +252,10 @@ async def _generate_stream(p: dict):
         "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0,
     }
     usage_token  = token_usage.set(usage_acc)
-    svc_token    = request_llm_service.set(LLMService(provider=llm_provider))
+    # Only set request_llm_service when the user explicitly selected a model.
+    # When model_name == "auto", each call site uses its per-task configured service.
+    _user_model = p.get("model_name") if p.get("model_name") != "auto" else None
+    svc_token   = request_llm_service.set(LLMService(provider=llm_provider) if _user_model else None)
 
     stages_log: list[dict] = []
 
@@ -304,6 +319,20 @@ async def _generate_stream(p: dict):
             else:
                 conversation_context = ""
 
+        # Append user text-selection context after the conversation history block
+        if selected_text and selected_text.strip():
+            _excerpt = selected_text.strip()
+            _max_chars = 2000
+            if len(_excerpt) > _max_chars:
+                _excerpt = _excerpt[:_max_chars] + "…"
+            conversation_context += (
+                "\n## USER TEXT SELECTION CONTEXT\n"
+                "The user has highlighted the following excerpt from the lesson:\n"
+                f"\"{_excerpt}\"\n"
+                "Their follow-up question is specifically about this selected text. "
+                "Elaborate, clarify, or extend this concept in your response.\n\n"
+            )
+
         # ── 2. Load prior synthesis_text from ancestor chain (branch-aware) ──
         prior_synthesis = await _load_prior_synthesis(parent_session_id, FOLLOWUP_CONTEXT_TURNS)
 
@@ -352,6 +381,7 @@ async def _generate_stream(p: dict):
 
             async for event in _search_phase(
                 intent=intent,
+                message=message,
                 research_mode=research_mode,
                 conversation_id=conversation_id,
                 file_paths=file_paths,
@@ -381,8 +411,9 @@ async def _generate_stream(p: dict):
 
                 from services.research.synthesiser import stream as synth_stream
                 from services.research.source_processor import build_evidence_table
+                from services.llm_service import get_task_service
 
-                llm_svc = request_llm_service.get()
+                llm_svc = request_llm_service.get() or get_task_service("synthesiser")
                 sr_list = [SearchResult(
                     title=s.get("title", ""), url=s.get("url", ""),
                     snippet=s.get("snippet", ""), content=s.get("content", ""),
@@ -549,8 +580,71 @@ async def _generate_stream(p: dict):
 
 # ── Search phase ──────────────────────────────────────────────────────────────
 
+_DEEP_MAX_ROUNDS = 3  # maximum search rounds for deep_research mode
+
+_GAP_ANALYSIS_SYSTEM = """\
+You are a research gap analyzer. Given a user question, the queries already run, and a summary of what was found, identify what important angles are still missing and generate new targeted search queries to fill those gaps.
+
+Rules:
+- Write queries like a domain expert — specific terminology, precise framing, NOT "what is X" or "how does Y work"
+- Each new query must target a distinct gap (mechanism, data, recent events, counterarguments, applications, comparisons)
+- Do NOT repeat or paraphrase queries already run
+- Return ONLY a JSON object with no markdown fences
+- If existing results already cover the topic well enough, return {"new_queries": []}
+- Maximum 3 new queries; fewer is better if only 1-2 gaps remain
+"""
+
+
+def _build_results_summary(results: list) -> str:
+    """Compact summary of search results for gap analysis LLM input."""
+    parts = []
+    for i, r in enumerate(results[:8], 1):
+        snippet = (getattr(r, "snippet", "") or getattr(r, "content", "") or "")[:250].strip()
+        if snippet:
+            parts.append(f"[{i}] {r.title}: {snippet}")
+    return "\n\n".join(parts) if parts else "No results found."
+
+
+async def _gap_analysis(
+    user_question: str,
+    results: list,
+    prev_queries: list[str],
+) -> list[str]:
+    """
+    Call Haiku to identify gaps in current search coverage and return new queries.
+    Returns an empty list if coverage is already sufficient.
+    """
+    from services.llm_service import get_task_service
+    from services.frame_generation.planner import _extract_json
+    llm_svc = get_task_service("synthesiser")  # Haiku — fast classification-class call
+
+    prev_q_str   = "\n".join(f"- {q}" for q in prev_queries)
+    results_text = _build_results_summary(results)
+    user_msg = (
+        f"## User question\n{user_question}\n\n"
+        f"## Queries already run\n{prev_q_str}\n\n"
+        f"## Summary of results found so far\n{results_text}\n\n"
+        "Identify the most important missing angles, then generate 0-3 new targeted search queries. "
+        'Return JSON: {"new_queries": ["query1", "query2"]} or {"new_queries": []} if coverage is sufficient.'
+    )
+
+    try:
+        raw, _ = await llm_svc.make_system_user_request_async(
+            _GAP_ANALYSIS_SYSTEM,
+            user_msg,
+            max_tokens=300,
+        )
+        data    = _extract_json(raw)
+        queries = data.get("new_queries", [])
+        return [q.strip() for q in queries if isinstance(q, str) and q.strip()][:3]
+    except Exception as exc:
+        logger.warning("gap_analysis_failed", error=str(exc))
+        return []
+
+
 async def _search_phase(
     intent:          dict,
+    message:         str,
     research_mode:   str,
     conversation_id: str,
     file_paths:      list[str],
@@ -559,6 +653,11 @@ async def _search_phase(
 ):
     """
     Unified search pipeline for instant (light) and deep_research (full) modes.
+
+    For deep_research: runs up to _DEEP_MAX_ROUNDS iterative rounds. After each
+    round an LLM gap-analysis call identifies what is still missing and generates
+    new targeted queries for the next round. Stops early when gap analysis returns
+    no new queries (sufficient coverage) or the round limit is reached.
 
     Yields SSE events and one internal sentinel:
       {type: '_sources_ready', sources, sources_for_llm, sources_all}
@@ -570,18 +669,23 @@ async def _search_phase(
     The caller forwards all non-internal events to the client.
     """
     search_queries = intent.get("search_queries", [])
-    sub_questions  = intent.get("sub_questions", [])
     max_queries    = DEEP_MAX_QUERIES if research_mode == "deep_research" else INSTANT_MAX_QUERIES
     queries_used   = search_queries[:max_queries]
 
-    all_results: list[SearchResult] = []
+    all_results:   list[SearchResult] = []
+    all_queries_run: list[str]        = []
 
     # One semaphore for the entire request — caps total concurrent Tavily calls
-    # across all rounds so both round 1 and round 2 share the same 3-slot limit.
     _tavily_sem = asyncio.Semaphore(3)
 
-    # ── Round 1 (and optional round 2 for deep) ───────────────────────────────
-    for round_n in range(2 if research_mode == "deep_research" else 1):
+    async def _bounded_search(q: str) -> list:
+        async with _tavily_sem:
+            return await tavily.search(q, max_results=5)
+
+    max_rounds = _DEEP_MAX_ROUNDS if research_mode == "deep_research" else 1
+
+    # ── Iterative search rounds ───────────────────────────────────────────────
+    for round_n in range(max_rounds):
         if not queries_used:
             break
 
@@ -589,16 +693,13 @@ async def _search_phase(
         search_evt = {
             "type":    "stage",
             "stage":   "searching",
-            "label":   f"Searching {n_q} {'query' if n_q == 1 else 'queries'}…",
+            "label":   f"Searching {n_q} {'query' if n_q == 1 else 'queries'}…" if round_n == 0
+                       else f"Round {round_n + 1}: filling {n_q} gap{'s' if n_q != 1 else ''}…",
             "round":   round_n + 1,
             "queries": queries_used,
         }
         yield search_evt
         t_search = time.time()
-
-        async def _bounded_search(q: str) -> list:
-            async with _tavily_sem:
-                return await tavily.search(q, max_results=5)
 
         batches = await asyncio.gather(*[_bounded_search(q) for q in queries_used])
 
@@ -609,8 +710,9 @@ async def _search_phase(
         seen = {r.url for r in all_results}
         new_results = [r for r in round_results if r.url not in seen]
         all_results.extend(new_results)
+        all_queries_run.extend(queries_used)
 
-        # Emit source events for every result found — UI shows all, not just what LLM uses
+        # Emit source events for every new result — UI shows all, not just what LLM uses
         for r in new_results:
             yield {"type": "source", "source": source_summary(r)}
 
@@ -621,9 +723,11 @@ async def _search_phase(
             "sources_found": len(new_results),
         }
 
-        # Round 2: only if deep and too few results
-        if round_n == 0 and research_mode == "deep_research" and len(all_results) < 5:
-            queries_used = [f"{q} explained" for q in sub_questions[:2]]
+        # For deep research, run gap analysis to decide whether another round is needed
+        if research_mode == "deep_research" and round_n < max_rounds - 1:
+            queries_used = await _gap_analysis(message, all_results, all_queries_run)
+            if not queries_used:
+                break  # gap analysis says coverage is sufficient
         else:
             break
 

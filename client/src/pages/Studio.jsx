@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
-import { Box, Typography, Divider, useTheme, useMediaQuery } from '@mui/material'
+import { Box, Typography, Divider, useTheme, useMediaQuery, CircularProgress } from '@mui/material'
 import { useMobileHeaderSlot } from '../App'
 import StudioToolbar from '../components/Studio/StudioToolbar'
 
@@ -63,6 +63,7 @@ export default function Studio({
   const [stagedFiles, setStagedFiles]               = useState([])
   const [turns, setTurns]                           = useState([])
   const [viewMode, setViewMode]                     = useState('chat')
+  const [selectedTextContext, setSelectedTextContext] = useState(null)
 
   const inputRef        = useRef(null)
   const threadBottomRef = useRef(null)
@@ -90,6 +91,8 @@ export default function Studio({
   const {
     bootstrap,
     setBootstrap,
+    isLoadingConversation,
+    setIsLoadingConversation,
     loadedConvIdRef,
     loadAbortRef,
     loadConversationById,
@@ -125,6 +128,8 @@ export default function Studio({
     stagedFiles,
     pauseContext,
     setPauseContext,
+    selectedTextContext,
+    setSelectedTextContext,
     setBootstrap,
     runVideoGenerationForTurn,
     scrollToTop,
@@ -170,6 +175,7 @@ export default function Studio({
   // Conversation switch: cancel in-flight work, then load the new conversation.
   useEffect(() => {
     setPauseContext(null)
+    setSelectedTextContext(null)
     generationAbortRef.current?.abort()
     loadAbortRef.current?.abort()
 
@@ -183,6 +189,7 @@ export default function Studio({
       setTurns([])
       setPrompt('')
       setBootstrap(null)
+      setIsLoadingConversation(false)
       scrollToTop()
     }
   }, [
@@ -215,17 +222,12 @@ export default function Studio({
         compact
         viewMode={viewMode}
         onViewModeChange={setViewMode}
-        notesEnabled={notesEnabled}
-        onToggleNotes={toggleNotes}
-        videoEnabled={videoEnabled}
-        onToggleVideo={toggleVideo}
         userNotesOpen={userNotesOpen}
         onToggleUserNotes={toggleUserNotes}
       />
     )
     return () => setSlot(null)
-  }, [isMobile, viewMode, notesEnabled, videoEnabled, userNotesOpen,
-      setSlot, toggleNotes, toggleVideo, toggleUserNotes, setViewMode])
+  }, [isMobile, viewMode, userNotesOpen, setSlot, toggleUserNotes, setViewMode])
 
   // ── Derived state ───────────────────────────────────────────────────────────
 
@@ -239,9 +241,10 @@ export default function Studio({
       : (lastTurn?.framesData?.suggested_followups ?? []),
   } : null, [activeConvId, lastTurn])
 
-  const showLoader = isBootstrapping
-  const showEmpty  = !isBootstrapping && turns.length === 0
-  const showThread = !isBootstrapping && turns.length > 0
+  const showLoader  = isBootstrapping
+  const showSpinner = !isBootstrapping && isLoadingConversation
+  const showEmpty   = !isBootstrapping && !isLoadingConversation && turns.length === 0
+  const showThread  = !isBootstrapping && !isLoadingConversation && turns.length > 0
 
   const followUpSuggestions = useMemo(() => {
     const lt            = turns[turns.length - 1]
@@ -287,6 +290,11 @@ export default function Studio({
   const handleMiniTreeNavigate = useCallback((tempId) => {
     document.querySelector(`[data-turn-id="${tempId}"]`)
       ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [])
+
+  const handleTextSelection = useCallback((text) => {
+    setSelectedTextContext(text)
+    setTimeout(() => inputRef.current?.focus(), 50)
   }, [])
 
   // ── Learning canvas (full-screen takeover) ──────────────────────────────────
@@ -348,10 +356,6 @@ export default function Studio({
           <StudioToolbar
             viewMode={viewMode}
             onViewModeChange={setViewMode}
-            notesEnabled={notesEnabled}
-            onToggleNotes={toggleNotes}
-            videoEnabled={videoEnabled}
-            onToggleVideo={toggleVideo}
             userNotesOpen={userNotesOpen}
             onToggleUserNotes={toggleUserNotes}
           />
@@ -386,6 +390,12 @@ export default function Studio({
               </Box>
             )}
 
+            {showSpinner && (
+              <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 200 }}>
+                <CircularProgress size={28} thickness={3} sx={{ color: theme.palette.text.disabled }} />
+              </Box>
+            )}
+
             {showEmpty && (
               <EmptyView
                 onSuggestionClick={handleSuggestionClick}
@@ -400,6 +410,8 @@ export default function Studio({
                 onNewConversation={handleNewConversation}
                 pauseContext={pauseContext}
                 onClearPauseContext={() => setPauseContext(null)}
+                selectedTextContext={selectedTextContext}
+                onClearSelectedText={() => setSelectedTextContext(null)}
                 selectedModel={selectedModel}
                 onModelChange={setSelectedModel}
                 selectedRenderMode={selectedRenderMode}
@@ -409,6 +421,10 @@ export default function Studio({
                 stagedFiles={stagedFiles}
                 onAddFiles={handleAddFiles}
                 onRemoveFile={handleRemoveFile}
+                notesEnabled={notesEnabled}
+                onToggleNotes={toggleNotes}
+                videoEnabled={videoEnabled}
+                onToggleVideo={toggleVideo}
               />
             )}
 
@@ -420,6 +436,7 @@ export default function Studio({
                   onRetryTurn={handleRetryTurn}
                   onRetryGeneration={handleRetryGeneration}
                   notesEnabled={notesEnabled}
+                  onTextSelect={handleTextSelection}
                 />
 
                 {followUpSuggestions.length > 0 && (
@@ -466,6 +483,8 @@ export default function Studio({
               onNewConversation={handleNewConversation}
               pauseContext={pauseContext}
               onClearPauseContext={() => setPauseContext(null)}
+              selectedTextContext={selectedTextContext}
+              onClearSelectedText={() => setSelectedTextContext(null)}
               selectedModel={selectedModel}
               onModelChange={setSelectedModel}
               selectedRenderMode={selectedRenderMode}
@@ -475,6 +494,10 @@ export default function Studio({
               stagedFiles={stagedFiles}
               onAddFiles={handleAddFiles}
               onRemoveFile={handleRemoveFile}
+              notesEnabled={notesEnabled}
+              onToggleNotes={toggleNotes}
+              videoEnabled={videoEnabled}
+              onToggleVideo={toggleVideo}
             />
           )}
         </Box>

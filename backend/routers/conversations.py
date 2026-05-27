@@ -161,34 +161,40 @@ async def list_conversations(
 @router.get("/conversations/{conversation_id}")
 async def get_conversation(conversation_id: str, current_user: User = Depends(get_current_user)):
     """
-    Conversation detail — 2 queries, small payload.
+    Conversation detail — 2 queries run in parallel, frames_meta embedded inline.
 
-    frames_meta is intentionally excluded here (it can be 10–40 KB per turn).
-    has_frames_meta: bool tells the client whether to call GET /sessions/:id/frames-meta,
-    which now reads directly from the DB column (zero disk I/O, one RTT).
+    Both DB queries fire concurrently on separate pool connections so total latency
+    is max(q1, q2) instead of q1+q2 — saves ~220ms at India→us-east-1 distance.
+    frames_meta is included inline so the client needs only this one request
+    instead of N+1 (conversation + one per turn).
     """
-    async with get_async_db_read() as conn:
-        conv = await conn.fetchrow(
-            """
-            SELECT c.id, c.title, c.created_at, c.updated_at, c.merged_video_path,
-                   n.content AS notes_content, n.updated_at AS notes_updated_at
-            FROM conversations c
-            LEFT JOIN conversation_notes n
-              ON n.conversation_id = c.id AND n.user_id = $2
-            WHERE c.id = $1 AND c.user_id = $2 AND c.deleted_at IS NULL
-            """,
-            conversation_id, current_user.id,
-        )
-        if not conv:
-            raise HTTPException(status_code=404, detail="Conversation not found")
-        turns = await conn.fetch(
-            "SELECT id, prompt, created_at, status, intent_type, render_path, "
-            "frame_count, video_path, turn_index, parent_session_id, parent_frame_index, "
-            "stages_json, sources_json, synthesis_text, "
-            "(frames_meta IS NOT NULL) AS has_frames_meta "
-            "FROM sessions WHERE conversation_id = $1 ORDER BY turn_index ASC",
-            conversation_id,
-        )
+    async def _fetch_conv():
+        async with get_async_db_read() as c:
+            return await c.fetchrow(
+                """
+                SELECT c.id, c.title, c.created_at, c.updated_at, c.merged_video_path,
+                       n.content AS notes_content, n.updated_at AS notes_updated_at
+                FROM conversations c
+                LEFT JOIN conversation_notes n
+                  ON n.conversation_id = c.id AND n.user_id = $2
+                WHERE c.id = $1 AND c.user_id = $2 AND c.deleted_at IS NULL
+                """,
+                conversation_id, current_user.id,
+            )
+
+    async def _fetch_turns():
+        async with get_async_db_read() as c:
+            return await c.fetch(
+                "SELECT id, prompt, created_at, status, intent_type, render_path, "
+                "frame_count, video_path, turn_index, parent_session_id, parent_frame_index, "
+                "stages_json, sources_json, synthesis_text, frames_meta "
+                "FROM sessions WHERE conversation_id = $1 ORDER BY turn_index ASC",
+                conversation_id,
+            )
+
+    conv, turns = await asyncio.gather(_fetch_conv(), _fetch_turns())
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
 
     notes = None
     if conv["notes_content"] is not None:

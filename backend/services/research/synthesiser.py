@@ -3,6 +3,11 @@ Final synthesis — takes the evidence table and produces a cited markdown answe
 
 Uses streaming so the route handler can forward tokens to the client as they arrive.
 Citation format: inline [1], [2], [3] matching the source index in the evidence table.
+
+Streaming support:
+  - ClaudeProvider  → native Anthropic async streaming
+  - GeminiProvider  → OpenAI-compatible streaming (same SDK, custom base_url)
+  - OpenAIProvider  → OpenAI streaming
 """
 
 import asyncio
@@ -15,16 +20,14 @@ from services.llm_service import LLMService
 
 logger = structlog.get_logger(__name__)
 
-_SYSTEM_PROMPT = """You are a research synthesiser for an AI educational app used by students.
-
-Your task: write a comprehensive, well-structured answer using ONLY the provided evidence.
+_SYSTEM_PROMPT = """You are a research synthesiser. Given a set of web sources, write a comprehensive, well-structured answer to the user's question.
 
 Rules:
 1. Use inline citations like [1], [2], [3] immediately after each factual claim.
-2. Write in clear, educational language suitable for students.
-3. Use markdown: headers (##), bullet points, bold for key terms.
+2. Write in clear, direct prose — adapt tone to the question (technical for technical topics, accessible for general ones).
+3. Use markdown: headers (##), bullet points, bold for key terms where appropriate.
 4. Be thorough but concise — aim for 300–600 words.
-5. If sources contradict each other, mention the disagreement.
+5. If sources contradict each other, note the disagreement.
 6. Do NOT invent facts not present in the evidence.
 7. End with a brief "## Summary" of 2–3 sentences."""
 
@@ -48,13 +51,19 @@ async def stream(
         "Write your cited answer now:"
     )
 
-    # Try streaming via Anthropic SDK
+    provider_class = llm_service.provider.__class__.__name__
+
+    # Try streaming — Claude natively, OpenAI/Gemini via compatible API
     try:
-        async for token in _stream_anthropic(llm_service, user_msg):
-            yield token
+        if provider_class == "ClaudeProvider":
+            async for token in _stream_anthropic(llm_service, user_msg):
+                yield token
+        else:
+            async for token in _stream_openai_compat(llm_service, user_msg):
+                yield token
         return
     except Exception as e:
-        logger.warning("synthesis_stream_failed_fallback", error=str(e))
+        logger.warning("synthesis_stream_failed_fallback", provider=provider_class, error=str(e))
 
     # Fallback: single async call
     try:
@@ -72,19 +81,39 @@ async def stream(
 
 async def _stream_anthropic(llm_service: LLMService, user_msg: str) -> AsyncGenerator[str, None]:
     """Native async streaming via AsyncAnthropic — no thread or queue needed."""
-    provider = llm_service.provider
-    if provider.__class__.__name__ != "ClaudeProvider":
-        raise NotImplementedError("streaming only implemented for ClaudeProvider")
-
     from services.llm_service import _get_async_anthropic_client
     client = _get_async_anthropic_client()
-    model  = getattr(provider, "model", "claude-haiku-4-5-20251001")
+    model  = getattr(llm_service.provider, "model", "claude-haiku-4-5-20251001")
 
     async with client.messages.stream(
         model=model,
         max_tokens=4096,
         system=_SYSTEM_PROMPT,
         messages=[{"role": "user", "content": user_msg}],
-    ) as stream:
-        async for text in stream.text_stream:
+    ) as s:
+        async for text in s.text_stream:
+            yield text
+
+
+async def _stream_openai_compat(llm_service: LLMService, user_msg: str) -> AsyncGenerator[str, None]:
+    """Streaming for OpenAI or Gemini (both use the same OpenAI SDK interface)."""
+    from services.llm_service import (
+        _get_async_openai_client, _get_async_gemini_client, GeminiProvider,
+    )
+    provider = llm_service.provider
+    client = _get_async_gemini_client() if isinstance(provider, GeminiProvider) else _get_async_openai_client()
+    model  = getattr(provider, "model", "gpt-4.1")
+
+    response = await client.chat.completions.create(
+        model=model,
+        max_tokens=4096,
+        messages=[
+            {"role": "system", "content": _SYSTEM_PROMPT},
+            {"role": "user",   "content": user_msg},
+        ],
+        stream=True,
+    )
+    async for chunk in response:
+        text = chunk.choices[0].delta.content
+        if text:
             yield text

@@ -1,4 +1,4 @@
-import { useState, memo } from 'react'
+import { useState, useRef, memo } from 'react'
 import PropTypes from 'prop-types'
 import { Box, Typography, Button, CircularProgress, useTheme } from '@mui/material'
 import { withProfiler } from '../../lib/sentry.js'
@@ -8,6 +8,7 @@ import SessionView from './SessionView'
 import LoadingView from './LoadingView'
 import VideoAssemblingView from './VideoAssemblingView'
 import NotesPanel from './NotesPanel'
+import TextSelectionPopup from './TextSelectionPopup'
 import { isTextTurn } from './studioUtils'
 import { BRAND, PALETTE } from '../../theme/tokens.js'
 import BlockRenderer   from '../Interactive/BlockRenderer'
@@ -172,12 +173,17 @@ const TurnWithBoundary = memo(function TurnWithBoundary({ turn, onPauseAsk, onRe
   )
 })
 
-const ConversationThread = memo(function ConversationThread({ turns, onPauseAsk, onRetryTurn, onRetryGeneration, notesEnabled }) {
+const ConversationThread = memo(function ConversationThread({ turns, onPauseAsk, onRetryTurn, onRetryGeneration, notesEnabled, onTextSelect }) {
+  const containerRef = useRef(null)
+
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', pt: 1, pb: 1 }}>
+    <Box ref={containerRef} sx={{ display: 'flex', flexDirection: 'column', pt: 1, pb: 1, position: 'relative' }}>
       {turns.map((turn) => (
         <TurnWithBoundary key={turn.tempId} turn={turn} onPauseAsk={onPauseAsk} onRetryTurn={onRetryTurn} onRetryGeneration={onRetryGeneration} notesEnabled={notesEnabled} />
       ))}
+      {onTextSelect && (
+        <TextSelectionPopup containerRef={containerRef} onAskFollowUp={onTextSelect} />
+      )}
     </Box>
   )
 })
@@ -204,6 +210,7 @@ ConversationThread.propTypes = {
   onRetryTurn:        PropTypes.func.isRequired,
   onRetryGeneration:  PropTypes.func.isRequired,
   notesEnabled:       PropTypes.bool,
+  onTextSelect:       PropTypes.func,
 }
 
 const ConversationThreadProfiled = withProfiler(ConversationThread, 'ConversationThread')

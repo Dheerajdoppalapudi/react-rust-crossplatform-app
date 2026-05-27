@@ -185,6 +185,7 @@ def _generate_svg_code(
         prompt, 8000,
         prompt_name=f"svg_prompt.md (frame {frame_index})",
         cache_prefix=cache_prefix,
+        task="svg_frame",
     )
 
 
@@ -258,7 +259,7 @@ def _generate_svg_code_retry(
         f"- Never use HTML entities (&nbsp; &copy; &rarr; etc) — use the Unicode character directly\n"
         f"- If complexity risks truncation, simplify shapes — a complete simple SVG beats an incomplete complex one\n"
     )
-    return call_llm(correction_prompt, 8000, prompt_name=f"svg_prompt.md (frame {frame.index} retry)")
+    return call_llm(correction_prompt, 8000, prompt_name=f"svg_prompt.md (frame {frame.index} retry)", task="svg_frame")
 
 
 # ── Animated rendering: timing + HTML builder ────────────────────────────────
