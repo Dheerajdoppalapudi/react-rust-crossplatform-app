@@ -23,7 +23,8 @@ import DeleteOutlineIcon       from '@mui/icons-material/DeleteOutline'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { relativeTime } from '../Studio/constants'
 import { useAuth } from '../../contexts/AuthContext'
-import { BRAND, PALETTE } from '../../theme/tokens.js'
+import { PALETTE, RADIUS } from '../../theme/tokens.js'
+import { metaText } from '../../theme/styleUtils.js'
 
 const DRAWER_OPEN   = 260
 const DRAWER_CLOSED = 56
@@ -87,8 +88,7 @@ const LogoButton = ({ onToggle }) => {
 const NavItem = ({ item, open, isActive, onClick }) => {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
-  const accent = theme.palette.primary.main
-  const activeBg = isDark ? 'rgba(79,110,255,0.12)'  : 'rgba(0,26,255,0.07)'
+  const activeBg = isDark ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.06)'
   const hoverBg  = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)'
 
   return (
@@ -97,7 +97,7 @@ const NavItem = ({ item, open, isActive, onClick }) => {
         <ListItemButton
           onClick={(e) => { e.stopPropagation(); onClick?.() }}
           sx={{
-            borderRadius: '7px', minHeight: 34, px: 0, mx: 0.75,
+            borderRadius: `${RADIUS.ui}px`, minHeight: 34, px: 0, mx: 0.75,
             overflow: 'hidden',
             bgcolor: isActive ? activeBg : 'transparent',
             '&:hover': { bgcolor: isActive ? activeBg : hoverBg },
@@ -108,7 +108,7 @@ const NavItem = ({ item, open, isActive, onClick }) => {
           <Box sx={{
             width: 38, minWidth: 38, flexShrink: 0,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: isActive ? accent : theme.palette.text.secondary,
+            color: theme.palette.text.secondary,
           }}>
             {item.icon}
           </Box>
@@ -122,13 +122,10 @@ const NavItem = ({ item, open, isActive, onClick }) => {
           }}>
             <Typography sx={{
               fontSize: 12.5, fontWeight: isActive ? 600 : 400,
-              color: isActive ? accent : theme.palette.text.primary,
+              color: theme.palette.text.primary,
             }}>
               {item.label}
             </Typography>
-            {isActive && (
-              <Box sx={{ width: 4, height: 4, borderRadius: '50%', bgcolor: accent, flexShrink: 0 }} />
-            )}
           </Box>
         </ListItemButton>
       </ListItem>
@@ -140,8 +137,6 @@ const NavItem = ({ item, open, isActive, onClick }) => {
 const ConvItem = memo(({ conv, isActive, onSelect, onRename, onStar, onDelete }) => {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
-  const accent = theme.palette.primary.main
-  const [hovered, setHovered]       = useState(false)
   const [menuAnchor, setMenuAnchor] = useState(null)
 
   const openMenu  = (e) => { e.stopPropagation(); setMenuAnchor(e.currentTarget) }
@@ -167,19 +162,19 @@ const ConvItem = memo(({ conv, isActive, onSelect, onRename, onStar, onDelete })
     <>
       <Box
         onClick={() => onSelect(conv)}
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
         sx={{
           px: 1.25, py: 0.4, mx: 0.75, mb: 0.1,
-          borderRadius: '8px', cursor: 'pointer',
+          borderRadius: `${RADIUS.lg}px`, cursor: 'pointer',
           bgcolor: isActive
-            ? (isDark ? 'rgba(75,114,255,0.12)' : 'rgba(24,71,214,0.07)')
+            ? (isDark ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.06)')
             : 'transparent',
           '&:hover': {
             bgcolor: isActive
-              ? (isDark ? 'rgba(75,114,255,0.15)' : 'rgba(24,71,214,0.09)')
+              ? (isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)')
               : (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)'),
           },
+          // Reveal action button on row hover or when menu is open
+          '&:hover .conv-actions': { opacity: 1 },
           transition: 'background 0.15s',
           display: 'flex', alignItems: 'center', gap: 1,
         }}
@@ -187,23 +182,26 @@ const ConvItem = memo(({ conv, isActive, onSelect, onRename, onStar, onDelete })
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography noWrap sx={{
             fontSize: 12.5, fontWeight: isActive ? 500 : 400,
-            color: isActive ? accent : theme.palette.text.primary, lineHeight: 1.4,
+            color: theme.palette.text.primary, lineHeight: 1.4,
           }}>
             {conv.title || 'Untitled'}
           </Typography>
-          <Typography sx={{ fontSize: 10, color: theme.palette.text.disabled, mt: 0.1, opacity: 0.7 }}>
+          <Typography sx={{ fontSize: 10, color: metaText(isDark), mt: 0.1 }}>
             {relativeTime(conv.updated_at)}
           </Typography>
         </Box>
 
-        {/* Three-dot menu button — visible on hover */}
-        {(hovered || menuAnchor) && (
+        {/* Three-dot menu button — hidden until row hover or menu open */}
+        <Box
+          className="conv-actions"
+          sx={{ opacity: menuAnchor ? 1 : 0, transition: 'opacity 0.15s', flexShrink: 0 }}
+        >
           <IconButton
             size="small"
             aria-label="Conversation options"
             onClick={openMenu}
             sx={{
-              p: 0.3, flexShrink: 0,
+              p: 0.3,
               color: theme.palette.text.disabled,
               borderRadius: '5px',
               '&:hover': {
@@ -214,7 +212,7 @@ const ConvItem = memo(({ conv, isActive, onSelect, onRename, onStar, onDelete })
           >
             <MoreHorizIcon sx={{ fontSize: 15 }} />
           </IconButton>
-        )}
+        </Box>
       </Box>
 
       {/* Context menu */}
@@ -356,10 +354,12 @@ function RenameDialog({ conv, onClose, onConfirm }) {
 
 // ─── Section label ────────────────────────────────────────────────────────────
 function SectionLabel({ children }) {
+  const theme  = useTheme()
+  const isDark = theme.palette.mode === 'dark'
   return (
     <Typography sx={{
       fontSize: 9.5, fontWeight: 600, letterSpacing: '0.07em',
-      color: 'text.disabled', opacity: 0.7,
+      color: metaText(isDark),
       px: 2, pt: 1.25, pb: 0.4, textTransform: 'uppercase',
     }}>
       {children}
@@ -502,7 +502,7 @@ const Sidebar = ({
               aria-label="Close sidebar"
               onClick={(e) => { e.stopPropagation(); isMobile ? closeMobile() : toggleOpen() }}
               sx={{
-                width: 28, height: 28, borderRadius: '7px', flexShrink: 0,
+                width: 28, height: 28, borderRadius: `${RADIUS.ui}px`, flexShrink: 0,
                 color: theme.palette.text.disabled,
                 '&:hover': {
                   bgcolor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)',
@@ -546,7 +546,7 @@ const Sidebar = ({
             <ListItemButton
               onClick={() => { onNewConversation(); if (isMobile) closeMobile() }}
               sx={{
-                borderRadius: '7px', minHeight: 34, px: 0, mx: 0.75,
+                borderRadius: `${RADIUS.ui}px`, minHeight: 34, px: 0, mx: 0.75,
                 overflow: 'hidden',
                 '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)' },
                 transition: 'background 0.15s',
@@ -598,7 +598,7 @@ const Sidebar = ({
               <Box sx={{
                 display: 'flex', alignItems: 'center', gap: 0.75,
                 bgcolor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
-                borderRadius: '7px', px: 1, py: 0.4, mx: 0.25,
+                borderRadius: `${RADIUS.ui}px`, px: 1, py: 0.4, mx: 0.25,
                 border: `1px solid ${isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)'}`,
               }}>
                 <SearchIcon sx={{ fontSize: 13, color: theme.palette.text.disabled, flexShrink: 0, opacity: 0.7 }} />
@@ -632,7 +632,7 @@ const Sidebar = ({
               <ListItem disablePadding sx={{ mb: 0.25 }}>
                 <ListItemButton
                   sx={{
-                    borderRadius: '7px', minHeight: 34, px: 0, mx: 0.75,
+                    borderRadius: `${RADIUS.ui}px`, minHeight: 34, px: 0, mx: 0.75,
                     justifyContent: 'center',
                     '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)' },
                     transition: 'background 0.15s',
@@ -704,7 +704,7 @@ const Sidebar = ({
                   onClick={onLoadMore}
                   sx={{
                     fontSize: 11.5, fontWeight: 400, textTransform: 'none',
-                    color: theme.palette.text.disabled, borderRadius: '7px',
+                    color: theme.palette.text.disabled, borderRadius: `${RADIUS.ui}px`,
                     py: 0.5,
                     '&:hover': { color: theme.palette.text.secondary },
                   }}
@@ -774,7 +774,7 @@ const Sidebar = ({
               <ListItemButton
                 onClick={onThemeToggle}
                 sx={{
-                  borderRadius: '7px', minHeight: 34, px: 0, mx: 0.75,
+                  borderRadius: `${RADIUS.ui}px`, minHeight: 34, px: 0, mx: 0.75,
                   overflow: 'hidden',
                   '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)' },
                   transition: 'background 0.15s',

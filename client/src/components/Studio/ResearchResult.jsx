@@ -4,6 +4,7 @@ import ReactMarkdown   from 'react-markdown'
 import BlockRenderer   from '../Interactive/BlockRenderer'
 import ResponseToolbar from './ResponseToolbar'
 import { safeHref }    from '../../utils/safeHref'
+import { SEMANTIC }    from '../../theme/tokens.js'
 
 // ── Citation chip ─────────────────────────────────────────────────────────────
 
@@ -17,12 +18,12 @@ function CitationChip({ num, source }) {
       display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
       minWidth: 16, height: 16, px: 0.4,
       borderRadius: '4px', fontSize: 10, fontWeight: 600, lineHeight: 1,
-      backgroundColor: isDark ? 'rgba(75,114,255,0.18)' : 'rgba(24,71,214,0.1)',
-      color: isDark ? '#7b9fff' : '#1847d6',
-      border: `1px solid ${isDark ? 'rgba(75,114,255,0.3)' : 'rgba(24,71,214,0.2)'}`,
+      backgroundColor: isDark ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.06)',
+      color: 'text.secondary',
+      border: `1px solid ${isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.14)'}`,
       cursor: source?.url ? 'pointer' : 'default',
       mx: 0.3, verticalAlign: 'super',
-      '&:hover': source?.url ? { backgroundColor: isDark ? 'rgba(75,114,255,0.28)' : 'rgba(24,71,214,0.18)' } : {},
+      '&:hover': source?.url ? { backgroundColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.10)' } : {},
       transition: 'background-color 0.15s',
     }}>
       {num}
@@ -143,7 +144,7 @@ function CitedMarkdown({ text, sources }) {
       ),
       a:          ({ href, children }) => (
         <Box component="a" href={safeHref(href)} target="_blank" rel="noopener noreferrer"
-          sx={{ color: isDark ? '#7b9fff' : '#1847d6', textDecoration: 'underline', textDecorationColor: 'transparent',
+          sx={{ color: isDark ? SEMANTIC.linkDark : SEMANTIC.link, textDecoration: 'underline', textDecorationColor: 'transparent',
             '&:hover': { textDecorationColor: 'currentColor' }, transition: 'text-decoration-color 0.15s' }}>
           {children}
         </Box>
@@ -193,7 +194,7 @@ function SourcesPanel({ sources, open }) {
               {/* Citation number */}
               <Typography sx={{
                 fontSize: 10, fontWeight: 700, flexShrink: 0,
-                color: isDark ? 'rgba(75,114,255,0.7)' : 'rgba(24,71,214,0.6)',
+                color: 'text.disabled',
                 minWidth: 18,
               }}>
                 [{i + 1}]

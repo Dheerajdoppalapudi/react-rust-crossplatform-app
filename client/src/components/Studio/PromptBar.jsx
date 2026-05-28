@@ -17,7 +17,8 @@ import VideocamOutlinedIcon   from '@mui/icons-material/VideocamOutlined'
 import VideocamOffOutlined    from '@mui/icons-material/VideocamOffOutlined'
 import { useTheme } from '@mui/material'
 import { MODELS, RENDER_MODES, MODES } from './constants'
-import { BRAND, PALETTE } from '../../theme/tokens.js'
+import { BRAND, PALETTE, RADIUS } from '../../theme/tokens.js'
+import { brandColor, brandHover, neutralGhost, neutralSubtle, neutralSurface, neutralActive, neutralToggle, neutralBorderFaint, neutralBorderDefault, neutralBorder, neutralBorderStrong, neutralBorderHover, cardShadow, menuShadow } from '../../theme/styleUtils.js'
 import { api } from '../../services/api.js'
 import { useToast } from '../../contexts/ToastContext'
 
@@ -30,6 +31,16 @@ const RENDER_MODE_ICONS = {
   manim: <FunctionsOutlinedIcon  sx={{ fontSize: 13 }} />,
   svg:   <BrushOutlinedIcon      sx={{ fontSize: 13 }} />,
 }
+
+// ── Shared menu paper style ───────────────────────────────────────────────────
+// Single source of truth for all four dropdown menus in this component.
+const menuPaperSx = (isDark, minWidth) => ({
+  minWidth,
+  borderRadius: `${RADIUS.xl}px`,
+  border: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.border}`,
+  boxShadow: menuShadow(isDark),
+  mb: 0.5,
+})
 
 // ── Menu state helper ─────────────────────────────────────────────────────────
 
@@ -49,21 +60,21 @@ function FileChip({ file, onRemove, isDark }) {
   return (
     <Box sx={{
       display: 'inline-flex', alignItems: 'center', gap: 0.5,
-      px: 1, py: 0.4, borderRadius: '20px',
-      backgroundColor: isDark ? 'rgba(75,114,255,0.12)' : 'rgba(24,71,214,0.07)',
-      border: `1px solid ${isDark ? 'rgba(75,114,255,0.25)' : 'rgba(24,71,214,0.2)'}`,
+      px: 1, py: 0.4, borderRadius: `${RADIUS.full}px`,
+      backgroundColor: neutralSubtle(isDark),
+      border: `1px solid ${neutralBorderFaint(isDark)}`,
       maxWidth: 180,
     }}>
-      <AttachFileIcon sx={{ fontSize: 11, color: isDark ? '#7b9fff' : BRAND.primary, flexShrink: 0 }} />
+      <AttachFileIcon sx={{ fontSize: 11, color: 'text.secondary', flexShrink: 0 }} />
       <Typography sx={{
         fontSize: 11, fontWeight: 500,
-        color: isDark ? '#7b9fff' : BRAND.primary,
+        color: 'text.secondary',
         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
       }}>
         {file.name}
       </Typography>
       <IconButton size="small" onClick={() => onRemove(file.id)} sx={{
-        p: 0.1, color: isDark ? '#7b9fff' : BRAND.primary, opacity: 0.7,
+        p: 0.1, color: 'text.disabled', opacity: 0.7,
         '&:hover': { opacity: 1 }, flexShrink: 0,
       }}>
         <CloseIcon sx={{ fontSize: 10 }} />
@@ -83,16 +94,16 @@ function Pill({ onClick, children, active = false, activeColor = null, activeBg 
       onClick={onClick}
       sx={{
         display: 'flex', alignItems: 'center', gap: 0.5,
-        px: 1.5, py: 0.8, borderRadius: '20px', cursor: 'pointer',
+        px: 1.5, py: 0.8, borderRadius: `${RADIUS.full}px`, cursor: 'pointer',
         background: 'none', fontFamily: 'inherit',
-        backgroundColor: active && activeBg ? activeBg : isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
+        backgroundColor: active && activeBg ? activeBg : neutralGhost(isDark),
         color: active && activeColor ? activeColor : theme.palette.text.secondary,
         border: active && activeColor
           ? `1.5px solid ${activeColor}55`
-          : `1.5px solid ${isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.14)'}`,
+          : `1.5px solid ${neutralBorder(isDark)}`,
         '&:hover': {
-          borderColor: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.22)',
-          bgcolor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)',
+          borderColor: neutralBorderHover(isDark),
+          bgcolor: neutralSubtle(isDark),
           color: theme.palette.text.primary,
         },
         transition: 'all 0.15s',
@@ -221,10 +232,10 @@ function PromptBar({
             borderRadius: '12px',
             overflow: 'hidden',
             backgroundColor: cardBg,
-            boxShadow: isDark ? '0 2px 12px rgba(0,0,0,0.35)' : '0 2px 12px rgba(0,0,0,0.06)',
+            boxShadow: cardShadow(isDark),
             '&:focus-within': {
-              borderColor: theme.palette.primary.main,
-              boxShadow: isDark ? '0 2px 20px rgba(75,114,255,0.15)' : '0 2px 20px rgba(24,71,214,0.08)',
+              borderColor: brandColor(isDark),
+              boxShadow: isDark ? '0 2px 20px rgba(14,124,102,0.18)' : '0 2px 20px rgba(14,124,102,0.10)',
             },
             transition: 'border-color 0.15s, box-shadow 0.15s',
           }}>
@@ -233,13 +244,13 @@ function PromptBar({
             {pauseContext && (
               <Box sx={{
                 display: 'flex', alignItems: 'stretch',
-                borderBottom: `1px solid ${isDark ? 'rgba(75,114,255,0.20)' : `${BRAND.primary}25`}`,
-                backgroundColor: isDark ? 'rgba(75,114,255,0.08)' : `${BRAND.primary}07`,
+                borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)'}`,
+                backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
               }}>
-                <Box sx={{ width: 3, flexShrink: 0, bgcolor: theme.palette.primary.main }} />
+                <Box sx={{ width: 3, flexShrink: 0, bgcolor: theme.palette.text.secondary }} />
                 <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 0.9, minWidth: 0 }}>
                   <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography sx={{ fontSize: 9.5, fontWeight: 700, color: theme.palette.primary.main, letterSpacing: '0.06em', textTransform: 'uppercase', lineHeight: 1.2, mb: 0.2 }}>
+                    <Typography sx={{ fontSize: 9.5, fontWeight: 700, color: theme.palette.text.secondary, letterSpacing: '0.06em', textTransform: 'uppercase', lineHeight: 1.2, mb: 0.2 }}>
                       Paused at
                     </Typography>
                     <Typography sx={{ fontSize: 12.5, color: theme.palette.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.4 }}>
@@ -344,18 +355,18 @@ function PromptBar({
                     width:           32,
                     height:          32,
                     borderRadius:    '50%',
-                    border:          `1.5px solid ${isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.14)'}`,
+                    border:          `1.5px solid ${neutralBorder(isDark)}`,
                     backgroundColor: 'transparent',
                     cursor:          'pointer',
                     background:      'none',
                     fontFamily:      'inherit',
                     flexShrink:      0,
                     transition:      'all 0.15s',
-                    color:           isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.5)',
+                    color:           theme.palette.text.secondary,
                     '&:hover': {
-                      borderColor:     isDark ? 'rgba(255,255,255,0.32)' : 'rgba(0,0,0,0.25)',
-                      backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
-                      color:           isDark ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.75)',
+                      borderColor:     neutralBorderHover(isDark),
+                      backgroundColor: neutralSubtle(isDark),
+                      color:           theme.palette.text.primary,
                     },
                   }}
                 >
@@ -371,7 +382,7 @@ function PromptBar({
                   onClose={plusMenu.close}
                   anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
                   transformOrigin={{ vertical: 'top', horizontal: 'left' }}
-                  slotProps={{ paper: { sx: { minWidth: 200, borderRadius: '12px', border: `1px solid ${theme.palette.divider}`, boxShadow: isDark ? '0 8px 32px rgba(0,0,0,0.6)' : '0 8px 32px rgba(0,0,0,0.12)', mb: 0.5 } } }}
+                  slotProps={{ paper: { sx: menuPaperSx(isDark, 200) } }}
                 >
                   <MenuItem
                     onClick={() => { plusMenu.close(); fileInputRef.current?.click() }}
@@ -417,7 +428,7 @@ function PromptBar({
                   onClose={modeMenu.close}
                   anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
                   transformOrigin={{ vertical: 'top', horizontal: 'left' }}
-                  slotProps={{ paper: { sx: { minWidth: 220, borderRadius: '12px', border: `1px solid ${theme.palette.divider}`, boxShadow: isDark ? '0 8px 32px rgba(0,0,0,0.6)' : '0 8px 32px rgba(0,0,0,0.12)', mb: 0.5 } } }}
+                  slotProps={{ paper: { sx: menuPaperSx(isDark, 220) } }}
                 >
                   {MODES.map(m => (
                     <MenuItem
@@ -458,7 +469,7 @@ function PromptBar({
                   onClose={renderMenu.close}
                   anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
                   transformOrigin={{ vertical: 'top', horizontal: 'left' }}
-                  slotProps={{ paper: { sx: { minWidth: 210, borderRadius: '12px', border: `1px solid ${theme.palette.divider}`, boxShadow: isDark ? '0 8px 32px rgba(0,0,0,0.6)' : '0 8px 32px rgba(0,0,0,0.12)', mb: 0.5 } } }}
+                  slotProps={{ paper: { sx: menuPaperSx(isDark, 210) } }}
                 >
                   {RENDER_MODES.map(mode => (
                     <MenuItem
@@ -488,13 +499,11 @@ function PromptBar({
                     aria-label={notesEnabled ? 'AI Notes on' : 'AI Notes off'}
                     sx={{
                       borderRadius: '7px', p: 0.55,
-                      border: `1px solid ${notesEnabled
-                        ? (isDark ? `${BRAND.accent}72` : `${BRAND.primary}33`)
-                        : (isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.14)')}`,
-                      color: notesEnabled ? theme.palette.primary.main : theme.palette.text.secondary,
-                      bgcolor: notesEnabled ? (isDark ? `${BRAND.accent}1a` : `${BRAND.primary}0d`) : 'transparent',
+                      border: `1px solid ${notesEnabled ? neutralBorderStrong(isDark) : neutralBorderDefault(isDark)}`,
+                      color: notesEnabled ? theme.palette.text.primary : theme.palette.text.secondary,
+                      bgcolor: notesEnabled ? neutralToggle(isDark) : 'transparent',
                       transition: 'all 0.15s',
-                      '&:hover': { borderColor: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.22)' },
+                      '&:hover': { borderColor: neutralBorderHover(isDark) },
                     }}
                   >
                     <NotesOutlinedIcon sx={{ fontSize: 14 }} />
@@ -510,13 +519,11 @@ function PromptBar({
                     aria-label={videoEnabled ? 'Video on' : 'Video off'}
                     sx={{
                       borderRadius: '7px', p: 0.55,
-                      border: `1px solid ${videoEnabled
-                        ? (isDark ? `${BRAND.accent}72` : `${BRAND.primary}33`)
-                        : (isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.14)')}`,
-                      color: videoEnabled ? theme.palette.primary.main : theme.palette.text.secondary,
-                      bgcolor: videoEnabled ? (isDark ? `${BRAND.accent}1a` : `${BRAND.primary}0d`) : 'transparent',
+                      border: `1px solid ${videoEnabled ? neutralBorderStrong(isDark) : neutralBorderDefault(isDark)}`,
+                      color: videoEnabled ? theme.palette.text.primary : theme.palette.text.secondary,
+                      bgcolor: videoEnabled ? neutralToggle(isDark) : 'transparent',
                       transition: 'all 0.15s',
-                      '&:hover': { borderColor: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.22)' },
+                      '&:hover': { borderColor: neutralBorderHover(isDark) },
                     }}
                   >
                     {videoEnabled
@@ -568,7 +575,7 @@ function PromptBar({
                   onClose={modelMenu.close}
                   anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
                   transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-                  slotProps={{ paper: { sx: { minWidth: 230, borderRadius: '12px', border: `1px solid ${theme.palette.divider}`, boxShadow: isDark ? '0 8px 32px rgba(0,0,0,0.6)' : '0 8px 32px rgba(0,0,0,0.12)', mb: 0.5 } } }}
+                  slotProps={{ paper: { sx: menuPaperSx(isDark, 230) } }}
                 >
                   <MenuItem
                     key={autoModel.id}
@@ -623,11 +630,11 @@ function PromptBar({
                       aria-label="Stop generation"
                       sx={{
                         width: 32, height: 32,
-                        backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+                        backgroundColor: neutralSurface(isDark),
                         color: theme.palette.text.primary,
                         borderRadius: '8px',
                         border: `1.5px solid ${theme.palette.divider}`,
-                        '&:hover': { backgroundColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.11)', borderColor: theme.palette.text.secondary },
+                        '&:hover': { backgroundColor: neutralActive(isDark), borderColor: theme.palette.text.secondary },
                         transition: 'all 0.15s',
                       }}
                     >
@@ -644,10 +651,10 @@ function PromptBar({
                         aria-label="Send message"
                         sx={{
                           width: 32, height: 32,
-                          backgroundColor: canSend ? theme.palette.primary.main : (isDark ? PALETTE.darkSubsurface : PALETTE.warmSand),
+                          backgroundColor: canSend ? brandColor(isDark) : (isDark ? PALETTE.darkSubsurface : PALETTE.warmSand),
                           color: canSend ? '#fff' : theme.palette.text.secondary,
                           borderRadius: '8px',
-                          '&:hover': { backgroundColor: canSend ? BRAND.primary : undefined },
+                          '&:hover': { backgroundColor: canSend ? brandHover() : undefined },
                           transition: 'all 0.15s',
                         }}
                       >

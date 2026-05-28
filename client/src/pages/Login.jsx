@@ -8,7 +8,7 @@ import { Visibility, VisibilityOff } from '@mui/icons-material'
 import { motion, useReducedMotion } from 'framer-motion'
 import { useGoogleLogin } from '@react-oauth/google'
 import { useAuth } from '../contexts/AuthContext'
-import { BRAND, PALETTE } from '../theme/tokens.js'
+import { BRAND, PALETTE, RADIUS } from '../theme/tokens.js'
 import { ROUTES } from '../constants/routes.js'
 
 const MotionBox = motion(Box)
@@ -306,8 +306,7 @@ function LeftPanel({ isMobile }) {
                   to="/register"
                   sx={{
                     fontSize: 13, fontWeight: 600, textDecoration: 'none',
-                    background: BRAND.gradientAlt,
-                    WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+                    color: BRAND.primary,
                     '&:hover': { opacity: 0.8 },
                   }}
                 >
@@ -324,7 +323,7 @@ function LeftPanel({ isMobile }) {
 
 // ── Field style helper ────────────────────────────────────────────────────────
 const fieldSx = {
-  '& .MuiOutlinedInput-root': { borderRadius: '4px' },
+  '& .MuiOutlinedInput-root': { borderRadius: `${RADIUS.sm}px` },
 }
 
 // ── No-client-id fallback ─────────────────────────────────────────────────────
@@ -523,9 +522,9 @@ function LoginForm({ isMobile }) {
               sx={{
                 borderRadius: '4px', py: 1.3, fontSize: 14,
                 fontWeight: 600, textTransform: 'none',
-                background: BRAND.gradient,
+                backgroundColor: BRAND.primary,
                 boxShadow: 'none',
-                '&:hover': { background: BRAND.gradientHover, boxShadow: 'none' },
+                '&:hover': { backgroundColor: BRAND.hover, boxShadow: 'none' },
               }}
             >
               {loading ? 'Signing in…' : 'Sign in'}

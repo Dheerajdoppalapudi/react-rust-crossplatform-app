@@ -4,6 +4,7 @@ import ZenithLogo from '../common/ZenithLogo'
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline'
 import { useMediaUrl } from '../../hooks/useMediaUrl'
 import { PALETTE } from '../../theme/tokens.js'
+import { neutralBorderDefault, neutralBorderStrong, neutralBorderHover } from '../../theme/styleUtils.js'
 
 // CRIT-2: FrameThumbnail receives getFrameUrl from useMediaUrl (called in the parent
 // FrameStrip or SessionView) so all thumbnails in a session share one token fetch.
@@ -28,13 +29,12 @@ function FrameThumbnail({ sessionId, frameIndex, caption, type, isActive, onClic
         width: 130, height: 78,
         flexShrink: 0, borderRadius: '8px', overflow: 'hidden',
         cursor: 'pointer', position: 'relative',
-        border: `2px solid ${isActive ? theme.palette.primary.main : (isDark ? PALETTE.dividerDark : PALETTE.borderWarm)}`,
+        border: `2px solid ${isActive ? neutralBorderStrong(isDark) : neutralBorderDefault(isDark)}`,
         backgroundColor: isDark ? PALETTE.nearBlack : PALETTE.warmSand,
         transition: 'all 0.15s',
         '&:hover': {
-          borderColor: theme.palette.primary.main,
+          borderColor: neutralBorderHover(isDark),
           transform: 'scale(1.04)',
-          boxShadow: `0 4px 12px ${theme.palette.primary.main}33`,
         },
       }}
     >
@@ -55,7 +55,7 @@ function FrameThumbnail({ sessionId, frameIndex, caption, type, isActive, onClic
           gap: 0.5, p: 0.75,
         }}>
           {type === 'video'
-            ? <PlayCircleOutlineIcon sx={{ fontSize: 22, color: theme.palette.primary.main, opacity: 0.7 }} />
+            ? <PlayCircleOutlineIcon sx={{ fontSize: 22, color: theme.palette.text.secondary, opacity: 0.7 }} />
             : <ZenithLogo sx={{ fontSize: 18, color: theme.palette.text.secondary, opacity: 0.35 }} />
           }
           <Typography sx={{
@@ -81,11 +81,11 @@ function FrameThumbnail({ sessionId, frameIndex, caption, type, isActive, onClic
         </Typography>
       </Box>
 
-      {/* Active indicator glow */}
+      {/* Active indicator overlay */}
       {isActive && (
         <Box sx={{
           position: 'absolute', inset: 0,
-          boxShadow: `inset 0 0 0 2px ${theme.palette.primary.main}`,
+          boxShadow: `inset 0 0 0 2px ${neutralBorderStrong(isDark)}`,
           borderRadius: '6px',
           pointerEvents: 'none',
         }} />

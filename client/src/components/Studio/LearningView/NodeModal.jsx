@@ -229,9 +229,9 @@ export default function NodeModal({ node, onClose, onAsk }) {
               display: 'inline-block',
               fontSize: 9.5, fontWeight: 700, px: 0.9, py: 0.25,
               borderRadius: '5px', textTransform: 'capitalize', mb: 0.6,
-              bgcolor: isDark ? 'rgba(79,110,255,0.12)' : '#f0f4ff',
-              color: theme.palette.primary.main,
-              border: `1px solid ${isDark ? 'rgba(79,110,255,0.3)' : '#c7d2fe'}`,
+              bgcolor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)',
+              color: theme.palette.text.secondary,
+              border: `1px solid ${isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.12)'}`,
             }}>
               {formatIntentType(node.intent_type)}
             </Typography>
@@ -339,9 +339,9 @@ export default function NodeModal({ node, onClose, onAsk }) {
             size="small"
             sx={{
               mb: 1.25, fontSize: 10.5, height: 24, cursor: 'default',
-              bgcolor: isDark ? 'rgba(79,110,255,0.1)' : '#f0f4ff',
-              color: theme.palette.primary.main,
-              border: `1px solid ${isDark ? 'rgba(79,110,255,0.25)' : '#c7d2fe'}`,
+              bgcolor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.04)',
+              color: theme.palette.text.secondary,
+              border: `1px solid ${isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.10)'}`,
               '& .MuiChip-label': { px: 1 },
             }}
           />

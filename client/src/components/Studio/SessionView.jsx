@@ -12,7 +12,7 @@ import FrameThumbnail              from './FrameThumbnail'
 import NotesPanel                  from './NotesPanel'
 import { getFrameType }            from './constants'
 import { useMediaUrl }             from '../../hooks/useMediaUrl'
-import { BRAND, PALETTE }          from '../../theme/tokens.js'
+import { PALETTE }                 from '../../theme/tokens.js'
 
 function NavButton({ onClick, disabled, 'aria-label': ariaLabel, children }) {
   return (
@@ -158,7 +158,7 @@ function SlideDialog({ open, frameIndex, captions, images, sessionId, onClose, o
       maxWidth="lg"
       PaperProps={{
         sx: {
-          bgcolor: isDark ? '#0d0d0d' : '#111',
+          bgcolor: PALETTE.nearBlack,
           borderRadius: '14px',
           overflow: 'hidden',
           width: '90vw',
@@ -194,7 +194,7 @@ function SlideDialog({ open, frameIndex, captions, images, sessionId, onClose, o
         </Box>
 
         <Box sx={{
-          position: 'relative', bgcolor: '#000',
+          position: 'relative', bgcolor: PALETTE.pureBlack,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
           {type === 'image' && imgUrl ? (
@@ -233,7 +233,7 @@ function SlideDialog({ open, frameIndex, captions, images, sessionId, onClose, o
         <Box sx={{
           px: 3, py: 2,
           display: 'flex', alignItems: 'flex-start', gap: 2,
-          borderTop: `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.08)'}`,
+          borderTop: '1px solid rgba(255,255,255,0.08)',
         }}>
           <Typography sx={{ flex: 1, fontSize: 13.5, color: 'rgba(255,255,255,0.85)', lineHeight: 1.6 }}>
             <Box component="span" sx={{ fontWeight: 700, color: '#fff', mr: 0.75 }}>
@@ -250,10 +250,10 @@ function SlideDialog({ open, frameIndex, captions, images, sessionId, onClose, o
               sx={{
                 flexShrink: 0, cursor: 'pointer',
                 fontSize: 11.5, fontWeight: 600, height: 26,
-                bgcolor: 'rgba(75,114,255,0.15)',
-                color: BRAND.accent,
-                border: `1px solid rgba(75,114,255,0.35)`,
-                '&:hover': { bgcolor: 'rgba(75,114,255,0.28)' },
+                bgcolor: 'rgba(255,255,255,0.10)',
+                color: 'rgba(255,255,255,0.85)',
+                border: '1px solid rgba(255,255,255,0.20)',
+                '&:hover': { bgcolor: 'rgba(255,255,255,0.18)' },
                 '& .MuiChip-icon': { color: 'inherit' },
                 transition: 'all 0.15s',
               }}
@@ -340,10 +340,10 @@ function SessionView({ session, videoPhase, framesData, onPauseAsk, notesEnabled
                 sx={{
                   flexShrink: 0, cursor: 'pointer',
                   fontSize: 11.5, fontWeight: 600, height: 26,
-                  bgcolor: isDark ? 'rgba(75,114,255,0.10)' : `${BRAND.primary}0d`,
-                  color: theme.palette.primary.main,
-                  border: `1px solid ${isDark ? 'rgba(75,114,255,0.25)' : `${BRAND.primary}30`}`,
-                  '&:hover': { bgcolor: isDark ? 'rgba(75,114,255,0.20)' : `${BRAND.primary}18` },
+                  bgcolor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)',
+                  color: theme.palette.text.secondary,
+                  border: `1px solid ${isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.10)'}`,
+                  '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.09)', color: theme.palette.text.primary },
                   '& .MuiChip-icon': { color: 'inherit' },
                   transition: 'all 0.15s',
                 }}

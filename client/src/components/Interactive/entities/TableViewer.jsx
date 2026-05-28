@@ -190,11 +190,11 @@ export default function TableViewer({
                       gridTemplateColumns: gridCols,
                       borderBottom: i < sortedRows.length - 1 ? `1px solid ${borderColor}` : 'none',
                       backgroundColor: isHighlighted
-                        ? (isDark ? 'rgba(75,114,255,0.1)' : 'rgba(75,114,255,0.06)')
+                        ? (isDark ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.06)')
                         : isStriped
                           ? (isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)')
                           : 'transparent',
-                      borderLeft: isHighlighted ? '3px solid #4B72FF' : '3px solid transparent',
+                      borderLeft: isHighlighted ? `3px solid ${isDark ? 'rgba(255,255,255,0.30)' : 'rgba(0,0,0,0.22)'}` : '3px solid transparent',
                     }}
                   >
                     {columns.map(col => (

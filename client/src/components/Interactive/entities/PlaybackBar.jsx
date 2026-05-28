@@ -4,7 +4,7 @@ import SkipNextIcon     from '@mui/icons-material/SkipNext'
 import PlayArrowIcon    from '@mui/icons-material/PlayArrow'
 import PauseIcon        from '@mui/icons-material/Pause'
 import ReplayIcon       from '@mui/icons-material/Replay'
-import { BRAND } from '../../../theme/tokens'
+import { PALETTE } from '../../../theme/tokens'
 
 const SPEED_OPTIONS = [
   { label: '2s',  value: 2000 },
@@ -61,7 +61,7 @@ export default function PlaybackBar({
         outline: 'none',
         // Only add focus ring when bar is a keyboard target (tabIndex is set)
         ...(tabIndex != null
-          ? { '&:focus-visible': { outline: `2px solid ${BRAND.accent}`, outlineOffset: 2 } }
+          ? { '&:focus-visible': { outline: `2px solid ${PALETTE.focusBlue}`, outlineOffset: 2 } }
           : {}),
         ...sx,
       }}

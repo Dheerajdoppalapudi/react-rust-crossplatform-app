@@ -2,7 +2,6 @@ import { memo } from 'react'
 import PropTypes from 'prop-types'
 import { Box, Tooltip, IconButton, useTheme } from '@mui/material'
 import EditNoteIcon from '@mui/icons-material/EditNote'
-import { BRAND } from '../../theme/tokens.js'
 
 const VIEWS = ['Chat', 'Learn']
 
@@ -25,13 +24,11 @@ function StudioToolbar({
 }) {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
-  const primary = theme.palette.primary.main
-
-  const borderOn  = isDark ? `${BRAND.accent}72` : `${BRAND.primary}33`
+  const borderOn  = isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.18)'
   const borderOff = isDark ? 'rgba(255,255,255,0.12)' : '#e2e8f0'
-  const colorOn   = primary
+  const colorOn   = isDark ? 'rgba(255,255,255,0.90)' : 'rgba(0,0,0,0.80)'
   const colorOff  = isDark ? 'rgba(255,255,255,0.4)' : '#94a3b8'
-  const bgOn      = isDark ? `${BRAND.accent}1a` : `${BRAND.primary}0d`
+  const bgOn      = isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.07)'
 
   const btnSx = (active) => ({
     borderRadius: '7px', p: 0.6,
@@ -68,8 +65,8 @@ function StudioToolbar({
             sx={{
               px: 1.25, py: 0.35, borderRadius: '5px', cursor: 'pointer',
               fontSize: 11, fontWeight: 600, userSelect: 'none',
-              bgcolor: active ? primary : 'transparent',
-              color:   active ? '#fff' : theme.palette.text.secondary,
+              bgcolor: active ? (isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.07)') : 'transparent',
+              color:   active ? (isDark ? 'rgba(255,255,255,0.90)' : 'rgba(0,0,0,0.80)') : theme.palette.text.secondary,
               transition: 'all 0.15s',
               border: 'none', fontFamily: 'inherit',
             }}

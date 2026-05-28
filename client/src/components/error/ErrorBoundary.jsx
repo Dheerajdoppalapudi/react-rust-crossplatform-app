@@ -20,7 +20,7 @@ function AppFallback({ onReset }) {
     }}>
       <Box sx={{
         width: 56, height: 56, borderRadius: '14px',
-        background: BRAND.gradient,
+        backgroundColor: BRAND.primary,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
         <ErrorOutlineIcon sx={{ fontSize: 26, color: '#fff' }} />
@@ -40,7 +40,7 @@ function AppFallback({ onReset }) {
         sx={{
           color: PALETTE.warmSilver, borderColor: PALETTE.borderDark,
           borderRadius: '8px', textTransform: 'none', fontWeight: 600,
-          '&:hover': { borderColor: BRAND.accent, color: BRAND.accent },
+          '&:hover': { borderColor: PALETTE.warmSilver, color: PALETTE.warmSilver },
         }}
       >
         Reload page

@@ -119,7 +119,7 @@ export default function AboutUs() {
   const theme    = useTheme()
   const navigate = useNavigate()
   const isDark   = theme.palette.mode === 'dark'
-  const accent   = theme.palette.primary.main
+  const accent   = isDark ? BRAND.accent : BRAND.primary
 
   // The scroll container — this element owns the scrollbar
   const scrollRef = useRef(null)
@@ -168,8 +168,8 @@ export default function AboutUs() {
           justifyContent: 'center',
           overflow: 'hidden',
           background: isDark
-            ? `radial-gradient(ellipse 90% 70% at 50% -10%, rgba(75,114,255,0.22) 0%, transparent 65%), ${PALETTE.nearBlack}`
-            : `radial-gradient(ellipse 90% 70% at 50% -10%, rgba(24,71,214,0.10) 0%, transparent 65%), ${PALETTE.parchment}`,
+            ? `radial-gradient(ellipse 90% 70% at 50% -10%, rgba(47,212,181,0.14) 0%, transparent 65%), ${PALETTE.nearBlack}`
+            : `radial-gradient(ellipse 90% 70% at 50% -10%, rgba(14,124,102,0.08) 0%, transparent 65%), ${PALETTE.parchment}`,
         }}
       >
         {/* Animated gradient orbs */}
@@ -253,7 +253,7 @@ export default function AboutUs() {
             <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, mb: 3 }}>
               <Box sx={{
                 width: 36, height: 36, borderRadius: '10px',
-                background: BRAND.gradient,
+                backgroundColor: BRAND.primary,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 boxShadow: `0 8px 24px ${accent}50`,
               }}>
@@ -342,7 +342,7 @@ export default function AboutUs() {
                 sx={{
                   display: 'inline-flex', alignItems: 'center', gap: 1,
                   px: 3.5, py: 1.4,
-                  background: BRAND.gradient,
+                  backgroundColor: BRAND.primary,
                   borderRadius: '12px', cursor: 'pointer',
                   boxShadow: `0 6px 28px ${accent}45`,
                   color: '#fff', fontSize: 14.5, fontWeight: 700,
@@ -535,10 +535,10 @@ export default function AboutUs() {
         position: 'relative', overflow: 'hidden',
         py: { xs: 8, md: 12 },
         background: isDark
-          ? `linear-gradient(135deg, rgba(75,114,255,0.15) 0%, rgba(124,58,237,0.12) 50%, rgba(8,145,178,0.10) 100%)`
-          : `linear-gradient(135deg, rgba(24,71,214,0.07) 0%, rgba(124,58,237,0.06) 50%, rgba(8,145,178,0.05) 100%)`,
-        borderTop:    `1px solid ${isDark ? 'rgba(75,114,255,0.2)' : 'rgba(24,71,214,0.1)'}`,
-        borderBottom: `1px solid ${isDark ? 'rgba(75,114,255,0.2)' : 'rgba(24,71,214,0.1)'}`,
+          ? `linear-gradient(135deg, rgba(47,212,181,0.10) 0%, rgba(14,124,102,0.08) 100%)`
+          : `linear-gradient(135deg, rgba(14,124,102,0.06) 0%, rgba(10,99,83,0.04) 100%)`,
+        borderTop:    `1px solid ${isDark ? 'rgba(47,212,181,0.15)' : 'rgba(14,124,102,0.12)'}`,
+        borderBottom: `1px solid ${isDark ? 'rgba(47,212,181,0.15)' : 'rgba(14,124,102,0.12)'}`,
       }}>
         {/* Decorative orb */}
         <MotionBox
@@ -735,7 +735,7 @@ export default function AboutUs() {
                       {msg.role === 'ai' && (
                         <Box sx={{
                           width: 28, height: 28, borderRadius: '8px', flexShrink: 0, mt: 0.25,
-                          background: BRAND.gradient,
+                          backgroundColor: BRAND.primary,
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                           boxShadow: `0 4px 12px ${accent}40`,
                         }}>
@@ -826,9 +826,9 @@ export default function AboutUs() {
                 alignItems: { sm: 'center' }, gap: 3,
                 p: { xs: 3, sm: 4 }, borderRadius: '20px',
                 background: isDark
-                  ? `linear-gradient(135deg, rgba(75,114,255,0.12) 0%, rgba(124,58,237,0.08) 100%)`
-                  : `linear-gradient(135deg, rgba(24,71,214,0.06) 0%, rgba(124,58,237,0.04) 100%)`,
-                border: `1.5px solid ${isDark ? 'rgba(75,114,255,0.2)' : 'rgba(24,71,214,0.12)'}`,
+                  ? `linear-gradient(135deg, rgba(47,212,181,0.08) 0%, rgba(14,124,102,0.06) 100%)`
+                  : `linear-gradient(135deg, rgba(14,124,102,0.05) 0%, rgba(10,99,83,0.03) 100%)`,
+                border: `1.5px solid ${isDark ? 'rgba(47,212,181,0.18)' : 'rgba(14,124,102,0.14)'}`,
                 boxShadow: isDark ? '0 16px 48px rgba(0,0,0,0.3)' : '0 16px 48px rgba(0,0,0,0.06)',
                 position: 'relative', overflow: 'hidden',
               }}

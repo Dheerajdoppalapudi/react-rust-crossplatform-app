@@ -235,8 +235,7 @@ function LeftPanel({ isMobile }) {
                 to="/login"
                 sx={{
                   fontSize: 13, fontWeight: 600, textDecoration: 'none',
-                  background: BRAND.gradientAlt,
-                  WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+                  color: BRAND.primary,
                   '&:hover': { opacity: 0.8 },
                 }}
               >
@@ -394,9 +393,9 @@ export default function Register() {
               sx={{
                 borderRadius: '4px', py: 1.3, fontSize: 14,
                 fontWeight: 600, textTransform: 'none', mt: 0.5,
-                background: BRAND.gradient,
+                backgroundColor: BRAND.primary,
                 boxShadow: 'none',
-                '&:hover': { background: BRAND.gradientHover, boxShadow: 'none' },
+                '&:hover': { backgroundColor: BRAND.hover, boxShadow: 'none' },
               }}
             >
               {loading ? 'Creating account…' : 'Create account'}

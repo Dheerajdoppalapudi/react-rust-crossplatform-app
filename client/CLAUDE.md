@@ -72,15 +72,48 @@ Each handler creates a `generationIdRef`-based `isStale()` guard and an `AbortCo
 ### Theme System
 
 ```
-src/theme/tokens.js     Design tokens (BRAND, PALETTE, TYPOGRAPHY, RADIUS)
+src/theme/tokens.js     Design tokens (BRAND, PALETTE, SEMANTIC, TYPOGRAPHY, RADIUS, SHADOWS)
 src/theme/index.js      buildTheme(mode) → MUI ThemeProvider config
 src/theme/animations.js Keyframe exports: pulse, fadeIn, shimmer, blink
-src/theme/styleUtils.js Helper fns for theme-aware sx values
+src/theme/styleUtils.js Neutral fill/border helpers + brand color helpers (see below)
 ```
 
 Light/dark preference is persisted in `localStorage` under key `zenith-theme`. `ColorModeContext` (created in `App.jsx`) exposes `{ mode, toggle }`. The current mode is also written to `document.documentElement.dataset.theme` for CSS variable targeting.
 
-Always use tokens from `tokens.js` for colors — never hardcode hex values in component `sx` props.
+#### Color Rules — read carefully
+
+**`theme.palette.primary.main` is neutral, not brand.**
+`buildTheme` sets `primary.main` to `PALETTE.warmSilver` (dark) / `PALETTE.nearBlackText` (light). This prevents MUI internals (Checkbox, Switch, LinearProgress, focus rings, etc.) from bleeding Pine teal. Do not rely on `primary.main` to mean Pine anywhere.
+
+**Brand color (Pine `#0E7C66` / `#2FD4B5`) appears in exactly two places:**
+1. Send button background
+2. Prompt bar `focus-within` border
+
+Everything else — buttons, toggles, active states, borders, highlights — must be neutral.
+
+**Never write inline `rgba()` values in `sx` props.** Use the helper functions from `src/theme/styleUtils.js`:
+
+```js
+import { neutralGhost, neutralSubtle, neutralSurface, neutralHover, neutralActive,
+         neutralToggle, neutralBorderFaint, neutralBorderDefault, neutralBorder,
+         neutralBorderStrong, neutralBorderHover, brandColor, brandHover } from '@theme/styleUtils.js'
+
+neutralGhost(isDark)          // 0.03/0.02  — very subtle bg
+neutralSubtle(isDark)         // 0.06/0.04  — menu hover, subtle surface
+neutralSurface(isDark)        // 0.09/0.06  — button default bg
+neutralHover(isDark)          // 0.12/0.08  — hover fill
+neutralActive(isDark)         // 0.14/0.10  — strong hover / pressed
+neutralToggle(isDark)         // 0.10/0.07  — active toggle bg
+neutralBorderFaint(isDark)    // 0.10/0.08
+neutralBorderDefault(isDark)  // 0.12/0.10  — inactive button border
+neutralBorder(isDark)         // 0.18/0.14  — pill outline, normal border
+neutralBorderStrong(isDark)   // 0.22/0.18  — active / selected border
+neutralBorderHover(isDark)    // 0.30/0.22  — hover border
+brandColor(isDark)            // BRAND.accent (dark) / BRAND.primary (light) — send btn + prompt focus only
+brandHover()                  // BRAND.hover — send button hover state only
+```
+
+Semantic status colors (`STATUS.success`, `STATUS.error`, `STATUS.warning`) from `tokens.js` are fine for quiz/diff correctness indicators — that is their intended use. `PALETTE.focusBlue` is correct for keyboard focus outlines.
 
 ### Toast Notifications (`src/contexts/ToastContext.jsx`)
 

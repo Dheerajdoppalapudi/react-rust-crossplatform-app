@@ -11,7 +11,7 @@ import ReactFlow, {
 import 'reactflow/dist/style.css'
 import dagre from 'dagre'
 import { useSceneStore } from '../useSceneStore'
-import { TYPOGRAPHY, RADIUS, PALETTE, BRAND } from '../../../theme/tokens'
+import { TYPOGRAPHY, RADIUS, PALETTE } from '../../../theme/tokens'
 import EntityCaption from './EntityCaption'
 
 const NODE_W = 140
@@ -50,12 +50,12 @@ function buildNodes(rawNodes, highlightedNodeIds, nodeColors, isDark) {
         minWidth:        NODE_W,
         textAlign:       'center',
         backgroundColor: isHighlighted
-          ? 'rgba(24,71,214,0.18)'
+          ? (isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.07)')
           : customColor
           ? `${customColor}22`
           : (isDark ? PALETTE.darkSubsurface : '#ffffff'),
         border: isHighlighted
-          ? `2px solid ${BRAND.primary}`
+          ? `2px solid ${isDark ? 'rgba(255,255,255,0.40)' : 'rgba(0,0,0,0.35)'}`
           : customColor
           ? `1.5px solid ${customColor}`
           : `1px solid ${isDark ? PALETTE.borderDark : PALETTE.borderCream}`,

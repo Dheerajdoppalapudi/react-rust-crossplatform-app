@@ -1,24 +1,59 @@
-// Dark-mode style helpers — return sx-compatible values.
-// All are pure functions of isDark so call sites stay readable.
+import { BRAND } from './tokens.js'
+import { textShimmer } from './animations.js'
 
-export const cardShadow  = (isDark) =>
-  isDark ? '0 2px 12px rgba(0,0,0,0.35)' : '0 2px 12px rgba(0,0,0,0.06)'
+// ─── Neutral background fills ──────────────────────────────────────────────────
+// Pure functions of isDark (theme.palette.mode === 'dark').
+// Use these instead of inline rgba strings in sx props.
+export const neutralGhost   = (d) => d ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)'
+export const neutralSubtle  = (d) => d ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)'
+export const neutralSurface = (d) => d ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.06)'
+export const neutralHover   = (d) => d ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)'
+export const neutralActive  = (d) => d ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.10)'
+export const neutralToggle  = (d) => d ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.07)'
 
-export const menuShadow  = (isDark) =>
-  isDark
-    ? '0 8px 32px rgba(0,0,0,0.6), 0 2px 8px rgba(0,0,0,0.4)'
-    : '0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06)'
+// ─── Neutral border strokes ────────────────────────────────────────────────────
+export const neutralBorderFaint   = (d) => d ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)'
+export const neutralBorderDefault = (d) => d ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.10)'
+export const neutralBorder        = (d) => d ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.14)'
+export const neutralBorderStrong = (d) => d ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.18)'
+export const neutralBorderHover  = (d) => d ? 'rgba(255,255,255,0.30)' : 'rgba(0,0,0,0.22)'
 
-export const hoverBg     = (isDark) =>
-  isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)'
+// ─── Shadow helpers ────────────────────────────────────────────────────────────
+export const cardShadow = (d) =>
+  d ? '0 2px 12px rgba(0,0,0,0.35)' : '0 2px 12px rgba(0,0,0,0.06)'
 
-export const subtleHoverBg = (isDark) =>
-  isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)'
+export const menuShadow = (d) =>
+  d ? '0 8px 32px rgba(0,0,0,0.6)' : '0 8px 32px rgba(0,0,0,0.12)'
 
-// Brand-tinted surface: brandTint(isDark, 0.10) → semi-transparent brand overlay
-export const brandTint   = (isDark, alpha = 0.10) =>
-  isDark ? `rgba(75,114,255,${alpha})` : `rgba(24,71,214,${alpha})`
+// ─── Brand color (Pine) ────────────────────────────────────────────────────────
+// Use ONLY on: (1) send button background, (2) prompt bar focus-within border.
+export const brandColor = (d) => d ? BRAND.accent  : BRAND.primary
+export const brandHover = ()  => BRAND.hover
 
-// Brand-tinted border
-export const brandBorder = (isDark, alpha = 0.25) =>
-  isDark ? `rgba(75,114,255,${alpha})` : `rgba(24,71,214,${alpha})`
+// ─── Meta text ─────────────────────────────────────────────────────────────────
+// For timestamps, domains, counts, and other tertiary metadata.
+// Meets WCAG AA 3:1 minimum for non-body text at these opacities.
+export const metaText = (d) => d ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.40)'
+
+// ─── Text shimmer (active stage / beat animation) ─────────────────────────────
+// Apply as spread in sx: { ...shimmerTextSx(isDark) }
+export const shimmerTextSx = (d) => ({
+  backgroundImage: `linear-gradient(90deg,
+    ${d ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.22)'} 35%,
+    ${d ? 'rgba(255,255,255,0.90)' : 'rgba(0,0,0,0.76)'} 50%,
+    ${d ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.22)'} 65%)`,
+  backgroundSize:       '300% 100%',
+  backgroundClip:       'text',
+  WebkitBackgroundClip: 'text',
+  color:                'transparent',
+  animation:            `${textShimmer} 1.6s linear infinite`,
+  transition:           'none',
+})
+
+
+
+// Planatrix
+// Intugence
+// Intuplex
+// Paralume
+// Soana

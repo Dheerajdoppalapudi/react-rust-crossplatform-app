@@ -201,11 +201,11 @@ function ReadyState({ sessionId, prompt, onPauseAsk, captions, frameCount, onFra
               aria-label={captionsOn ? 'Turn off captions' : 'Turn on captions'}
               aria-pressed={captionsOn}
               sx={{
-                backgroundColor: captionsOn ? 'rgba(79,110,255,0.82)' : 'rgba(0,0,0,0.55)',
+                backgroundColor: captionsOn ? 'rgba(255,255,255,0.20)' : 'rgba(0,0,0,0.55)',
                 color: '#fff',
                 backdropFilter: 'blur(4px)',
                 '&:hover': {
-                  backgroundColor: captionsOn ? 'rgba(79,110,255,1)' : 'rgba(0,0,0,0.75)',
+                  backgroundColor: captionsOn ? 'rgba(255,255,255,0.30)' : 'rgba(0,0,0,0.75)',
                 },
                 transition: 'background-color 0.15s',
               }}
@@ -248,7 +248,7 @@ function ReadyState({ sessionId, prompt, onPauseAsk, captions, frameCount, onFra
               cursor: 'pointer', fontWeight: 600, fontSize: 12.5,
               backgroundColor: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(8px)',
               color: '#fff', border: '1px solid rgba(255,255,255,0.18)', height: 34,
-              '&:hover': { backgroundColor: 'rgba(79,110,255,0.85)' },
+              '&:hover': { backgroundColor: 'rgba(255,255,255,0.18)' },
               transition: 'all 0.15s',
               '& .MuiChip-icon': { color: '#fff' },
             }}

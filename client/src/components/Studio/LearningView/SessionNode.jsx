@@ -218,11 +218,11 @@ export default function SessionNode({ data }) {
               : '0 1px 3px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.08)',
             transition: 'border-color 0.2s, box-shadow 0.2s, transform 0.15s',
             '&:hover': {
-              borderColor: primary,
+              borderColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.18)',
               transform:   'translateY(-2px)',
               boxShadow:   isDark
-                ? `0 0 0 1.5px ${primary}55, 0 16px 48px rgba(0,0,0,0.65)`
-                : `0 0 0 1.5px ${primary}44, 0 12px 32px rgba(0,0,0,0.12)`,
+                ? '0 16px 48px rgba(0,0,0,0.65)'
+                : '0 12px 32px rgba(0,0,0,0.12)',
             },
           }}>
 
@@ -270,8 +270,8 @@ export default function SessionNode({ data }) {
 
               <Box sx={{ position: 'absolute', top: 8, right: 8, display: 'flex', alignItems: 'center', gap: 0.5 }}>
                 {intentLabel && (
-                  <Box sx={{ px: 0.75, py: 0.3, borderRadius: '20px', bgcolor: 'rgba(75,114,255,0.18)', border: '1px solid rgba(75,114,255,0.4)', backdropFilter: 'blur(6px)' }}>
-                    <Typography sx={{ fontSize: 8, fontWeight: 600, lineHeight: 1, color: BRAND.accent, textTransform: 'capitalize' }}>{intentLabel}</Typography>
+                  <Box sx={{ px: 0.75, py: 0.3, borderRadius: '20px', bgcolor: 'rgba(0,0,0,0.55)', border: '1px solid rgba(255,255,255,0.18)', backdropFilter: 'blur(6px)' }}>
+                    <Typography sx={{ fontSize: 8, fontWeight: 600, lineHeight: 1, color: 'rgba(255,255,255,0.75)', textTransform: 'capitalize' }}>{intentLabel}</Typography>
                   </Box>
                 )}
                 {!isText && (
@@ -295,7 +295,7 @@ export default function SessionNode({ data }) {
                 {!isText && frameCount > 0 ? (
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.4 }}>
                     {Array.from({ length: Math.min(frameCount, 6) }).map((_, i) => (
-                      <Box key={i} sx={{ width: 4, height: 4, borderRadius: '50%', flexShrink: 0, bgcolor: primary, opacity: 0.5 }} />
+                      <Box key={i} sx={{ width: 4, height: 4, borderRadius: '50%', flexShrink: 0, bgcolor: theme.palette.text.disabled, opacity: 0.6 }} />
                     ))}
                     {frameCount > 6 && <Typography sx={{ fontSize: 9, color: theme.palette.text.secondary }}>+{frameCount - 6}</Typography>}
                     <Typography sx={{ fontSize: 9.5, color: theme.palette.text.secondary, ml: 0.5 }}>{frameCount} slides</Typography>

@@ -28,9 +28,9 @@ export function UserBubble({ prompt }) {
   const isDark = theme.palette.mode === 'dark'
 
   return (
-    <Box sx={{ display: 'flex', justifyContent: 'flex-end', pt: 3, pb: 3.5 }}>
+    <Box sx={{ display: 'flex', justifyContent: 'flex-end', pt: 2.5, pb: 2 }}>
       <Box sx={{
-        maxWidth: '72%', px: 2.5, py: 1.5,
+        maxWidth: '72%', minWidth: 60, px: 2.5, py: 1.5,
         backgroundColor: isDark ? PALETTE.darkSubsurface : PALETTE.warmSand,
         color: theme.palette.text.primary,
         borderRadius: '18px 18px 4px 18px',
@@ -72,9 +72,9 @@ function RetryBanner({ turn, onRetry }) {
         sx={{
           textTransform: 'none', fontSize: 12.5, fontWeight: 600,
           borderRadius: '8px', flexShrink: 0,
-          color: theme.palette.primary.main,
-          border: `1px solid ${theme.palette.primary.main}44`,
-          '&:hover': { bgcolor: isDark ? 'rgba(75,114,255,0.10)' : `${BRAND.primary}0d` },
+          color: theme.palette.text.secondary,
+          border: `1px solid ${isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.10)'}`,
+          '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)', color: theme.palette.text.primary },
         }}
       >
         {isRetrying ? 'Retrying…' : 'Retry'}
@@ -88,7 +88,7 @@ const TurnView = memo(function TurnView({ turn, onPauseAsk, onRetryTurn, onRetry
   const isDark = theme.palette.mode === 'dark'
 
   return (
-    <Box data-turn-id={turn.tempId} sx={{ mb: 4, '&:last-child': { mb: 0 } }}>
+    <Box data-turn-id={turn.tempId} sx={{ mb: 2, '&:last-child': { mb: 0 } }}>
       <ContentColumn>
         <UserBubble prompt={turn.prompt} />
 
@@ -136,7 +136,7 @@ const TurnView = memo(function TurnView({ turn, onPauseAsk, onRetryTurn, onRetry
         ) : turn.videoPhase === 'error' && !turn.id ? (
           <Box sx={{
             py: 2.5, px: 3, borderRadius: '12px',
-            backgroundColor: isDark ? '#1a1a1a' : '#fff8f8',
+            backgroundColor: isDark ? PALETTE.darkSurface : PALETTE.parchment,
             border: `1px solid ${theme.palette.error.main}22`,
           }}>
             <Typography sx={{ fontSize: 13.5, color: theme.palette.text.secondary, lineHeight: 1.5, mb: 1.5 }}>

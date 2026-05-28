@@ -176,12 +176,12 @@ export default function LearningView({ turns, conversationId, onExit, onAskFromL
             aria-pressed={userNotesOpen}
             sx={{
               bgcolor: userNotesOpen
-                ? (isDark ? 'rgba(79,110,255,0.2)' : 'rgba(24,71,214,0.1)')
+                ? (isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)')
                 : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.92)'),
               border: `1px solid ${userNotesOpen
-                ? (isDark ? 'rgba(79,110,255,0.5)' : 'rgba(24,71,214,0.3)')
+                ? (isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.18)')
                 : (isDark ? 'rgba(255,255,255,0.14)' : '#e2e8f0')}`,
-              color: userNotesOpen ? theme.palette.primary.main : theme.palette.text.secondary,
+              color: userNotesOpen ? (isDark ? 'rgba(255,255,255,0.90)' : 'rgba(0,0,0,0.80)') : theme.palette.text.secondary,
               backdropFilter: 'blur(10px)',
               boxShadow: '0 2px 10px rgba(0,0,0,0.14)',
               '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.14)' : '#fff' },

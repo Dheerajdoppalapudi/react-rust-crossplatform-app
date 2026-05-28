@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { Box, Typography, LinearProgress, useTheme } from '@mui/material'
-import { TYPOGRAPHY, RADIUS, PALETTE, BRAND, STATUS } from '../../../theme/tokens'
+import { TYPOGRAPHY, RADIUS, PALETTE, STATUS } from '../../../theme/tokens'
 import EntityCaption from './EntityCaption'
 import { useExpanded } from '../BlockWrapper'
 
@@ -33,8 +33,8 @@ function QuizQuestion({ q, index, total, onAnswer, isDark }) {
       borderColor: isDark ? PALETTE.borderDark : PALETTE.borderCream,
       backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
       '&:hover': {
-        borderColor: isDark ? 'rgba(75,114,255,0.5)' : 'rgba(75,114,255,0.4)',
-        backgroundColor: isDark ? 'rgba(75,114,255,0.08)' : 'rgba(75,114,255,0.05)',
+        borderColor: isDark ? 'rgba(255,255,255,0.30)' : 'rgba(0,0,0,0.22)',
+        backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
       },
     }
     if (i === q.correctIndex) return {
@@ -195,7 +195,7 @@ function ScoreSummary({ answers, questions, onRetry, isDark }) {
           color: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)',
           fontFamily: 'inherit', background: 'none',
           transition: 'all 0.15s ease',
-          '&:hover': { borderColor: BRAND.accent, color: BRAND.accent },
+          '&:hover': { borderColor: isDark ? 'rgba(255,255,255,0.30)' : 'rgba(0,0,0,0.22)', color: isDark ? 'rgba(255,255,255,0.90)' : 'rgba(0,0,0,0.80)' },
         }}
       >
         Try again

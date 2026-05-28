@@ -1,5 +1,5 @@
 import { createTheme } from '@mui/material'
-import { BRAND, PALETTE, TYPOGRAPHY, RADIUS } from './tokens.js'
+import { BRAND, PALETTE, SEMANTIC, TYPOGRAPHY, RADIUS } from './tokens.js'
 
 export const buildTheme = (mode) => {
   const isDark = mode === 'dark'
@@ -16,9 +16,9 @@ export const buildTheme = (mode) => {
     palette: {
       mode,
       primary: {
-        main:  isDark ? BRAND.accent   : BRAND.primary,
-        light: BRAND.accent,
-        dark:  BRAND.primary,
+        main:  isDark ? PALETTE.warmSilver : PALETTE.nearBlackText,
+        light: PALETTE.warmSilver,
+        dark:  PALETTE.nearBlackText,
       },
       background: {
         default: isDark ? PALETTE.nearBlack   : PALETTE.parchment,
@@ -29,8 +29,8 @@ export const buildTheme = (mode) => {
         secondary: isDark ? PALETTE.stoneGray   : PALETTE.oliveGray,
         disabled:  isDark ? PALETTE.charcoalWarm: PALETTE.stoneGray,
       },
-      divider: isDark ? PALETTE.dividerDark : PALETTE.dividerLight,
-      error:   { main: PALETTE.errorRed },
+      divider: isDark ? PALETTE.borderDark : PALETTE.border,
+      error:   { main: SEMANTIC.danger },
     },
 
     shape: {
@@ -47,11 +47,11 @@ export const buildTheme = (mode) => {
             MozOsxFontSmoothing: 'grayscale',
           },
           '::selection': {
-            backgroundColor: 'rgba(24, 71, 214, 0.20)',
+            backgroundColor: 'rgba(14, 124, 102, 0.20)',
             color: 'inherit',
           },
           '::-moz-selection': {
-            backgroundColor: 'rgba(24, 71, 214, 0.20)',
+            backgroundColor: 'rgba(14, 124, 102, 0.20)',
             color: 'inherit',
           },
           '::-webkit-scrollbar': { width: '3px', height: '3px' },
@@ -68,7 +68,7 @@ export const buildTheme = (mode) => {
         styleOverrides: {
           root: {
             backgroundImage: 'none',
-            border: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.borderCream}`,
+            border: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.border}`,
           },
         },
       },
@@ -84,14 +84,16 @@ export const buildTheme = (mode) => {
             '&:hover': { boxShadow: 'none' },
           },
           contained: {
-            background: BRAND.gradient,
-            color: PALETTE.ivory,
+            backgroundColor: isDark ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.06)',
+            color: isDark ? PALETTE.warmSilver : PALETTE.nearBlackText,
+            border: `1px solid ${isDark ? 'rgba(255,255,255,0.13)' : 'rgba(0,0,0,0.10)'}`,
             '&:hover': {
-              background: BRAND.gradientHover,
+              backgroundColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.10)',
+              border: `1px solid ${isDark ? 'rgba(255,255,255,0.20)' : 'rgba(0,0,0,0.15)'}`,
             },
           },
           outlined: {
-            borderColor: isDark ? PALETTE.borderDark : PALETTE.borderWarm,
+            borderColor: isDark ? PALETTE.borderDark : PALETTE.border,
             color: isDark ? PALETTE.warmSilver : PALETTE.nearBlackText,
             '&:hover': {
               borderColor: BRAND.primary,
@@ -112,7 +114,7 @@ export const buildTheme = (mode) => {
             },
           },
           notchedOutline: {
-            borderColor: isDark ? PALETTE.borderDark : PALETTE.borderWarm,
+            borderColor: isDark ? PALETTE.borderDark : PALETTE.border,
           },
         },
       },
@@ -129,7 +131,7 @@ export const buildTheme = (mode) => {
       MuiMenu: {
         styleOverrides: {
           paper: {
-            border: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.borderCream}`,
+            border: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.border}`,
             boxShadow: isDark ? '0px 8px 24px rgba(0,0,0,0.5)' : '0px 4px 16px rgba(0,0,0,0.08)',
           },
         },
@@ -141,15 +143,11 @@ export const buildTheme = (mode) => {
             fontFamily: TYPOGRAPHY.fontFamily,
             fontSize: TYPOGRAPHY.sizes.bodySm,
             '&:hover': {
-              backgroundColor: isDark
-                ? `rgba(75, 114, 255, 0.10)`
-                : `rgba(24, 71, 214, 0.06)`,
+              backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
             },
             '&.Mui-selected': {
-              backgroundColor: isDark
-                ? `rgba(75, 114, 255, 0.15)`
-                : `rgba(24, 71, 214, 0.08)`,
-              color: isDark ? BRAND.accent : BRAND.primary,
+              backgroundColor: isDark ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.06)',
+              color: isDark ? PALETTE.warmSilver : PALETTE.nearBlackText,
             },
           },
         },
@@ -173,7 +171,7 @@ export const buildTheme = (mode) => {
       MuiDivider: {
         styleOverrides: {
           root: {
-            borderColor: isDark ? PALETTE.dividerDark : PALETTE.dividerLight,
+            borderColor: isDark ? PALETTE.borderDark : PALETTE.border,
           },
         },
       },
@@ -183,7 +181,7 @@ export const buildTheme = (mode) => {
           paper: {
             backgroundImage: 'none',
             backgroundColor: isDark ? PALETTE.darkSurface : PALETTE.ivory,
-            border: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.borderCream}`,
+            border: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.border}`,
           },
         },
       },

@@ -12,7 +12,7 @@ import java       from 'react-syntax-highlighter/dist/esm/languages/hljs/java'
 import cpp        from 'react-syntax-highlighter/dist/esm/languages/hljs/cpp'
 import go         from 'react-syntax-highlighter/dist/esm/languages/hljs/go'
 import bash       from 'react-syntax-highlighter/dist/esm/languages/hljs/bash'
-import { TYPOGRAPHY, RADIUS, PALETTE, STATUS, BRAND } from '../../../theme/tokens'
+import { TYPOGRAPHY, RADIUS, PALETTE, STATUS } from '../../../theme/tokens'
 import EntityCaption from './EntityCaption'
 
 SyntaxHighlighter.registerLanguage('python',     python)
@@ -177,13 +177,13 @@ function ToolbarBtn({ active, onClick, title, children }) {
         fontSize: TYPOGRAPHY.sizes.caption,
         fontFamily: 'inherit',
         border: '1px solid',
-        borderColor: active ? BRAND.accent : (isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'),
+        borderColor: active ? (isDark ? 'rgba(255,255,255,0.30)' : 'rgba(0,0,0,0.22)') : (isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'),
         borderRadius: '4px',
-        backgroundColor: active ? 'rgba(75,114,255,0.12)' : 'transparent',
-        color: active ? BRAND.accent : (isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)'),
+        backgroundColor: active ? (isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.07)') : 'transparent',
+        color: active ? (isDark ? 'rgba(255,255,255,0.90)' : 'rgba(0,0,0,0.80)') : (isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)'),
         cursor: 'pointer',
         lineHeight: 1.4,
-        '&:hover': { borderColor: BRAND.accent, color: BRAND.accent },
+        '&:hover': { borderColor: isDark ? 'rgba(255,255,255,0.30)' : 'rgba(0,0,0,0.22)', color: isDark ? 'rgba(255,255,255,0.90)' : 'rgba(0,0,0,0.80)' },
       }}
     >
       {children}

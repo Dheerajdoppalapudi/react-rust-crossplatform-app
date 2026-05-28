@@ -6,7 +6,7 @@ import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
 import ShuffleIcon      from '@mui/icons-material/Shuffle'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useSceneStore } from '../useSceneStore'
-import { TYPOGRAPHY, RADIUS, PALETTE, STATUS, BRAND } from '../../../theme/tokens'
+import { TYPOGRAPHY, RADIUS, PALETTE, STATUS, SEMANTIC } from '../../../theme/tokens'
 import EntityCaption from './EntityCaption'
 
 const MotionDiv = motion.div
@@ -24,7 +24,7 @@ const CONFIDENCE = [
   { key: 'again', label: 'Again', color: STATUS.error,   bg: 'rgba(248,81,73,0.12)' },
   { key: 'hard',  label: 'Hard',  color: STATUS.warning, bg: 'rgba(240,136,62,0.12)' },
   { key: 'good',  label: 'Good',  color: STATUS.success, bg: 'rgba(46,160,67,0.12)' },
-  { key: 'easy',  label: 'Easy',  color: BRAND.accent,   bg: 'rgba(75,114,255,0.12)' },
+  { key: 'easy',  label: 'Easy',  color: SEMANTIC.success, bg: 'rgba(46,160,67,0.12)' },
 ]
 
 export default function FlashcardDeck({
@@ -77,13 +77,8 @@ export default function FlashcardDeck({
     if (!atEnd) setLocalIndex(i => i + 1)
   }
 
-  const frontBg = isDark
-    ? 'linear-gradient(135deg, rgba(75,114,255,0.12) 0%, rgba(107,68,248,0.08) 100%)'
-    : 'linear-gradient(135deg, rgba(75,114,255,0.07) 0%, rgba(107,68,248,0.04) 100%)'
-
-  const backBg = isDark
-    ? 'linear-gradient(135deg, rgba(107,68,248,0.14) 0%, rgba(75,114,255,0.10) 100%)'
-    : 'linear-gradient(135deg, rgba(107,68,248,0.07) 0%, rgba(75,114,255,0.04) 100%)'
+  const frontBg = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)'
+  const backBg  = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.04)'
 
   const showConfidenceButtons = reviewMode === 'spaced' && flipped
 
@@ -123,7 +118,7 @@ export default function FlashcardDeck({
           sx={{
             perspective: '1000px', cursor: 'pointer', mb: 2, userSelect: 'none',
             outline: 'none',
-            '&:focus-visible': { outline: `2px solid ${BRAND.accent}`, outlineOffset: 3, borderRadius: `${RADIUS.md}px` },
+            '&:focus-visible': { outline: `2px solid ${PALETTE.focusBlue}`, outlineOffset: 3, borderRadius: `${RADIUS.md}px` },
           }}
         >
           <AnimatePresence mode="wait" initial={false}>
@@ -137,7 +132,7 @@ export default function FlashcardDeck({
               >
                 <Box sx={{
                   minHeight: 180, borderRadius: `${RADIUS.md}px`, background: frontBg,
-                  border: `1px solid ${isDark ? 'rgba(75,114,255,0.2)' : 'rgba(75,114,255,0.15)'}`,
+                  border: `1px solid ${isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.10)'}`,
                   display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
                   p: 3, position: 'relative',
                 }}>

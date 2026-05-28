@@ -6,7 +6,7 @@ import { Light as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { atomOneDark }  from 'react-syntax-highlighter/dist/esm/styles/hljs'
 import { atomOneLight } from 'react-syntax-highlighter/dist/esm/styles/hljs'
 import PlaybackBar from './PlaybackBar'
-import { BRAND, PALETTE } from '../../../theme/tokens'
+import { PALETTE } from '../../../theme/tokens'
 
 // ── Language registrations ────────────────────────────────────────────────────
 import python     from 'react-syntax-highlighter/dist/esm/languages/hljs/python'
@@ -85,16 +85,15 @@ export default function CodeWalkthrough({
     } catch {}
   }, [code])
 
-  const accentColor = isDark ? BRAND.accent : BRAND.primary
-  const surfaceBg   = isDark ? PALETTE.darkSurface : PALETTE.warmSand
+  const surfaceBg = isDark ? PALETTE.darkSurface : PALETTE.warmSand
 
   const lineProps = (lineNumber) => {
     if (lineNumber === highlightLine) {
       return {
         style: {
           display: 'block',
-          backgroundColor: isDark ? 'rgba(75,114,255,0.18)' : 'rgba(24,71,214,0.10)',
-          borderLeft: `3px solid ${accentColor}`,
+          backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)',
+          borderLeft: `3px solid ${isDark ? 'rgba(255,255,255,0.30)' : 'rgba(0,0,0,0.22)'}`,
           paddingLeft: '8px',
           marginLeft: '-8px',
         },
@@ -110,7 +109,7 @@ export default function CodeWalkthrough({
       sx={{
         borderRadius: 2, overflow: 'hidden', border: '1px solid', borderColor: 'divider',
         outline: 'none',
-        '&:focus-visible': { outline: `2px solid ${accentColor}`, outlineOffset: 2 },
+        '&:focus-visible': { outline: `2px solid ${PALETTE.focusBlue}`, outlineOffset: 2 },
       }}
     >
 
@@ -132,7 +131,7 @@ export default function CodeWalkthrough({
           }}
         />
         {highlightLine && (
-          <Typography sx={{ fontSize: 11, color: accentColor, opacity: 0.85 }}>
+          <Typography sx={{ fontSize: 11, color: 'text.secondary', opacity: 0.85 }}>
             Line {highlightLine}
           </Typography>
         )}
@@ -162,7 +161,7 @@ export default function CodeWalkthrough({
           px: 2, py: 1.5,
           borderTop: '1px solid', borderColor: 'divider',
           borderRadius: 0,
-          backgroundColor: isDark ? 'rgba(74,171,255,0.06)' : 'rgba(24,71,214,0.04)',
+          backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
         }}>
           <Typography variant="body2" sx={{ color: 'text.secondary', lineHeight: 1.55, fontSize: 13 }}>
             {explanation}
@@ -178,7 +177,6 @@ export default function CodeWalkthrough({
           label={stepLabel}
           isPlaying={isPlaying}
           autoInterval={autoInterval}
-          accentColor={accentColor}
           isDark={isDark}
           onPlayPause={() => setIsPlaying(p => !p)}
           onPrev={prev}

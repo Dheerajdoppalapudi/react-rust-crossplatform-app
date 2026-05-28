@@ -50,15 +50,15 @@ function BlockRenderer({ turnId, title, learningObjective, blocks = [], isLoadin
         <Box sx={{
           px: 2, py: 1.25,
           borderRadius: `${RADIUS.md}px`,
-          backgroundColor: isDark ? 'rgba(75,114,255,0.08)' : 'rgba(75,114,255,0.05)',
-          borderLeft: `3px solid ${BRAND.accent}`,
+          backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
+          borderLeft: `3px solid ${isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.15)'}`,
         }}>
           <Typography sx={{
             fontSize: TYPOGRAPHY.sizes.caption,
             color: isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.55)',
             lineHeight: 1.5,
           }}>
-            <Box component="span" sx={{ fontWeight: 600, color: BRAND.accent, mr: 0.75 }}>
+            <Box component="span" sx={{ fontWeight: 600, color: isDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.70)', mr: 0.75 }}>
               Goal:
             </Box>
             {learningObjective}

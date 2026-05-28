@@ -41,8 +41,8 @@ export default function BubbleToolbar({ editor }) {
   const btnSx = (active) => ({
     p: 0.5,
     borderRadius: '5px',
-    color: active ? theme.palette.primary.main : (isDark ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.6)'),
-    bgcolor: active ? (isDark ? 'rgba(79,110,255,0.15)' : 'rgba(79,110,255,0.08)') : 'transparent',
+    color: active ? theme.palette.text.primary : theme.palette.text.secondary,
+    bgcolor: active ? (isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)') : 'transparent',
     '&:hover': {
       bgcolor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
     },

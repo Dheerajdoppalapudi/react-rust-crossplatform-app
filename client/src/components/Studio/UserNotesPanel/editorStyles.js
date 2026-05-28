@@ -155,7 +155,7 @@ export function getEditorSx(theme) {
       bgcolor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
     },
     '& .ProseMirror .selectedCell': {
-      bgcolor: isDark ? 'rgba(79,110,255,0.15)' : 'rgba(79,110,255,0.08)',
+      bgcolor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.06)',
     },
 
     // Bold, italic
