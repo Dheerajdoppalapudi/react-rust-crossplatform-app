@@ -1,74 +1,67 @@
 import { useState, useRef, useEffect } from 'react'
 import { Handle, Position } from 'reactflow'
-import { Box, Typography, TextField, IconButton, Tooltip, useTheme, Menu, MenuItem } from '@mui/material'
-import SendIcon              from '@mui/icons-material/Send'
-import CloseIcon             from '@mui/icons-material/Close'
-import VideocamOutlinedIcon  from '@mui/icons-material/VideocamOutlined'
-import VideocamOffOutlined   from '@mui/icons-material/VideocamOffOutlined'
-import NotesOutlinedIcon     from '@mui/icons-material/NotesOutlined'
-import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown'
-import { MODELS, DEFAULT_MODEL } from '../constants'
+import { Box, Typography, IconButton, useTheme } from '@mui/material'
+import CloseIcon from '@mui/icons-material/Close'
+import PromptBar from '../PromptBar'
+import { DEFAULT_MODEL, DEFAULT_RENDER_MODE, DEFAULT_MODE } from '../constants'
 
-const ASK_NODE_W = 340
+const ASK_NODE_W = 460
 
 export default function AskNode({ data }) {
   const theme   = useTheme()
   const isDark  = theme.palette.mode === 'dark'
-  const primary = theme.palette.primary.main
 
-  const [question,      setQuestion]      = useState('')
+  const [prompt,        setPrompt]        = useState('')
+  const [selectedModel, setSelectedModel] = useState(data.defaultModel ?? DEFAULT_MODEL)
+  const [renderMode,    setRenderMode]    = useState(DEFAULT_RENDER_MODE)
+  const [selectedMode,  setSelectedMode]  = useState(DEFAULT_MODE)
   const [videoEnabled,  setVideoEnabled]  = useState(data.defaultVideoEnabled ?? true)
   const [notesEnabled,  setNotesEnabled]  = useState(data.defaultNotesEnabled ?? true)
-  const [selectedModel, setSelectedModel] = useState(data.defaultModel ?? DEFAULT_MODEL)
-  const [menuAnchor,    setMenuAnchor]    = useState(null)
+  const [stagedFiles,   setStagedFiles]   = useState([])
 
+  const inputRef    = useRef(null)
   const nodeRef     = useRef(null)
   const onCancelRef = useRef(data.onCancel)
   useEffect(() => { onCancelRef.current = data.onCancel }, [data.onCancel])
 
   useEffect(() => {
-    const handleKeyDown = (e) => {
+    const handleEscape = (e) => {
       if (e.key === 'Escape' && nodeRef.current?.contains(document.activeElement)) {
         e.stopPropagation()
         onCancelRef.current?.()
       }
     }
-    window.addEventListener('keydown', handleKeyDown, true)
-    return () => window.removeEventListener('keydown', handleKeyDown, true)
+    window.addEventListener('keydown', handleEscape, true)
+    return () => window.removeEventListener('keydown', handleEscape, true)
   }, [])
 
-  const isValid = Boolean(question.trim())
-
   const handleSubmit = () => {
-    if (!isValid) return
-    data.onSubmit?.({ question: question.trim(), model: selectedModel, videoEnabled, notesEnabled })
+    if (!prompt.trim()) return
+    data.onSubmit?.({ question: prompt.trim(), model: selectedModel, videoEnabled, notesEnabled })
   }
 
-  const borderCol  = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.09)'
-  const subTextCol = isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.28)'
+  const handleKeyDown = (e) => {
+    e.stopPropagation()
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSubmit()
+    }
+  }
 
   return (
     <>
       <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
 
-      <Box ref={nodeRef} sx={{
-        width: ASK_NODE_W,
-        borderRadius: '12px',
-        border: `1.5px solid ${borderCol}`,
-        bgcolor: isDark ? '#1a1a2e' : '#ffffff',
-        overflow: 'hidden',
-        boxShadow: isDark
-          ? '0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04)'
-          : '0 8px 32px rgba(0,0,0,0.1), 0 0 0 1px rgba(0,0,0,0.04)',
-        '&:focus-within': {
-          borderColor: isDark ? `${primary}88` : `${primary}66`,
-        },
-        transition: 'border-color 0.15s',
-      }}>
-        <Box sx={{ height: 2, background: `linear-gradient(90deg, transparent, ${primary}77, transparent)` }} />
-
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 1.75, pt: 1.25, pb: 0.5 }}>
-          <Typography sx={{ fontSize: 11, fontWeight: 600, color: isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.4)', letterSpacing: '0.03em' }}>
+      <Box ref={nodeRef} sx={{ width: ASK_NODE_W }}>
+        {/* Small label row above the card */}
+        <Box sx={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          mb: 0.75, px: 0.5,
+        }}>
+          <Typography sx={{
+            fontSize: 11, fontWeight: 600, letterSpacing: '0.04em',
+            color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.42)',
+          }}>
             Ask a follow-up
           </Typography>
           <IconButton
@@ -77,7 +70,10 @@ export default function AskNode({ data }) {
             sx={{
               width: 20, height: 20, borderRadius: '5px',
               color: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)',
-              '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)', color: isDark ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.6)' },
+              '&:hover': {
+                bgcolor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)',
+                color:   isDark ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.6)',
+              },
               transition: 'all 0.15s',
             }}
           >
@@ -85,156 +81,34 @@ export default function AskNode({ data }) {
           </IconButton>
         </Box>
 
-        <Box sx={{ px: 1.75, pb: 1.75 }}>
-          <TextField
-            autoFocus
-            value={question}
-            onChange={(e) => setQuestion(e.target.value)}
-            onKeyDown={(e) => {
-              e.stopPropagation()
-              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit() }
-            }}
-            placeholder="Ask a follow-up…"
-            multiline
-            rows={2}
-            size="small"
-            fullWidth
-            sx={{
-              '& .MuiOutlinedInput-root': {
-                fontSize: 13, borderRadius: '8px',
-                bgcolor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)',
-                color: theme.palette.text.primary,
-                '& fieldset': { borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)' },
-                '&:hover fieldset': { borderColor: `${primary}55` },
-                '&.Mui-focused fieldset': { borderColor: `${primary}99` },
-              },
-              '& .MuiInputBase-input::placeholder': {
-                color: subTextCol,
-                opacity: 1,
-              },
-            }}
-          />
-
-          {/* Model + video row */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 1.25 }}>
-            <Box
-              onClick={(e) => setMenuAnchor(e.currentTarget)}
-              sx={{
-                display: 'flex', alignItems: 'center', gap: 0.4, cursor: 'pointer',
-                px: 0.9, py: 0.4, borderRadius: '6px',
-                border: `1px solid ${borderCol}`,
-                bgcolor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
-                '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' },
-                transition: 'background 0.15s',
-              }}
-            >
-              <Typography sx={{ fontSize: 10, fontWeight: 600, color: isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.5)' }}>
-                {selectedModel.short}
-              </Typography>
-              <KeyboardArrowDownIcon sx={{ fontSize: 11, color: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)' }} />
-            </Box>
-
-            <Tooltip title={videoEnabled ? 'Video on — click to disable' : 'Video off — click to enable'}>
-              <IconButton
-                size="small"
-                onClick={() => setVideoEnabled((v) => !v)}
-                sx={{
-                  width: 26, height: 26,
-                  borderRadius: '6px',
-                  border: `1px solid ${videoEnabled ? `${primary}55` : borderCol}`,
-                  bgcolor: videoEnabled ? `${primary}14` : 'transparent',
-                  color: videoEnabled ? primary : (isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)'),
-                  '&:hover': { bgcolor: videoEnabled ? `${primary}22` : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)') },
-                  transition: 'all 0.15s',
-                }}
-              >
-                {videoEnabled
-                  ? <VideocamOutlinedIcon sx={{ fontSize: 13 }} />
-                  : <VideocamOffOutlined  sx={{ fontSize: 13 }} />}
-              </IconButton>
-            </Tooltip>
-
-            <Tooltip title={notesEnabled ? 'AI Notes on — click to disable' : 'AI Notes off — click to enable'}>
-              <IconButton
-                size="small"
-                onClick={() => setNotesEnabled((n) => !n)}
-                sx={{
-                  width: 26, height: 26,
-                  borderRadius: '6px',
-                  border: `1px solid ${notesEnabled ? `${primary}55` : borderCol}`,
-                  bgcolor: notesEnabled ? `${primary}14` : 'transparent',
-                  color: notesEnabled ? primary : (isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)'),
-                  '&:hover': { bgcolor: notesEnabled ? `${primary}22` : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)') },
-                  transition: 'all 0.15s',
-                }}
-              >
-                <NotesOutlinedIcon sx={{ fontSize: 13 }} />
-              </IconButton>
-            </Tooltip>
-
-            <Box sx={{ flex: 1 }} />
-
-            <Tooltip title="Generate (Enter)">
-              <span>
-                <IconButton
-                  onClick={handleSubmit}
-                  disabled={!isValid}
-                  size="small"
-                  sx={{
-                    width: 30, height: 30,
-                    bgcolor: isValid ? primary : 'transparent',
-                    color: isValid ? '#fff' : (isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)'),
-                    border: `1.5px solid ${isValid ? primary : (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)')}`,
-                    borderRadius: '8px',
-                    transition: 'all 0.15s',
-                    '&:hover': { bgcolor: theme.palette.primary.dark, color: '#fff', borderColor: theme.palette.primary.dark },
-                    '&.Mui-disabled': { opacity: 0.3 },
-                  }}
-                >
-                  <SendIcon sx={{ fontSize: 12 }} />
-                </IconButton>
-              </span>
-            </Tooltip>
-          </Box>
-
-          <Typography sx={{ fontSize: 9, color: subTextCol, mt: 0.75 }}>
-            Enter to generate
-          </Typography>
-        </Box>
+        <PromptBar
+          embedded
+          prompt={prompt}
+          onPromptChange={setPrompt}
+          onSubmit={handleSubmit}
+          onStop={() => {}}
+          onKeyDown={handleKeyDown}
+          inputRef={inputRef}
+          isGenerating={false}
+          activeConversation={null}
+          onNewConversation={() => {}}
+          pauseContext={null}
+          onClearPauseContext={() => {}}
+          selectedModel={selectedModel}
+          onModelChange={setSelectedModel}
+          selectedRenderMode={renderMode}
+          onRenderModeChange={setRenderMode}
+          selectedMode={selectedMode}
+          onModeChange={setSelectedMode}
+          stagedFiles={stagedFiles}
+          onAddFiles={(files) => setStagedFiles((prev) => [...prev, ...files])}
+          onRemoveFile={(id)  => setStagedFiles((prev) => prev.filter((f) => f.id !== id))}
+          notesEnabled={notesEnabled}
+          onToggleNotes={() => setNotesEnabled((n) => !n)}
+          videoEnabled={videoEnabled}
+          onToggleVideo={() => setVideoEnabled((v) => !v)}
+        />
       </Box>
-
-      <Menu
-        anchorEl={menuAnchor}
-        open={Boolean(menuAnchor)}
-        onClose={() => setMenuAnchor(null)}
-        PaperProps={{
-          sx: {
-            mt: 0.5, minWidth: 180, borderRadius: '10px',
-            bgcolor: isDark ? '#1e1e1e' : '#fff',
-            border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : '#e2e8f0'}`,
-            boxShadow: isDark ? '0 8px 32px rgba(0,0,0,0.6)' : '0 8px 24px rgba(0,0,0,0.12)',
-          },
-        }}
-      >
-        {MODELS.map((m) => (
-          <MenuItem
-            key={m.id}
-            selected={m.id === selectedModel.id}
-            onClick={() => { setSelectedModel(m); setMenuAnchor(null) }}
-            sx={{
-              fontSize: 12.5, py: 0.9, px: 1.5, gap: 1,
-              borderRadius: '6px', mx: 0.5,
-              '&.Mui-selected': { bgcolor: isDark ? 'rgba(79,110,255,0.14)' : '#f0f4ff' },
-              '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.06)' : '#f8fafc' },
-            }}
-          >
-            <Box sx={{ flex: 1 }}>
-              <Typography sx={{ fontSize: 12.5, fontWeight: 500 }}>{m.short}</Typography>
-              <Typography sx={{ fontSize: 10.5, color: 'text.secondary', mt: 0.1 }}>{m.description}</Typography>
-            </Box>
-          </MenuItem>
-        ))}
-      </Menu>
     </>
   )
 }

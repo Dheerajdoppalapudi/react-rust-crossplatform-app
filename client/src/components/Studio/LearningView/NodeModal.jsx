@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import {
-  Dialog, Box, Typography, IconButton,
+  Box, Typography, IconButton,
   TextField, Chip, CircularProgress, Tooltip, useTheme,
 } from '@mui/material'
 import CloseIcon                  from '@mui/icons-material/Close'
@@ -10,7 +10,6 @@ import CheckCircleOutlinedIcon    from '@mui/icons-material/CheckCircleOutlined'
 import { useMediaUrl }    from '../../../hooks/useMediaUrl'
 import VideoPanel         from '../VideoPanel'
 import BlockRenderer      from '../../Interactive/BlockRenderer'
-import UserNotesPanel     from '../UserNotesPanel/index'
 import { api }            from '../../../services/api'
 import { formatIntentType } from '../studioUtils'
 import { pulse } from '../../../theme/animations'
@@ -38,7 +37,7 @@ function FrameStrip({ sessionId, captions, activeFrame, onSelect, isDark, theme 
             onClick={() => onSelect(fi)}
             sx={{
               flexShrink: 0, cursor: 'pointer', borderRadius: '8px',
-              overflow: 'hidden', width: 88, height: 66, position: 'relative',
+              overflow: 'hidden', width: 80, height: 60, position: 'relative',
               border: `2px solid ${activeFrame === fi ? theme.palette.primary.main : 'transparent'}`,
               boxShadow: activeFrame === fi ? `0 0 0 1px ${theme.palette.primary.main}44` : 'none',
               transition: 'border-color 0.15s',
@@ -69,7 +68,7 @@ function FrameStrip({ sessionId, captions, activeFrame, onSelect, isDark, theme 
           border: `1px solid ${theme.palette.divider}`,
           borderRadius: '10px',
         }}>
-          <Typography sx={{ fontSize: 12.5, color: theme.palette.text.secondary, lineHeight: 1.55 }}>
+          <Typography sx={{ fontSize: 12, color: theme.palette.text.secondary, lineHeight: 1.55 }}>
             <Box component="span" sx={{ fontWeight: 700, color: theme.palette.text.primary, mr: 0.5 }}>
               Slide {activeFrame + 1}:
             </Box>
@@ -88,23 +87,21 @@ function LoadingPanel({ node, theme }) {
 
   return (
     <Box sx={{
-      flex: 1, display: 'flex', flexDirection: 'column',
+      display: 'flex', flexDirection: 'column',
       alignItems: 'center', justifyContent: 'center', gap: 2.5,
-      px: 5, py: 4,
+      py: 6, px: 2,
     }}>
       <CircularProgress size={20} thickness={2.5} sx={{ color: primary, opacity: 0.55 }} />
-
       <Box sx={{ textAlign: 'center' }}>
         <Typography sx={{ fontSize: 13, fontWeight: 600, color: theme.palette.text.primary, mb: 0.5 }}>
           {activeStage?.label ?? 'Thinking about your question…'}
         </Typography>
-        <Typography sx={{ fontSize: 12.5, color: theme.palette.text.secondary, lineHeight: 1.55, maxWidth: 340 }}>
+        <Typography sx={{ fontSize: 12.5, color: theme.palette.text.secondary, lineHeight: 1.55 }}>
           {node.prompt}
         </Typography>
       </Box>
-
       {stages.length > 0 && (
-        <Box sx={{ width: '100%', maxWidth: 300 }}>
+        <Box sx={{ width: '100%', maxWidth: 260 }}>
           {stages.map((stage, i) => {
             const isDone   = stage.status === 'done'
             const isActive = stage.status === 'active'
@@ -121,9 +118,8 @@ function LoadingPanel({ node, theme }) {
                   <Box sx={{ width: 5, height: 5, borderRadius: '50%', flexShrink: 0, bgcolor: theme.palette.divider }} />
                 )}
                 <Typography sx={{
-                  fontSize: 12, fontWeight: isActive ? 500 : 400,
+                  fontSize: 12, fontWeight: isActive ? 500 : 400, flex: 1,
                   color: isDone ? theme.palette.text.secondary : isActive ? theme.palette.text.primary : theme.palette.text.disabled,
-                  flex: 1,
                 }}>
                   {stage.label}
                 </Typography>
@@ -151,7 +147,7 @@ function VideoGeneratingPlaceholder({ isDark, theme }) {
       bgcolor: isDark ? '#0d0d0d' : '#f8fafc',
       border: `1px solid ${theme.palette.divider}`,
     }}>
-      <CircularProgress size={32} thickness={2.5} sx={{ color: theme.palette.primary.main }} />
+      <CircularProgress size={28} thickness={2.5} sx={{ color: theme.palette.primary.main }} />
       <Typography sx={{ fontSize: 12.5, color: theme.palette.text.secondary }}>
         Video is being generated…
       </Typography>
@@ -159,7 +155,8 @@ function VideoGeneratingPlaceholder({ isDark, theme }) {
   )
 }
 
-export default function NodeModal({ node, onClose, onAsk, conversationId }) {
+// Renders as an inline side panel — no Dialog wrapper.
+export default function NodeModal({ node, onClose, onAsk }) {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
 
@@ -202,10 +199,10 @@ export default function NodeModal({ node, onClose, onAsk, conversationId }) {
   const handleAsk = () => {
     if (!hasQuestion) return
     onAsk({
-      question:    question.trim(),
-      sessionId:   node.id,
-      frameIndex:  hasCaption ? activeFrame : null,
-      caption:     captions[activeFrame] || null,
+      question:   question.trim(),
+      sessionId:  node.id,
+      frameIndex: hasCaption ? activeFrame : null,
+      caption:    captions[activeFrame] || null,
     })
   }
 
@@ -214,38 +211,24 @@ export default function NodeModal({ node, onClose, onAsk, conversationId }) {
   }
 
   return (
-    <Dialog
-      open={!!node}
-      onClose={onClose}
-      maxWidth={false}
-      PaperProps={{
-        sx: {
-          width:           '92vw',
-          maxWidth:        1280,
-          height:          '88vh',
-          m:               0,
-          borderRadius:    '16px',
-          overflow:        'hidden',
-          bgcolor:         isDark ? '#141414' : '#ffffff',
-          backgroundImage: 'none',
-          boxShadow:       isDark
-            ? '0 32px 80px rgba(0,0,0,0.7)'
-            : '0 32px 80px rgba(0,0,0,0.18)',
-        },
-      }}
-    >
+    <Box sx={{
+      display: 'flex', flexDirection: 'column', height: '100%',
+      bgcolor: isDark ? '#141414' : '#ffffff',
+      overflow: 'hidden',
+    }}>
       {/* ── Header ── */}
       <Box sx={{
-        px: 3, py: 1.75, flexShrink: 0,
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        px: 2, py: 1.5, flexShrink: 0,
+        display: 'flex', alignItems: 'flex-start', gap: 1,
         borderBottom: `1px solid ${theme.palette.divider}`,
         bgcolor: isDark ? 'rgba(255,255,255,0.02)' : '#fafafa',
       }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, flex: 1, mr: 2, minWidth: 0 }}>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
           {node.intent_type && (
             <Typography sx={{
-              fontSize: 10, fontWeight: 700, px: 0.9, py: 0.3,
-              borderRadius: '5px', textTransform: 'capitalize', flexShrink: 0,
+              display: 'inline-block',
+              fontSize: 9.5, fontWeight: 700, px: 0.9, py: 0.25,
+              borderRadius: '5px', textTransform: 'capitalize', mb: 0.6,
               bgcolor: isDark ? 'rgba(79,110,255,0.12)' : '#f0f4ff',
               color: theme.palette.primary.main,
               border: `1px solid ${isDark ? 'rgba(79,110,255,0.3)' : '#c7d2fe'}`,
@@ -254,182 +237,158 @@ export default function NodeModal({ node, onClose, onAsk, conversationId }) {
             </Typography>
           )}
           <Typography sx={{
-            fontSize: 14, fontWeight: 600,
-            color: theme.palette.text.primary,
-            overflow: 'hidden', display: '-webkit-box',
-            WebkitLineClamp: 1, WebkitBoxOrient: 'vertical',
+            fontSize: 13, fontWeight: 600,
+            color: theme.palette.text.primary, lineHeight: 1.45,
+            display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden',
           }}>
             {node.prompt}
           </Typography>
         </Box>
-        <IconButton onClick={onClose} size="small" sx={{ flexShrink: 0 }}>
-          <CloseIcon sx={{ fontSize: 18 }} />
+        <IconButton onClick={onClose} size="small" sx={{ flexShrink: 0, mt: 0.25 }}>
+          <CloseIcon sx={{ fontSize: 16 }} />
         </IconButton>
       </Box>
 
-      {/* ── Body ── */}
-      <Box sx={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
-
-        {/* Left panel — content */}
-        <Box sx={{
-          flex: '0 0 60%',
-          display: 'flex', flexDirection: 'column',
-          p: isInteractive ? 0 : 2.5,
-          overflow: 'auto',
-          borderRight: `1px solid ${theme.palette.divider}`,
-          '&::-webkit-scrollbar': { width: 4 },
-          '&::-webkit-scrollbar-thumb': { backgroundColor: theme.palette.divider, borderRadius: 2 },
-        }}>
-          {isLoading ? (
-            <LoadingPanel node={node} theme={theme} />
-          ) : isInteractive ? (
-            // Render full interactive blocks (same as main chat)
-            <Box sx={{
-              flex: 1, overflow: 'auto',
-              px: 2.5, py: 2,
-              '&::-webkit-scrollbar': { width: 4 },
-              '&::-webkit-scrollbar-thumb': { backgroundColor: theme.palette.divider, borderRadius: 2 },
-            }}>
-              {(node.blocks ?? []).length > 0 ? (
-                <BlockRenderer
-                  turnId={node.id ?? node.tempId}
-                  title={node.title}
-                  learningObjective={node.learningObjective}
-                  blocks={node.blocks ?? []}
-                  isLoading={false}
-                />
-              ) : (
-                <Box sx={{
-                  mb: 2, px: 2, py: 1.5, borderRadius: '12px',
-                  bgcolor: isDark ? 'rgba(255,255,255,0.04)' : '#f1f5f9',
-                  border: `1px solid ${theme.palette.divider}`,
-                }}>
-                  <Typography sx={{
-                    fontSize: 10, fontWeight: 700, letterSpacing: '0.06em',
-                    textTransform: 'uppercase', color: theme.palette.text.secondary,
-                    opacity: 0.55, mb: 0.75,
-                  }}>
-                    Prompt
-                  </Typography>
-                  <Typography sx={{ fontSize: 13.5, color: theme.palette.text.primary, lineHeight: 1.6 }}>
-                    {node.prompt}
-                  </Typography>
-                </Box>
-              )}
-            </Box>
-          ) : node.videoPhase === 'generating' ? (
-            <VideoGeneratingPlaceholder isDark={isDark} theme={theme} />
-          ) : (
-            <VideoPanel sessionId={node.id} videoPhase={node.videoPhase} onPauseAsk={null} />
-          )}
-
-          {!isInteractive && (
-            <>
-              {loadingMeta && !captions.length && (
-                <Box sx={{ display: 'flex', justifyContent: 'center', pt: 3 }}>
-                  <CircularProgress size={20} />
-                </Box>
-              )}
-              {captions.length > 0 && (
-                <FrameStrip
-                  sessionId={node.id}
-                  captions={captions}
-                  activeFrame={activeFrame}
-                  onSelect={setActiveFrame}
-                  isDark={isDark}
-                  theme={theme}
-                />
-              )}
-            </>
-          )}
-        </Box>
-
-        {/* Right panel — My Notes + Ask follow-up */}
-        <Box sx={{ flex: '0 0 40%', display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
-
-          {/* My Notes — fills available space */}
-          <Box sx={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
-            <UserNotesPanel conversationId={conversationId} isOpen={true} />
-          </Box>
-
-          {/* Ask a follow-up — pinned bottom */}
+      {/* ── Content (scrollable) ── */}
+      <Box sx={{
+        flex: 1, overflow: 'auto',
+        p: isInteractive ? 0 : 2,
+        '&::-webkit-scrollbar': { width: 4 },
+        '&::-webkit-scrollbar-thumb': { backgroundColor: theme.palette.divider, borderRadius: 2 },
+      }}>
+        {isLoading ? (
+          <LoadingPanel node={node} theme={theme} />
+        ) : isInteractive ? (
           <Box sx={{
-            flexShrink: 0, p: 2.5,
-            borderTop: `1px solid ${theme.palette.divider}`,
-            bgcolor: isDark ? 'rgba(255,255,255,0.015)' : '#fafafa',
-            opacity: isLoading ? 0.45 : 1,
-            pointerEvents: isLoading ? 'none' : 'auto',
-            transition: 'opacity 0.2s',
+            px: 2, py: 2,
+            '&::-webkit-scrollbar': { width: 4 },
+            '&::-webkit-scrollbar-thumb': { backgroundColor: theme.palette.divider, borderRadius: 2 },
           }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1.25 }}>
-              <QuestionAnswerOutlinedIcon sx={{ fontSize: 13, color: theme.palette.primary.main }} />
-              <Typography sx={{
-                fontSize: 10, fontWeight: 700, letterSpacing: '0.05em',
-                textTransform: 'uppercase',
-                color: theme.palette.primary.main, opacity: 0.85,
+            {(node.blocks ?? []).length > 0 ? (
+              <BlockRenderer
+                turnId={node.id ?? node.tempId}
+                title={node.title}
+                learningObjective={node.learningObjective}
+                blocks={node.blocks ?? []}
+                isLoading={false}
+              />
+            ) : (
+              <Box sx={{
+                px: 2, py: 1.5, borderRadius: '12px',
+                bgcolor: isDark ? 'rgba(255,255,255,0.04)' : '#f1f5f9',
+                border: `1px solid ${theme.palette.divider}`,
               }}>
-                {isLoading ? 'Generating…' : 'Ask a follow-up'}
-              </Typography>
-            </Box>
+                <Typography sx={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.palette.text.secondary, opacity: 0.55, mb: 0.75 }}>
+                  Prompt
+                </Typography>
+                <Typography sx={{ fontSize: 13, color: theme.palette.text.primary, lineHeight: 1.6 }}>
+                  {node.prompt}
+                </Typography>
+              </Box>
+            )}
+          </Box>
+        ) : node.videoPhase === 'generating' ? (
+          <VideoGeneratingPlaceholder isDark={isDark} theme={theme} />
+        ) : (
+          <VideoPanel sessionId={node.id} videoPhase={node.videoPhase} onPauseAsk={null} />
+        )}
 
-            {hasCaption && !isLoading && (
-              <Chip
-                label={`Context: Slide ${activeFrame + 1}`}
-                size="small"
-                sx={{
-                  mb: 1.25, fontSize: 10.5, height: 24, cursor: 'default',
-                  bgcolor: isDark ? 'rgba(79,110,255,0.1)' : '#f0f4ff',
-                  color: theme.palette.primary.main,
-                  border: `1px solid ${isDark ? 'rgba(79,110,255,0.25)' : '#c7d2fe'}`,
-                  '& .MuiChip-label': { px: 1 },
-                }}
+        {!isInteractive && (
+          <>
+            {loadingMeta && !captions.length && (
+              <Box sx={{ display: 'flex', justifyContent: 'center', pt: 3 }}>
+                <CircularProgress size={18} />
+              </Box>
+            )}
+            {captions.length > 0 && (
+              <FrameStrip
+                sessionId={node.id}
+                captions={captions}
+                activeFrame={activeFrame}
+                onSelect={setActiveFrame}
+                isDark={isDark}
+                theme={theme}
               />
             )}
+          </>
+        )}
+      </Box>
 
-            <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-end' }}>
-              <TextField
-                value={question}
-                onChange={(e) => setQuestion(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder={isLoading ? 'Available once generation completes…' : 'Ask something about this lesson…'}
-                disabled={isLoading}
-                multiline
-                maxRows={4}
+      {/* ── Ask follow-up (pinned bottom) ── */}
+      <Box sx={{
+        flexShrink: 0, p: 2,
+        borderTop: `1px solid ${theme.palette.divider}`,
+        bgcolor: isDark ? 'rgba(255,255,255,0.015)' : '#fafafa',
+        opacity: isLoading ? 0.45 : 1,
+        pointerEvents: isLoading ? 'none' : 'auto',
+        transition: 'opacity 0.2s',
+      }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1.25 }}>
+          <QuestionAnswerOutlinedIcon sx={{ fontSize: 13, color: theme.palette.primary.main }} />
+          <Typography sx={{
+            fontSize: 10, fontWeight: 700, letterSpacing: '0.05em',
+            textTransform: 'uppercase', color: theme.palette.primary.main, opacity: 0.85,
+          }}>
+            {isLoading ? 'Generating…' : 'Ask a follow-up'}
+          </Typography>
+        </Box>
+
+        {hasCaption && !isLoading && (
+          <Chip
+            label={`Context: Slide ${activeFrame + 1}`}
+            size="small"
+            sx={{
+              mb: 1.25, fontSize: 10.5, height: 24, cursor: 'default',
+              bgcolor: isDark ? 'rgba(79,110,255,0.1)' : '#f0f4ff',
+              color: theme.palette.primary.main,
+              border: `1px solid ${isDark ? 'rgba(79,110,255,0.25)' : '#c7d2fe'}`,
+              '& .MuiChip-label': { px: 1 },
+            }}
+          />
+        )}
+
+        <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-end' }}>
+          <TextField
+            value={question}
+            onChange={(e) => setQuestion(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={isLoading ? 'Available once generation completes…' : 'Ask something about this lesson…'}
+            disabled={isLoading}
+            multiline
+            maxRows={3}
+            size="small"
+            fullWidth
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                fontSize: 12.5,
+                borderRadius: '10px',
+                bgcolor: isDark ? 'rgba(255,255,255,0.04)' : '#fff',
+              },
+            }}
+          />
+          <Tooltip title="Ask (Enter)">
+            <span>
+              <IconButton
+                onClick={handleAsk}
+                disabled={!hasQuestion || isLoading}
                 size="small"
-                fullWidth
                 sx={{
-                  '& .MuiOutlinedInput-root': {
-                    fontSize: 13,
-                    borderRadius: '12px',
-                    bgcolor: isDark ? 'rgba(255,255,255,0.04)' : '#fff',
-                  },
+                  width: 34, height: 34, flexShrink: 0,
+                  bgcolor: hasQuestion && !isLoading ? theme.palette.primary.main : 'transparent',
+                  color: hasQuestion && !isLoading ? '#fff' : theme.palette.text.disabled,
+                  border: `1.5px solid ${hasQuestion && !isLoading ? theme.palette.primary.main : theme.palette.divider}`,
+                  borderRadius: '9px',
+                  transition: 'all 0.15s',
+                  '&:hover': { bgcolor: theme.palette.primary.dark, color: '#fff' },
+                  '&.Mui-disabled': { opacity: 0.4 },
                 }}
-              />
-              <Tooltip title="Ask (Enter)">
-                <span>
-                  <IconButton
-                    onClick={handleAsk}
-                    disabled={!hasQuestion || isLoading}
-                    size="small"
-                    sx={{
-                      width: 38, height: 38, flexShrink: 0,
-                      bgcolor: hasQuestion && !isLoading ? theme.palette.primary.main : 'transparent',
-                      color: hasQuestion && !isLoading ? '#fff' : theme.palette.text.disabled,
-                      border: `1.5px solid ${hasQuestion && !isLoading ? theme.palette.primary.main : theme.palette.divider}`,
-                      borderRadius: '10px',
-                      transition: 'all 0.15s',
-                      '&:hover': { bgcolor: theme.palette.primary.dark, color: '#fff' },
-                      '&:disabled': { opacity: 0.4 },
-                    }}
-                  >
-                    <SendIcon sx={{ fontSize: 15 }} />
-                  </IconButton>
-                </span>
-              </Tooltip>
-            </Box>
-          </Box>
+              >
+                <SendIcon sx={{ fontSize: 14 }} />
+              </IconButton>
+            </span>
+          </Tooltip>
         </Box>
       </Box>
-    </Dialog>
+    </Box>
   )
 }

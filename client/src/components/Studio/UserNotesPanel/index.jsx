@@ -31,7 +31,7 @@ const DEBOUNCE_MS = 1500
 const SAVED_RESET   = 3000  // ms before 'saved' reverts to 'idle'
 
 // ─── UserNotesPanel ───────────────────────────────────────────────────────────
-export default function UserNotesPanel({ conversationId, isOpen }) {
+export default function UserNotesPanel({ conversationId, isOpen, panelWidth = PANEL_WIDTH }) {
   const theme       = useTheme()
   const isMobile    = useMediaQuery(theme.breakpoints.down('sm'))
   const toast       = useToast()
@@ -256,7 +256,7 @@ export default function UserNotesPanel({ conversationId, isOpen }) {
   // ── Desktop: right-side slide-in panel ───────────────────────────────────────
   return (
     <Box sx={{
-      width: isOpen ? PANEL_WIDTH : 0,
+      width: isOpen ? panelWidth : 0,
       flexShrink: 0,
       overflow: 'hidden',
       transition: 'width 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
@@ -264,7 +264,7 @@ export default function UserNotesPanel({ conversationId, isOpen }) {
       height: '100%',
     }}>
       {/* Keep the panel mounted but hidden so editor state survives close/open */}
-      <Box sx={{ width: PANEL_WIDTH, height: '100%', opacity: isOpen ? 1 : 0, transition: 'opacity 0.2s' }}>
+      <Box sx={{ width: '100%', height: '100%', opacity: isOpen ? 1 : 0, transition: 'opacity 0.2s' }}>
         {panelContent}
       </Box>
     </Box>

@@ -1,14 +1,15 @@
-import { useState, useCallback } from 'react'
-import { Box, IconButton, Typography, Tooltip, useTheme, Button, CircularProgress, TextField } from '@mui/material'
+import { useState, useRef, useCallback } from 'react'
+import { Box, IconButton, Typography, Tooltip, useTheme, Button, CircularProgress } from '@mui/material'
 import ArrowBackIcon  from '@mui/icons-material/ArrowBack'
 import MergeIcon      from '@mui/icons-material/MergeType'
 import EditNoteIcon   from '@mui/icons-material/EditNote'
-import SendIcon       from '@mui/icons-material/Send'
 import Canvas         from './Canvas'
 import NodeModal      from './NodeModal'
 import MergedVideoModal   from './MergedVideoModal'
 import MergeLoadingModal  from './MergeLoadingModal'
 import UserNotesPanel from '../UserNotesPanel/index'
+import PromptBar      from '../PromptBar'
+import { DEFAULT_MODEL, DEFAULT_RENDER_MODE, DEFAULT_MODE } from '../constants'
 import { api } from '../../../services/api'
 import { getConversationMediaToken } from '../../../services/mediaToken'
 import { API_BASE } from '../../../constants/api.js'
@@ -18,12 +19,26 @@ export default function LearningView({ turns, conversationId, onExit, onAskFromL
   const isDark = theme.palette.mode === 'dark'
 
   const [selectedNode,    setSelectedNode]    = useState(null)
+  const [nodePanelWidth,  setNodePanelWidth]  = useState(() => Math.round(window.innerWidth * 0.45))
+  const [isResizing,      setIsResizing]      = useState(false)
+  const nodePanelRef      = useRef(null)
+  const resizeStartXRef   = useRef(0)
+  const resizeStartWRef   = useRef(0)
   const [merging,         setMerging]         = useState(false)
   const [mergeResult,     setMergeResult]     = useState(null)
   const [showMergedModal, setShowMergedModal] = useState(false)
   const [mergeError,      setMergeError]      = useState(null)
   const [mergedVideoUrl,  setMergedVideoUrl]  = useState(null)
-  const [emptyInput,      setEmptyInput]      = useState('')
+
+  // Empty-state PromptBar state
+  const [canvasPrompt,     setCanvasPrompt]     = useState('')
+  const [canvasModel,      setCanvasModel]      = useState(defaultModel ?? DEFAULT_MODEL)
+  const [canvasRenderMode, setCanvasRenderMode] = useState(DEFAULT_RENDER_MODE)
+  const [canvasMode,       setCanvasMode]       = useState(DEFAULT_MODE)
+  const [canvasVideo,      setCanvasVideo]      = useState(defaultVideoEnabled ?? true)
+  const [canvasNotes,      setCanvasNotes]      = useState(notesEnabled ?? true)
+  const [canvasFiles,      setCanvasFiles]      = useState([])
+  const canvasInputRef = useRef(null)
 
   const handleNodeClick = useCallback((node) => {
     const fresh = turns.find((t) => t.id === node.id || t.tempId === node.tempId) || node
@@ -40,11 +55,46 @@ export default function LearningView({ turns, conversationId, onExit, onAskFromL
   }, [onGenerateFromCanvas])
 
   const handleEmptySubmit = () => {
-    const q = emptyInput.trim()
+    const q = canvasPrompt.trim()
     if (!q) return
-    setEmptyInput('')
-    handleCanvasAsk({ question: q })
+    setCanvasPrompt('')
+    handleCanvasAsk({ question: q, model: canvasModel, videoEnabled: canvasVideo, notesEnabled: canvasNotes })
   }
+
+  const handleCanvasKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleEmptySubmit()
+    }
+  }
+
+  const handleNodeResizeStart = useCallback((e) => {
+    e.preventDefault()
+    resizeStartXRef.current = e.clientX
+    resizeStartWRef.current = nodePanelRef.current?.offsetWidth ?? nodePanelWidth
+    setIsResizing(true)
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+
+    const onMove = (e) => {
+      const vw = window.innerWidth
+      const delta = resizeStartXRef.current - e.clientX
+      const newW = Math.min(
+        Math.round(vw * 0.70),
+        Math.max(Math.round(vw * 0.30), resizeStartWRef.current + delta)
+      )
+      setNodePanelWidth(newW)
+    }
+    const onUp = () => {
+      setIsResizing(false)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }, [nodePanelWidth])
 
   const handleMerge = useCallback(async () => {
     setMerging(true)
@@ -73,7 +123,7 @@ export default function LearningView({ turns, conversationId, onExit, onAskFromL
       display:       'flex',
       flexDirection: 'column',
     }}>
-      {/* ── Top-left bar: back + label + notes + merge ─────────────────────── */}
+      {/* ── Top-left: back + label ─────────────────────────────────────────── */}
       <Box sx={{
         position: 'absolute', top: 16, left: 16, zIndex: 10,
         display: 'flex', alignItems: 'center', gap: 1,
@@ -102,15 +152,17 @@ export default function LearningView({ turns, conversationId, onExit, onAskFromL
           backdropFilter: 'blur(10px)',
           boxShadow:      '0 2px 10px rgba(0,0,0,0.1)',
         }}>
-          <Typography sx={{
-            fontSize: 11.5, fontWeight: 700,
-            letterSpacing: '0.04em',
-            color: theme.palette.text.primary,
-          }}>
+          <Typography sx={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.04em', color: theme.palette.text.primary }}>
             Learning Canvas
           </Typography>
         </Box>
+      </Box>
 
+      {/* ── Top-right: My Notes + Merge Videos ────────────────────────────── */}
+      <Box sx={{
+        position: 'absolute', top: 16, right: 16, zIndex: 10,
+        display: 'flex', alignItems: 'center', gap: 1,
+      }}>
         {mergeError && (
           <Typography sx={{ fontSize: 11, color: '#f87171', bgcolor: 'rgba(239,68,68,0.12)', px: 1.5, py: 0.5, borderRadius: '6px', border: '1px solid rgba(239,68,68,0.3)' }}>
             {mergeError}
@@ -157,17 +209,17 @@ export default function LearningView({ turns, conversationId, onExit, onAskFromL
         </Button>
       </Box>
 
-      {/* ── Bottom hint pill ──────────────────────────────────────────────────── */}
+      {/* ── Bottom hint pill ──────────────────────────────────────────────── */}
       {!isEmpty && (
         <Box sx={{
-          position:       'absolute', bottom: 20, left: '50%',
-          transform:      'translateX(-50%)', zIndex: 10,
+          position: 'absolute', bottom: 20, left: '50%',
+          transform: 'translateX(-50%)', zIndex: 10,
           px: 2, py: 0.6,
-          bgcolor:        isDark ? 'rgba(0,0,0,0.45)' : 'rgba(255,255,255,0.8)',
-          border:         `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : '#e2e8f0'}`,
-          borderRadius:   '20px',
+          bgcolor: isDark ? 'rgba(0,0,0,0.45)' : 'rgba(255,255,255,0.8)',
+          border: `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : '#e2e8f0'}`,
+          borderRadius: '20px',
           backdropFilter: 'blur(8px)',
-          pointerEvents:  'none',
+          pointerEvents: 'none',
         }}>
           <Typography sx={{ fontSize: 11, color: theme.palette.text.secondary }}>
             Click a node to explore · Drag to reposition · Scroll to zoom
@@ -175,9 +227,81 @@ export default function LearningView({ turns, conversationId, onExit, onAskFromL
         </Box>
       )}
 
-      <Canvas turns={turns} onNodeClick={handleNodeClick} onAsk={handleCanvasAsk} defaultModel={defaultModel} defaultVideoEnabled={defaultVideoEnabled} defaultNotesEnabled={notesEnabled} />
+      {/* ── Main content row: canvas + node panel + my notes ─────────────── */}
+      <Box sx={{ flex: 1, display: 'flex', minHeight: 0 }}>
+        {/* Canvas — fills remaining width */}
+        <Canvas
+          turns={turns}
+          onNodeClick={handleNodeClick}
+          onAsk={handleCanvasAsk}
+          defaultModel={defaultModel}
+          defaultVideoEnabled={defaultVideoEnabled}
+          defaultNotesEnabled={notesEnabled}
+        />
 
-      {/* ── Empty state overlay ──────────────────────────────────────────────── */}
+        {/* Node detail panel — resizable 20–65vw, default 30vw */}
+        <Box
+          ref={nodePanelRef}
+          sx={{
+            width:      selectedNode ? nodePanelWidth : 0,
+            flexShrink: 0,
+            overflow:   'visible',   // allow handle pill to straddle the border
+            position:   'relative',
+            borderLeft: selectedNode ? `1px solid ${theme.palette.divider}` : 'none',
+            transition: isResizing ? 'none' : 'width 0.28s cubic-bezier(0.16, 1, 0.3, 1)',
+            bgcolor:    isDark ? '#141414' : '#ffffff',
+            height:     '100%',
+          }}
+        >
+          {/* Drag-to-resize handle — pill centered on the border line */}
+          {selectedNode && (
+            <Box
+              onMouseDown={handleNodeResizeStart}
+              sx={{
+                position: 'absolute', left: -6, top: 0, bottom: 0, width: 12,
+                cursor: 'col-resize', zIndex: 10,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                '&:hover .resize-thumb': {
+                  bgcolor: theme.palette.primary.main,
+                  opacity: 1,
+                },
+              }}
+            >
+              <Box
+                className="resize-thumb"
+                sx={{
+                  width: 4, height: 32,
+                  borderRadius: '3px',
+                  bgcolor: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.2)',
+                  opacity: 0.75,
+                  transition: 'background-color 0.15s, opacity 0.15s',
+                  pointerEvents: 'none',
+                }}
+              />
+            </Box>
+          )}
+
+          {/* Inner content box clips NodeModal within the panel bounds */}
+          {selectedNode && (
+            <Box sx={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
+              <NodeModal
+                node={selectedNode}
+                onClose={() => setSelectedNode(null)}
+                onAsk={handleAsk}
+                conversationId={conversationId}
+              />
+            </Box>
+          )}
+        </Box>
+
+        {/* My Notes panel — same as normal view (440px default), pushes canvas left */}
+        <UserNotesPanel
+          conversationId={conversationId}
+          isOpen={userNotesOpen}
+        />
+      </Box>
+
+      {/* ── Empty state overlay ───────────────────────────────────────────── */}
       {isEmpty && (
         <Box sx={{
           position: 'absolute', inset: 0, zIndex: 8,
@@ -185,7 +309,7 @@ export default function LearningView({ turns, conversationId, onExit, onAskFromL
           alignItems: 'center', justifyContent: 'center',
           pointerEvents: 'none',
         }}>
-          <Box sx={{ pointerEvents: 'auto', width: '100%', maxWidth: 520, px: 3 }}>
+          <Box sx={{ pointerEvents: 'auto', width: '100%', maxWidth: 600, px: 3 }}>
             <Typography sx={{
               fontSize: 22, fontWeight: 700, mb: 0.75, textAlign: 'center',
               color: theme.palette.text.primary,
@@ -199,100 +323,35 @@ export default function LearningView({ turns, conversationId, onExit, onAskFromL
               Start a topic and watch it grow into an interactive knowledge tree.
             </Typography>
 
-            <Box sx={{
-              border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.12)' : '#e2e8f0'}`,
-              borderRadius: '12px',
-              overflow: 'hidden',
-              bgcolor: isDark ? '#1a1a2e' : '#ffffff',
-              boxShadow: isDark
-                ? '0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04)'
-                : '0 8px 32px rgba(0,0,0,0.1)',
-              '&:focus-within': {
-                borderColor: isDark ? 'rgba(79,110,255,0.55)' : 'rgba(79,110,255,0.45)',
-              },
-              transition: 'border-color 0.15s',
-            }}>
-              <TextField
-                autoFocus
-                value={emptyInput}
-                onChange={(e) => setEmptyInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault()
-                    handleEmptySubmit()
-                  }
-                }}
-                placeholder="Ask anything…"
-                multiline
-                maxRows={4}
-                fullWidth
-                variant="standard"
-                InputProps={{ disableUnderline: true }}
-                sx={{
-                  px: 2, pt: 1.75, pb: 1,
-                  '& .MuiInputBase-root': {
-                    fontSize: 14.5,
-                    color: theme.palette.text.primary,
-                    lineHeight: 1.6,
-                  },
-                  '& .MuiInputBase-input::placeholder': {
-                    color: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.35)',
-                    opacity: 1,
-                  },
-                }}
-              />
-              <Box sx={{ display: 'flex', justifyContent: 'flex-end', px: 1.5, pb: 1.25 }}>
-                <Tooltip title="Generate (Enter)">
-                  <span>
-                    <IconButton
-                      size="small"
-                      disabled={!emptyInput.trim()}
-                      onClick={handleEmptySubmit}
-                      sx={{
-                        width: 30, height: 30,
-                        bgcolor: emptyInput.trim() ? theme.palette.primary.main : 'transparent',
-                        color: emptyInput.trim() ? '#fff' : (isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)'),
-                        border: `1.5px solid ${emptyInput.trim() ? theme.palette.primary.main : (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)')}`,
-                        borderRadius: '8px',
-                        transition: 'all 0.15s',
-                        '&:hover': { bgcolor: theme.palette.primary.dark, color: '#fff', borderColor: theme.palette.primary.dark },
-                        '&.Mui-disabled': { opacity: 0.3 },
-                      }}
-                    >
-                      <SendIcon sx={{ fontSize: 13 }} />
-                    </IconButton>
-                  </span>
-                </Tooltip>
-              </Box>
-            </Box>
+            <PromptBar
+              embedded
+              prompt={canvasPrompt}
+              onPromptChange={setCanvasPrompt}
+              onSubmit={handleEmptySubmit}
+              onStop={() => {}}
+              onKeyDown={handleCanvasKeyDown}
+              inputRef={canvasInputRef}
+              isGenerating={false}
+              activeConversation={null}
+              onNewConversation={() => {}}
+              pauseContext={null}
+              onClearPauseContext={() => {}}
+              selectedModel={canvasModel}
+              onModelChange={setCanvasModel}
+              selectedRenderMode={canvasRenderMode}
+              onRenderModeChange={setCanvasRenderMode}
+              selectedMode={canvasMode}
+              onModeChange={setCanvasMode}
+              stagedFiles={canvasFiles}
+              onAddFiles={(files) => setCanvasFiles((prev) => [...prev, ...files])}
+              onRemoveFile={(id)  => setCanvasFiles((prev) => prev.filter((f) => f.id !== id))}
+              notesEnabled={canvasNotes}
+              onToggleNotes={() => setCanvasNotes((n) => !n)}
+              videoEnabled={canvasVideo}
+              onToggleVideo={() => setCanvasVideo((v) => !v)}
+            />
           </Box>
         </Box>
-      )}
-
-      {/* ── My Notes slide-over ──────────────────────────────────────────────── */}
-      <Box sx={{
-        position: 'absolute', top: 0, right: 0, bottom: 0,
-        width: userNotesOpen ? 440 : 0,
-        overflow: 'hidden',
-        transition: 'width 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
-        zIndex: 5,
-        borderLeft: userNotesOpen ? `1px solid ${theme.palette.divider}` : 'none',
-        boxShadow: userNotesOpen
-          ? (isDark ? '-8px 0 32px rgba(0,0,0,0.5)' : '-8px 0 32px rgba(0,0,0,0.1)')
-          : 'none',
-      }}>
-        <Box sx={{ width: 440, height: '100%' }}>
-          <UserNotesPanel conversationId={conversationId} isOpen={userNotesOpen} />
-        </Box>
-      </Box>
-
-      {selectedNode && (
-        <NodeModal
-          node={selectedNode}
-          onClose={() => setSelectedNode(null)}
-          onAsk={handleAsk}
-          conversationId={conversationId}
-        />
       )}
 
       <MergeLoadingModal open={merging} sessionCount={readyCount} />

@@ -74,6 +74,7 @@ export default function Canvas({ turns, onNodeClick, onAsk, defaultModel, defaul
   return (
     <Box sx={{
       flex: 1,
+      height: '100%',
       '& .react-flow__controls': {
         boxShadow: 'none',
         border: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.borderWarm}`,
