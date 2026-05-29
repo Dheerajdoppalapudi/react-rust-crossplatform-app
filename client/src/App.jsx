@@ -272,7 +272,7 @@ function AppInner() {
             </ErrorBoundary>
           </Box>
 
-          {!isFullHeight && !isLoginPage && <Footer />}
+          {!isFullHeight && !isLoginPage && !isNoPadding && <Footer />}
         </Box>
 
       </Box>
