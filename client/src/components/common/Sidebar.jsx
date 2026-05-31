@@ -599,8 +599,8 @@ const Sidebar = ({
         <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
 
           {(isMobile || open) && (
-            <Box sx={{ px: 0.75, mb: 0.5, flexShrink: 0 }}>
-              <Box sx={{ px: 0.75, mb: 0.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Box sx={{ flexShrink: 0, mb: 0.5 }}>
+              <Box sx={{ px: 1.75, mb: 0.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Typography sx={{
                   fontSize: 9.5, fontWeight: 600, color: theme.palette.text.secondary,
                   textTransform: 'uppercase', letterSpacing: '0.8px', opacity: 0.5,
@@ -614,10 +614,11 @@ const Sidebar = ({
                 )}
               </Box>
 
+              {/* Search box — same mx as New Chat button so widths align */}
               <Box sx={{
                 display: 'flex', alignItems: 'center', gap: 0.75,
                 bgcolor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
-                borderRadius: `${RADIUS.ui}px`, px: 1, py: 0.4, mx: 0.25,
+                borderRadius: `${RADIUS.ui}px`, px: 1.25, py: 0.65, mx: 0.75,
                 border: `1px solid ${isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)'}`,
               }}>
                 <SearchIcon sx={{ fontSize: 13, color: theme.palette.text.disabled, flexShrink: 0, opacity: 0.7 }} />
@@ -632,7 +633,7 @@ const Sidebar = ({
                   sx={{
                     flex: 1,
                     '& input': {
-                      fontSize: 12, color: theme.palette.text.primary, p: 0,
+                      fontSize: 12.5, color: theme.palette.text.primary, p: 0,
                       '&::placeholder': { color: theme.palette.text.disabled, opacity: 1 },
                     },
                   }}
