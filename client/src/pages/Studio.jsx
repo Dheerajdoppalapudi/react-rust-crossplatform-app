@@ -26,7 +26,6 @@ export default function Studio({
   onConversationsRefresh,
 }) {
   const theme    = useTheme()
-  const isDark   = theme.palette.mode === 'dark'
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
   const toast    = useToast()
   const { setSlot } = useMobileHeaderSlot()
@@ -344,14 +343,8 @@ export default function Studio({
 
         {/* ── Toolbar — hidden on mobile (controls move to MobileHeader slot) ── */}
         <Box sx={{
-          position: 'absolute', top: 12, right: 16, zIndex: 10,
-          display: { xs: 'none', sm: 'flex' }, alignItems: 'center', gap: 0.75,
-          bgcolor: isDark ? 'rgba(26,26,26,0.85)' : 'rgba(255,255,255,0.88)',
-          backdropFilter: 'blur(12px)',
-          border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)'}`,
-          borderRadius: '12px',
-          px: { xs: 0.5, sm: 0.75 }, py: 0.5,
-          boxShadow: isDark ? '0 4px 16px rgba(0,0,0,0.4)' : '0 4px 16px rgba(0,0,0,0.08)',
+          position: 'absolute', top: 14, right: 16, zIndex: 10,
+          display: { xs: 'none', sm: 'flex' }, alignItems: 'center', gap: 1,
         }}>
           <StudioToolbar
             viewMode={viewMode}

@@ -163,7 +163,7 @@ const ConvItem = memo(({ conv, isActive, onSelect, onRename, onStar, onDelete })
       <Box
         onClick={() => onSelect(conv)}
         sx={{
-          px: 1.25, py: 0.4, mx: 0.75, mb: 0.1,
+          px: 1.25, py: 0.75, mx: 0.75, mb: 0.1,
           borderRadius: `${RADIUS.lg}px`, cursor: 'pointer',
           bgcolor: isActive
             ? (isDark ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.06)')
@@ -173,45 +173,64 @@ const ConvItem = memo(({ conv, isActive, onSelect, onRename, onStar, onDelete })
               ? (isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)')
               : (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)'),
           },
-          // Reveal action button on row hover or when menu is open
+          // On hover: hide time, show actions
+          '&:hover .conv-time':    { opacity: 0 },
           '&:hover .conv-actions': { opacity: 1 },
           transition: 'background 0.15s',
-          display: 'flex', alignItems: 'center', gap: 1,
+          display: 'flex', alignItems: 'center', gap: 0.75,
         }}
       >
-        <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography noWrap sx={{
-            fontSize: 12.5, fontWeight: isActive ? 500 : 400,
-            color: theme.palette.text.primary, lineHeight: 1.4,
-          }}>
-            {conv.title || 'Untitled'}
-          </Typography>
-          <Typography sx={{ fontSize: 10, color: metaText(isDark), mt: 0.1 }}>
-            {relativeTime(conv.updated_at)}
-          </Typography>
-        </Box>
+        {/* Title — truncated, fills available space */}
+        <Typography noWrap sx={{
+          flex: 1, minWidth: 0,
+          fontSize: 13, fontWeight: isActive ? 500 : 400,
+          color: isActive ? theme.palette.text.primary : theme.palette.text.secondary,
+          lineHeight: 1.4,
+        }}>
+          {conv.title || 'Untitled'}
+        </Typography>
 
-        {/* Three-dot menu button — hidden until row hover or menu open */}
-        <Box
-          className="conv-actions"
-          sx={{ opacity: menuAnchor ? 1 : 0, transition: 'opacity 0.15s', flexShrink: 0 }}
-        >
-          <IconButton
-            size="small"
-            aria-label="Conversation options"
-            onClick={openMenu}
+        {/* Right slot: time + actions stacked in same space */}
+        <Box sx={{ position: 'relative', flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+          {/* Timestamp — always visible, hidden on row hover */}
+          <Typography
+            className="conv-time"
             sx={{
-              p: 0.3,
-              color: theme.palette.text.disabled,
-              borderRadius: '5px',
-              '&:hover': {
-                bgcolor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
-                color: theme.palette.text.secondary,
-              },
+              fontSize: 10.5, fontWeight: 400,
+              color: metaText(isDark),
+              lineHeight: 1, whiteSpace: 'nowrap',
+              transition: 'opacity 0.12s',
             }}
           >
-            <MoreHorizIcon sx={{ fontSize: 15 }} />
-          </IconButton>
+            {relativeTime(conv.updated_at)}
+          </Typography>
+
+          {/* Three-dot menu — overlays timestamp on hover or when menu open */}
+          <Box
+            className="conv-actions"
+            sx={{
+              position: 'absolute', right: -2,
+              opacity: menuAnchor ? 1 : 0,
+              transition: 'opacity 0.12s',
+            }}
+          >
+            <IconButton
+              size="small"
+              aria-label="Conversation options"
+              onClick={openMenu}
+              sx={{
+                p: 0.25,
+                color: theme.palette.text.disabled,
+                borderRadius: '5px',
+                '&:hover': {
+                  bgcolor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
+                  color: theme.palette.text.secondary,
+                },
+              }}
+            >
+              <MoreHorizIcon sx={{ fontSize: 14 }} />
+            </IconButton>
+          </Box>
         </Box>
       </Box>
 

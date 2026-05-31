@@ -1,20 +1,15 @@
 import { memo } from 'react'
 import PropTypes from 'prop-types'
-import { Box, Tooltip, IconButton, useTheme } from '@mui/material'
-import EditNoteIcon from '@mui/icons-material/EditNote'
+import { Box, Typography, Tooltip, IconButton, useTheme } from '@mui/material'
+import EditNoteIcon           from '@mui/icons-material/EditNote'
+import MenuBookOutlinedIcon   from '@mui/icons-material/MenuBookOutlined'
 
 const VIEWS = ['Chat', 'Learn']
 
-/**
- * Toolbar buttons shared between the desktop overlay and the mobile header slot.
- *
- * Props:
- *   compact          — true in the mobile slot (no Tooltips, tighter border colors)
- *   viewMode         — 'chat' | 'learn'
- *   onViewModeChange — (mode: string) => void
- *   userNotesOpen    — boolean
- *   onToggleUserNotes — () => void
- */
+const VIEW_ICON = {
+  learn: <MenuBookOutlinedIcon sx={{ fontSize: 13, flexShrink: 0 }} />,
+}
+
 function StudioToolbar({
   compact = false,
   viewMode,
@@ -24,38 +19,28 @@ function StudioToolbar({
 }) {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
-  const borderOn  = isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.18)'
-  const borderOff = isDark ? 'rgba(255,255,255,0.12)' : '#e2e8f0'
-  const colorOn   = isDark ? 'rgba(255,255,255,0.90)' : 'rgba(0,0,0,0.80)'
-  const colorOff  = isDark ? 'rgba(255,255,255,0.4)' : '#94a3b8'
-  const bgOn      = isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.07)'
-
-  const btnSx = (active) => ({
-    borderRadius: '7px', p: 0.6,
-    border: `1px solid ${active ? borderOn : borderOff}`,
-    color: active ? colorOn : colorOff,
-    bgcolor: active ? bgOn : 'transparent',
-    ...(!compact && {
-      '&:hover': {
-        borderColor: isDark ? 'rgba(255,255,255,0.25)' : '#94a3b8',
-        color: active ? colorOn : (isDark ? '#fff' : '#374151'),
-      },
-      transition: 'all 0.15s',
-    }),
-  })
 
   const isMac = typeof navigator !== 'undefined' && navigator.platform.toUpperCase().includes('MAC')
 
-  // Chat / Learn toggle
+  // ── Chat / Learn pill — floats independently, no outer wrapper ───────────
   const viewToggle = (
     <Box sx={{
-      display: 'flex',
-      border: `1px solid ${isDark ? (compact ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.1)') : '#e2e8f0'}`,
-      borderRadius: '7px', p: 0.25, gap: 0.2,
+      display:     'inline-flex',
+      alignItems:  'center',
+      bgcolor:     isDark ? 'rgba(20,20,20,0.94)' : 'rgba(255,255,255,0.94)',
+      border:      `1px solid ${isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.10)'}`,
+      borderRadius:'10px',
+      p:           0.5,
+      gap:         0.25,
+      boxShadow:   isDark
+        ? '0 2px 12px rgba(0,0,0,0.5)'
+        : '0 2px 12px rgba(0,0,0,0.10)',
+      backdropFilter: 'blur(12px)',
     }}>
       {VIEWS.map((label) => {
         const m      = label.toLowerCase()
         const active = viewMode === m
+        const icon   = VIEW_ICON[m]
         return (
           <Box
             key={m}
@@ -63,33 +48,78 @@ function StudioToolbar({
             type="button"
             onClick={() => onViewModeChange(m)}
             sx={{
-              px: 1.25, py: 0.35, borderRadius: '5px', cursor: 'pointer',
-              fontSize: 11, fontWeight: 600, userSelect: 'none',
-              bgcolor: active ? (isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.07)') : 'transparent',
-              color:   active ? (isDark ? 'rgba(255,255,255,0.90)' : 'rgba(0,0,0,0.80)') : theme.palette.text.secondary,
-              transition: 'all 0.15s',
+              display:    'flex', alignItems: 'center', gap: 0.6,
+              px:         1.625, py: 0.625,
+              borderRadius: '8px',
+              cursor: 'pointer', userSelect: 'none',
               border: 'none', fontFamily: 'inherit',
+              bgcolor: active
+                ? (isDark ? '#2FD4B5' : '#0E7C66')
+                : 'transparent',
+              color: active
+                ? (isDark ? '#0d1f1b' : '#fff')
+                : (isDark ? 'rgba(255,255,255,0.42)' : 'rgba(0,0,0,0.42)'),
+              transition: 'background 0.18s, color 0.18s',
+              '&:hover': !active ? {
+                bgcolor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+                color:   isDark ? 'rgba(255,255,255,0.80)' : 'rgba(0,0,0,0.72)',
+              } : {},
             }}
           >
-            {label}
+            {icon && (
+              <Box sx={{ color: 'inherit', display: 'flex', alignItems: 'center' }}>
+                {icon}
+              </Box>
+            )}
+            <Typography sx={{
+              fontSize: 13, fontWeight: 600, lineHeight: 1,
+              color: 'inherit', fontFamily: 'inherit',
+            }}>
+              {label}
+            </Typography>
           </Box>
         )
       })}
     </Box>
   )
 
+  // ── Notes button — standalone, same visual weight as the pill ────────────
+  const notesBg     = userNotesOpen
+    ? (isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)')
+    : (isDark ? 'rgba(20,20,20,0.94)' : 'rgba(255,255,255,0.94)')
+  const notesBorder = `1px solid ${userNotesOpen
+    ? (isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.18)')
+    : (isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.10)')}`
+
   const userNotesBtn = (
-    <IconButton size="small" onClick={onToggleUserNotes} aria-pressed={userNotesOpen}
+    <IconButton
+      size="small"
+      onClick={onToggleUserNotes}
+      aria-pressed={userNotesOpen}
       aria-label="My Notes"
-      sx={btnSx(userNotesOpen)}
+      sx={{
+        borderRadius: '8px', p: 0.875,
+        bgcolor:      notesBg,
+        border:       notesBorder,
+        color:        userNotesOpen
+          ? (isDark ? 'rgba(255,255,255,0.90)' : 'rgba(0,0,0,0.80)')
+          : (isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.45)'),
+        boxShadow: isDark ? '0 2px 12px rgba(0,0,0,0.5)' : '0 2px 12px rgba(0,0,0,0.10)',
+        backdropFilter: 'blur(12px)',
+        transition: 'all 0.15s',
+        '&:hover': {
+          bgcolor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.07)',
+          color:   isDark ? 'rgba(255,255,255,0.80)' : 'rgba(0,0,0,0.72)',
+        },
+      }}
     >
-      <EditNoteIcon sx={{ fontSize: 16 }} />
+      <EditNoteIcon sx={{ fontSize: 17 }} />
     </IconButton>
   )
 
   if (compact) {
     return (
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
         {viewToggle}
         {userNotesBtn}
       </Box>
@@ -99,7 +129,9 @@ function StudioToolbar({
   return (
     <>
       {viewToggle}
-      <Tooltip title={`My Notes (${isMac ? '⇧⌘N' : 'Ctrl+Shift+N'})`}>{userNotesBtn}</Tooltip>
+      <Tooltip title={`My Notes (${isMac ? '⇧⌘N' : 'Ctrl+Shift+N'})`}>
+        {userNotesBtn}
+      </Tooltip>
     </>
   )
 }

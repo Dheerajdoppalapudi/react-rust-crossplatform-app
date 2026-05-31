@@ -18,7 +18,7 @@ import VideocamOffOutlined    from '@mui/icons-material/VideocamOffOutlined'
 import { useTheme } from '@mui/material'
 import { MODELS, RENDER_MODES, MODES } from './constants'
 import { BRAND, PALETTE, RADIUS } from '../../theme/tokens.js'
-import { brandColor, brandHover, neutralGhost, neutralSubtle, neutralSurface, neutralActive, neutralToggle, neutralBorderFaint, neutralBorderDefault, neutralBorder, neutralBorderStrong, neutralBorderHover, cardShadow, menuShadow } from '../../theme/styleUtils.js'
+import { brandColor, brandHover, neutralGhost, neutralSubtle, neutralSurface, neutralActive, neutralToggle, neutralBorderFaint, neutralBorderDefault, neutralBorderStrong, neutralBorderHover, cardShadow, menuShadow } from '../../theme/styleUtils.js'
 import { api } from '../../services/api.js'
 import { useToast } from '../../contexts/ToastContext'
 
@@ -94,13 +94,13 @@ function Pill({ onClick, children, active = false, activeColor = null, activeBg 
       onClick={onClick}
       sx={{
         display: 'flex', alignItems: 'center', gap: 0.5,
-        px: 1.5, py: 0.8, borderRadius: `${RADIUS.full}px`, cursor: 'pointer',
+        px: 1.125, py: 0.5, borderRadius: '8px', cursor: 'pointer',
         background: 'none', fontFamily: 'inherit',
         backgroundColor: active && activeBg ? activeBg : neutralGhost(isDark),
         color: active && activeColor ? activeColor : theme.palette.text.secondary,
         border: active && activeColor
-          ? `1.5px solid ${activeColor}55`
-          : `1.5px solid ${neutralBorder(isDark)}`,
+          ? `1px solid ${activeColor}55`
+          : `1px solid ${neutralBorderDefault(isDark)}`,
         '&:hover': {
           borderColor: neutralBorderHover(isDark),
           bgcolor: neutralSubtle(isDark),
@@ -343,7 +343,7 @@ function PromptBar({
               {/* LEFT: + | mode | render */}
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
 
-                {/* + button — circle style */}
+                {/* + button — rounded square */}
                 <Box
                   component="button"
                   type="button"
@@ -354,9 +354,9 @@ function PromptBar({
                     justifyContent:  'center',
                     width:           32,
                     height:          32,
-                    borderRadius:    '50%',
-                    border:          `1.5px solid ${neutralBorder(isDark)}`,
-                    backgroundColor: 'transparent',
+                    borderRadius:    '8px',
+                    border:          `1px solid ${neutralBorderDefault(isDark)}`,
+                    backgroundColor: neutralGhost(isDark),
                     cursor:          'pointer',
                     background:      'none',
                     fontFamily:      'inherit',
@@ -372,7 +372,7 @@ function PromptBar({
                 >
                   {uploading
                     ? <CircularProgress size={14} sx={{ color: 'inherit' }} />
-                    : <AddIcon sx={{ fontSize: 18 }} />
+                    : <AddIcon sx={{ fontSize: 16 }} />
                   }
                 </Box>
 
@@ -498,12 +498,12 @@ function PromptBar({
                     aria-pressed={notesEnabled}
                     aria-label={notesEnabled ? 'AI Notes on' : 'AI Notes off'}
                     sx={{
-                      borderRadius: '7px', p: 0.55,
+                      borderRadius: '8px', p: 0.6,
                       border: `1px solid ${notesEnabled ? neutralBorderStrong(isDark) : neutralBorderDefault(isDark)}`,
-                      color: notesEnabled ? theme.palette.text.primary : theme.palette.text.secondary,
-                      bgcolor: notesEnabled ? neutralToggle(isDark) : 'transparent',
+                      color:  notesEnabled ? theme.palette.text.primary : theme.palette.text.secondary,
+                      bgcolor: notesEnabled ? neutralToggle(isDark) : neutralGhost(isDark),
                       transition: 'all 0.15s',
-                      '&:hover': { borderColor: neutralBorderHover(isDark) },
+                      '&:hover': { borderColor: neutralBorderHover(isDark), bgcolor: neutralSubtle(isDark) },
                     }}
                   >
                     <NotesOutlinedIcon sx={{ fontSize: 14 }} />
@@ -518,12 +518,12 @@ function PromptBar({
                     aria-pressed={videoEnabled}
                     aria-label={videoEnabled ? 'Video on' : 'Video off'}
                     sx={{
-                      borderRadius: '7px', p: 0.55,
+                      borderRadius: '8px', p: 0.6,
                       border: `1px solid ${videoEnabled ? neutralBorderStrong(isDark) : neutralBorderDefault(isDark)}`,
-                      color: videoEnabled ? theme.palette.text.primary : theme.palette.text.secondary,
-                      bgcolor: videoEnabled ? neutralToggle(isDark) : 'transparent',
+                      color:  videoEnabled ? theme.palette.text.primary : theme.palette.text.secondary,
+                      bgcolor: videoEnabled ? neutralToggle(isDark) : neutralGhost(isDark),
                       transition: 'all 0.15s',
-                      '&:hover': { borderColor: neutralBorderHover(isDark) },
+                      '&:hover': { borderColor: neutralBorderHover(isDark), bgcolor: neutralSubtle(isDark) },
                     }}
                   >
                     {videoEnabled

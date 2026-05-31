@@ -273,7 +273,10 @@ function BeatProgressList({ beatTitles, completedBeats, isDark }) {
 // ── Single stage row ──────────────────────────────────────────────────────────
 
 export function StageRow({ stage, sources, isLast, compact, isDark, beatTitles, completedBeats, blockCount }) {
-  const registryKey   = stage.id.startsWith('building_') ? 'building' : stage.id
+  // Strip _r{N} round suffix (e.g. "searching_r2" → "searching") before registry lookup.
+  const registryKey   = stage.id.startsWith('building_')
+    ? 'building'
+    : stage.id.replace(/_r\d+$/, '')
   const stageConfig   = STAGE_REGISTRY[registryKey]
   const IconComponent = stageConfig?.Icon ?? FALLBACK_STAGE_ICON
   const isActive  = stage.status === 'active'
@@ -290,8 +293,24 @@ export function StageRow({ stage, sources, isLast, compact, isDark, beatTitles, 
     ? (isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.11)')
     : (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)')
 
-  const queries      = stage.queries ?? []
-  const stageSources = stageConfig?.hasSourceItems ? sources : []
+  const queries = stage.queries ?? []
+
+  const stageSources = (() => {
+    if (!stageConfig?.hasSourceItems) return []
+    // "reading" is the final summary — show every source across all rounds
+    if (registryKey === 'reading') return sources
+    // Round-based searching row — show only sources found in this specific round
+    if (stage.round != null) return sources.filter(s => s._roundId === stage.id)
+    // Any other hasSourceItems stage: show all (legacy behaviour)
+    return sources
+  })()
+
+  // The backend labels the reading stage with the LLM-fed subset count (e.g. 10),
+  // but the UI has the true total. Override the label so the number matches what we show.
+  const displayLabel = (registryKey === 'reading' && sources.length > 0)
+    ? `Reading ${sources.length} source${sources.length !== 1 ? 's' : ''}…`
+    : stage.label
+
   const hasSubItems  = queries.length > 0 || stageSources.length > 0
 
   const [expanded, setExpanded] = useState(stage.status !== 'done')
@@ -357,7 +376,7 @@ export function StageRow({ stage, sources, isLast, compact, isDark, beatTitles, 
             transition: 'opacity 0.15s',
           }}
         >
-          <TypewriterLabel label={stage.label} isDark={isDark} isActive={isActive} />
+          <TypewriterLabel label={displayLabel} isDark={isDark} isActive={isActive} />
 
           {isActive && isBuildingStage && <ElapsedTimer isDark={isDark} />}
 
@@ -371,7 +390,7 @@ export function StageRow({ stage, sources, isLast, compact, isDark, beatTitles, 
             </Typography>
           )}
 
-          {isDone && stage.duration_s != null && (
+          {isDone && stage.duration_s != null && stage.duration_s > 0 && (
             <Typography sx={{
               fontSize: 11, flexShrink: 0,
               color: metaText(isDark),

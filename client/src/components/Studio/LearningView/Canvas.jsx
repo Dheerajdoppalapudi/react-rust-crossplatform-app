@@ -110,8 +110,8 @@ export default function Canvas({ turns, onNodeClick, onAsk, defaultModel, defaul
         proOptions={{ hideAttribution: true }}
         style={{ background: isDark ? PALETTE.nearBlack : PALETTE.parchment }}
       >
-        <Background variant={BackgroundVariant.Dots} gap={22} size={1}
-          color={isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.07)'} />
+        <Background variant={BackgroundVariant.Dots} gap={24} size={2}
+          color={isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.18)'} />
         <Controls />
         <MiniMap
           nodeColor={isDark ? PALETTE.dividerDark : PALETTE.borderWarm}
