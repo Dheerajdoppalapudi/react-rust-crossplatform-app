@@ -76,8 +76,8 @@ export const MODELS = [
     label: 'GPT-4o mini', short: '4o mini', description: 'Fastest OpenAI',
   },
   {
-    id: 'gemini-2.0-flash', provider: 'gemini', model: 'gemini-2.0-flash',
-    label: 'Gemini Flash 2.0', short: 'Flash 2.0', description: '40× cheaper · very fast',
+    id: 'gemini-2.5-flash', provider: 'gemini', model: 'gemini-2.5-flash',
+    label: 'Gemini Flash 2.5', short: 'Flash 2.5', description: 'Fast · strong reasoning',
   },
   {
     id: 'gemini-1.5-pro', provider: 'gemini', model: 'gemini-1.5-pro',

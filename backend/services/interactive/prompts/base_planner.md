@@ -120,6 +120,13 @@ Text blocks support full markdown. Use it when it genuinely aids comprehension �
 - `props` must exactly match the schema for that entity type — required fields must be present.
 - See the catalog for field names, types, and a worked example for each entity type.
 
+**HARD RULE — step_controls pairing:**
+`step_controls` exists ONLY to drive a `timeline` entity that has `stepReveal: true`.
+NEVER add `step_controls` after `code_walkthrough` or `math_formula` — those entities have their own built-in navigation and completely ignore `step_controls`. Adding it creates a duplicate broken navigation bar visible to the user.
+- ✅ CORRECT: `timeline (stepReveal:true)` → `step_controls (targetEntityId → timeline)`
+- ❌ WRONG:   `code_walkthrough` → `step_controls` (duplicate nav, confuses users)
+- ❌ WRONG:   `math_formula` → `step_controls` (duplicate nav, confuses users)
+
 ---
 
 ## Output rules (enforced)

@@ -360,14 +360,18 @@ async def run_interactive_pipeline(
     yield {"type": "stage_done", "stage": "widgets", "duration_s": round(time.monotonic() - _t0, 1)}
     yield {"type": "entities_selected", "entities": selection.entities}
 
-    # Honour per-request model override; fall back to entity selector recommendation;
-    # final fallback to task-configured codegen service.
     from services.llm_service import get_task_service
     user_forced_svc = request_llm_service.get()
+
+    # scene_planner always reads from TASK_MODELS["scene_planner"] unless the
+    # user explicitly chose a model in the UI.
+    # Entity selector model recommendation is used for codegen only.
     if user_forced_svc:
-        downstream_svc = user_forced_svc
+        scene_planner_svc = user_forced_svc
+        codegen_svc       = user_forced_svc
     else:
-        downstream_svc = _get_llm_service(selection.model) or get_task_service("codegen")
+        scene_planner_svc = get_task_service("scene_planner")
+        codegen_svc       = _get_llm_service(selection.model) or get_task_service("codegen")
 
     # Stage 2: Plan scene IR — enriched prompt + sources for grounded citations
     plan_topic = _short_topic(selection.enriched_prompt.split('.')[0])
@@ -375,7 +379,7 @@ async def run_interactive_pipeline(
     yield {"type": "stage", "stage": "planning", "label": random.choice(_PLANNING_TEMPLATES).format(topic=plan_topic)}
     scene = await _plan_scene(
         selection.enriched_prompt, domain, conversation_context,
-        selection.entities, sources, svc=downstream_svc,
+        selection.entities, sources, svc=scene_planner_svc,
     )
     yield {"type": "stage_done", "stage": "planning", "duration_s": round(time.monotonic() - _t0, 1)}
     entity_blocks = [b for b in scene.blocks if b.type == "entity"]
@@ -404,13 +408,13 @@ async def run_interactive_pipeline(
             yield {"type": "stage", "stage": stage_id, "label": _CODEGEN_LABELS.get(block.entity_type, "Building widget…"), "entity_type": block.entity_type}
             try:
                 if block.entity_type == "p5_sketch":
-                    raw_html = await _run_p5_codegen(spec, selection.enriched_prompt, svc=downstream_svc)
+                    raw_html = await _run_p5_codegen(spec, selection.enriched_prompt, svc=codegen_svc)
                     block.html = _wrap_in_sandbox(raw_html)
                 elif block.entity_type == "slide_deck":
-                    raw_html = await _run_slide_codegen(spec, selection.enriched_prompt, svc=downstream_svc)
+                    raw_html = await _run_slide_codegen(spec, selection.enriched_prompt, svc=codegen_svc)
                     block.html = raw_html  # SlideDeck component handles its own iframe sandbox
                 else:
-                    raw_html = await _run_codegen(spec, selection.enriched_prompt, svc=downstream_svc)
+                    raw_html = await _run_codegen(spec, selection.enriched_prompt, svc=codegen_svc)
                     block.html = _wrap_in_sandbox(raw_html)
             except Exception as exc:
                 logger.error("codegen_failed", block=block.id, error=str(exc))

@@ -518,6 +518,12 @@ async def _generate_stream(p: dict):
         if sources_all:
             await asyncio.to_thread(upsert_sources, conversation_id, sources_all)
 
+        # frames_meta from the video pipeline (non-None for video mode).
+        # For interactive mode, interactive_service already wrote frames_meta to
+        # the DB — passing None here would overwrite and erase it.
+        _frames_meta = result_payload.pop("frames_meta", None)
+        _extra = {"frames_meta": _frames_meta} if _frames_meta is not None else {}
+
         await update_session(
             session_id,
             status="done",
@@ -526,7 +532,6 @@ async def _generate_stream(p: dict):
             frame_count=result_payload.get("frame_count"),
             output_dir=output_dir,
             ui_output_file=result_payload.pop("ui_output_file", None),
-            frames_meta=result_payload.pop("frames_meta", None),
             # Beat pipeline assembles session_final.mp4 directly — save it so the
             # video router can serve it without re-assembling with TTS.
             video_path=result_payload.get("video_path") or None,
@@ -539,6 +544,7 @@ async def _generate_stream(p: dict):
             sources_json=sources or None,
             stages_json=stages_log or None,
             synthesis_text=synthesis_text or None,
+            **_extra,
         )
 
         done_event: dict = {

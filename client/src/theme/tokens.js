@@ -41,24 +41,24 @@ export const SEMANTIC = {
 // so they were left unchanged in the migration.
 export const PALETTE = {
   // Dark backgrounds
-  nearBlack:       '#111111',  // primary dark page background
-  darkSurface:     '#1c1c1c',  // card / paper on dark
-  darkSubsurface:  '#262626',  // elevated surfaces on dark
+  nearBlack:       '#0f1110',  // primary dark page background
+  darkSurface:     '#1a1c1b',  // card / paper on dark
+  darkSubsurface:  '#232624',  // elevated surfaces on dark
   sidebarDark:     '#0f0f0f',  // sidebar / nav on dark
 
   // Light backgrounds
-  parchment:       '#f8fafc',  // primary light page background
-  ivory:           '#ffffff',  // card / paper on light
-  warmSand:        '#f1f5f9',  // button backgrounds, interactive surfaces, sidebar
+  parchment:       '#f7f9f8',  // primary light page background
+  ivory:           '#fafcfb',  // card / paper on light
+  warmSand:        '#eff3f1',  // button backgrounds, interactive surfaces, sidebar
   sidebarLight:    '#f1f5f9',  // (== warmSand; kept as a distinct role name)
 
   // Text
-  nearBlackText:   '#0f172a',  // primary text on light
-  oliveGray:       '#64748b',  // secondary text on light
-  stoneGray:       '#94a3b8',  // tertiary text, disabled, metadata
-  charcoalWarm:    '#475569',  // neutral button text / neutral action color
-  warmSilver:      '#f1f5f9',  // primary text on dark
-  darkWarm:        '#334155',  // emphasized secondary text
+  nearBlackText:   '#071510',  // primary text on light
+  oliveGray:       '#7c837f',  // secondary text on light
+  stoneGray:       '#808583',  // tertiary text, disabled, metadata
+  charcoalWarm:    '#5e746d',  // neutral button text / neutral action color
+  warmSilver:      '#ecf4f0',  // primary text on dark
+  darkWarm:        '#9bb3ab',  // emphasized secondary text
 
   // Borders & dividers — collapsed to two canonical values
   border:          '#e2e8f0',  // light mode border + divider
