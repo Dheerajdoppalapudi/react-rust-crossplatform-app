@@ -77,12 +77,12 @@ function CitedMarkdown({ text, sources }) {
 
     return {
       p:          ({ children }) => (
-        <Typography component="p" sx={{ fontSize: 13.5, lineHeight: 1.75, color: textColor, mb: 1.25, mt: 0 }}>
+        <Typography component="p" sx={{ fontSize: 15, lineHeight: 1.75, color: textColor, mb: 1.25, mt: 0 }}>
           {injectCitations(children, sourcesRef.current)}
         </Typography>
       ),
       li:         ({ children }) => (
-        <Typography component="li" sx={{ fontSize: 13.5, lineHeight: 1.75, color: textColor, mb: 0.5 }}>
+        <Typography component="li" sx={{ fontSize: 15, lineHeight: 1.75, color: textColor, mb: 0.5 }}>
           {injectCitations(children, sourcesRef.current)}
         </Typography>
       ),
@@ -200,13 +200,32 @@ function SourcesPanel({ sources, open }) {
                 [{i + 1}]
               </Typography>
 
-              {/* Favicon */}
-              <Box sx={{ width: 14, height: 14, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {/* Favicon — lazy loaded with domain-initial fallback on error */}
+              <Box sx={{ width: 14, height: 14, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
                 {faviconUrl ? (
-                  <img src={faviconUrl} alt="" width={14} height={14} style={{ objectFit: 'contain', borderRadius: 2 }} />
-                ) : (
-                  <Box sx={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)' }} />
-                )}
+                  <img
+                    src={faviconUrl}
+                    alt=""
+                    width={14}
+                    height={14}
+                    loading="lazy"
+                    style={{ objectFit: 'contain', borderRadius: 2 }}
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none'
+                      e.currentTarget.nextElementSibling.style.display = 'flex'
+                    }}
+                  />
+                ) : null}
+                <Box sx={{
+                  width: 14, height: 14, borderRadius: '4px', flexShrink: 0,
+                  display: faviconUrl ? 'none' : 'flex',
+                  alignItems: 'center', justifyContent: 'center',
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)',
+                }}>
+                  <Typography sx={{ fontSize: 8, fontWeight: 700, lineHeight: 1, color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.4)' }}>
+                    {(domain[0] || '?').toUpperCase()}
+                  </Typography>
+                </Box>
               </Box>
 
               {/* Title */}

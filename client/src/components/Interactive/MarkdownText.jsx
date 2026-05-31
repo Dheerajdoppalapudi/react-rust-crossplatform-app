@@ -12,16 +12,16 @@ function MarkdownText({ content, sx = {} }) {
   return (
     <Box sx={{
       fontFamily: TYPOGRAPHY.fontFamily,
-      fontSize:   TYPOGRAPHY.sizes.bodySm,
-      lineHeight: TYPOGRAPHY.lineHeights.relaxed,
-      color: 'text.secondary',
+      fontSize:   TYPOGRAPHY.sizes.body,       // 15px — up from 14px
+      lineHeight: 1.75,                        // up from 1.6
+      color: 'text.primary',                  // was text.secondary — the core fix
 
-      '& p':            { mt: 0, mb: 1.5 },
+      '& p':            { mt: 0, mb: 1.5, color: 'inherit' },
       '& p:last-child': { mb: 0 },
-      '& strong':       { fontWeight: TYPOGRAPHY.weights.semibold, color: 'text.primary' },
-      '& em':           { fontStyle: 'italic' },
+      '& strong':       { fontWeight: TYPOGRAPHY.weights.semibold, color: 'inherit' },
+      '& em':           { fontStyle: 'italic', color: 'inherit' },
       '& ul, & ol':     { pl: 3, mb: 1.5, mt: 0 },
-      '& li':           { mb: 0.5 },
+      '& li':           { mb: 0.5, color: 'inherit' },
       '& code': {
         fontFamily: TYPOGRAPHY.fontFamilyMono,
         fontSize:   TYPOGRAPHY.sizes.caption,
@@ -40,7 +40,7 @@ function MarkdownText({ content, sx = {} }) {
       '& h1, & h2, & h3': {
         fontFamily: TYPOGRAPHY.fontFamily,
         fontWeight: TYPOGRAPHY.weights.semibold,
-        color: 'text.primary',
+        color: 'inherit',
         mt: 2, mb: 1,
         lineHeight: TYPOGRAPHY.lineHeights.snug,
       },

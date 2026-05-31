@@ -11,9 +11,10 @@ import { neutralBorderDefault, neutralBorderStrong, neutralBorderHover } from '.
 // If sessionId + frameIndex are known here, we call useMediaUrl locally.
 
 function FrameThumbnail({ sessionId, frameIndex, caption, type, isActive, onClick }) {
-  const theme      = useTheme()
-  const isDark     = theme.palette.mode === 'dark'
-  const [imgError, setImgError] = useState(false)
+  const theme       = useTheme()
+  const isDark      = theme.palette.mode === 'dark'
+  const [imgError,   setImgError]   = useState(false)
+  const [imgLoading, setImgLoading] = useState(true)
 
   // CRIT-2: use media token URL instead of embedding the main access JWT.
   const { getFrameUrl } = useMediaUrl(sessionId)
@@ -38,14 +39,36 @@ function FrameThumbnail({ sessionId, frameIndex, caption, type, isActive, onClic
         },
       }}
     >
+      {/* Shimmer while image loads */}
+      {!showPlaceholder && imgLoading && (
+        <Box sx={{
+          position: 'absolute', inset: 0,
+          bgcolor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.06)',
+          overflow: 'hidden',
+          '&::after': {
+            content: '""', position: 'absolute', inset: 0,
+            background: isDark
+              ? 'linear-gradient(90deg,transparent 20%,rgba(255,255,255,0.08) 50%,transparent 80%)'
+              : 'linear-gradient(90deg,transparent 20%,rgba(255,255,255,0.7) 50%,transparent 80%)',
+            backgroundSize: '200% 100%',
+            animation: 'thumbShimmer 1.4s ease-in-out infinite',
+          },
+          '@keyframes thumbShimmer': {
+            '0%':   { backgroundPosition: '-200% 0' },
+            '100%': { backgroundPosition:  '200% 0' },
+          },
+        }} />
+      )}
+
       {!showPlaceholder ? (
         <img
           src={frameUrl}
           alt={caption}
           loading="lazy"
           decoding="async"
-          onError={() => setImgError(true)}
-          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          onLoad={() => setImgLoading(false)}
+          onError={() => { setImgError(true); setImgLoading(false) }}
+          style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: imgLoading ? 0 : 1, transition: 'opacity 0.2s' }}
         />
       ) : (
         <Box sx={{

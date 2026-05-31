@@ -1,4 +1,4 @@
-import { useState, useRef, memo } from 'react'
+import { useState, useRef, memo, useCallback } from 'react'
 import PropTypes from 'prop-types'
 import { Box, Typography, TextField, IconButton, Tooltip, Divider,
          Menu, MenuItem, CircularProgress } from '@mui/material'
@@ -56,7 +56,7 @@ function useMenuState() {
 
 // ── Staged file chip ──────────────────────────────────────────────────────────
 
-function FileChip({ file, onRemove, isDark }) {
+const FileChip = memo(function FileChip({ file, onRemove, isDark }) {
   return (
     <Box sx={{
       display: 'inline-flex', alignItems: 'center', gap: 0.5,
@@ -81,11 +81,11 @@ function FileChip({ file, onRemove, isDark }) {
       </IconButton>
     </Box>
   )
-}
+})
 
 // ── Pill button (shared style for mode and render selectors) ──────────────────
 
-function Pill({ onClick, children, active = false, activeColor = null, activeBg = null, isDark, sx = {} }) {
+const Pill = memo(function Pill({ onClick, children, active = false, activeColor = null, activeBg = null, isDark, sx = {} }) {
   const theme = useTheme()
   return (
     <Box
@@ -113,7 +113,7 @@ function Pill({ onClick, children, active = false, activeColor = null, activeBg 
       {children}
     </Box>
   )
-}
+})
 
 // ── Main component ────────────────────────────────────────────────────────────
 
@@ -167,6 +167,11 @@ function PromptBar({
 
   const promptBorder = isDark ? PALETTE.dividerDark : PALETTE.borderCream
   const cardBg       = isDark ? PALETTE.darkSurface : PALETTE.ivory
+
+  // Stable handlers so Pill + menu items don't re-render on every keystroke
+  const handleModeMenuOpen   = useCallback((e) => modeMenu.open(e),   [modeMenu])
+  const handleRenderMenuOpen = useCallback((e) => renderMenu.open(e), [renderMenu])
+  const handlePlusMenuOpen   = useCallback((e) => plusMenu.open(e),   [plusMenu])
 
   const MAX_FILE_MB   = 25
   const MAX_FILE_SIZE = MAX_FILE_MB * 1024 * 1024
@@ -347,7 +352,7 @@ function PromptBar({
                 <Box
                   component="button"
                   type="button"
-                  onClick={plusMenu.open}
+                  onClick={handlePlusMenuOpen}
                   sx={{
                     display:         'flex',
                     alignItems:      'center',
@@ -412,7 +417,7 @@ function PromptBar({
                 </Menu>
 
                 {/* Mode selector */}
-                <Pill onClick={modeMenu.open} isDark={isDark}>
+                <Pill onClick={handleModeMenuOpen} isDark={isDark}>
                   <Typography sx={{
                     fontSize: 14, fontWeight: 500, lineHeight: 1,
                     color: isDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.62)',
@@ -447,7 +452,7 @@ function PromptBar({
 
                 {/* Render mode selector */}
                 <Pill
-                  onClick={renderMenu.open}
+                  onClick={handleRenderMenuOpen}
                   isDark={isDark}
                   active={isCustomRender}
                   activeColor={selectedRenderMode?.color}

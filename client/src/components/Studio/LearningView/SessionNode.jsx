@@ -686,7 +686,7 @@ function VideoNode({ turn, data, isDark, theme, indexLabel, nodeHovered, isOpen,
 // ─── Main export ──────────────────────────────────────────────────────────────
 
 export default function SessionNode({ data }) {
-  const { turn } = data
+  const { turn, isSelected } = data
   const theme    = useTheme()
   const isDark   = theme.palette.mode === 'dark'
   const { setNodes, setEdges, getNode } = useReactFlow()
@@ -795,12 +795,20 @@ export default function SessionNode({ data }) {
     )
   }
 
+  // Active-selection ring — thin brand outline drawn outside the card
+  const activeRingSx = isSelected ? {
+    outline: `2px solid ${isDark ? BRAND.glow : BRAND.primary}`,
+    outlineOffset: '2px',
+    borderRadius: '13px',
+  } : {}
+
   // ── INTERACTIVE ──────────────────────────────────────────────────────────
   if (isText) {
     return (
       <Box
         onMouseEnter={() => setNodeHovered(true)}
         onMouseLeave={() => { if (!isOpen) setNodeHovered(false) }}
+        sx={activeRingSx}
       >
         {handles}
         <InteractiveNode
@@ -822,6 +830,7 @@ export default function SessionNode({ data }) {
     <Box
       onMouseEnter={() => setNodeHovered(true)}
       onMouseLeave={() => { if (!isOpen) setNodeHovered(false) }}
+      sx={activeRingSx}
     >
       {handles}
       <VideoNode

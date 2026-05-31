@@ -32,7 +32,7 @@ function layoutWithDagre(nodes, edges) {
   })
 }
 
-export function useFlowData(turns, onAsk, defaultModel, defaultVideoEnabled, defaultNotesEnabled) {
+export function useFlowData(turns, onAsk, defaultModel, defaultVideoEnabled, defaultNotesEnabled, selectedNodeId = null) {
   const onAskRef = useRef(onAsk)
   useEffect(() => { onAskRef.current = onAsk }, [onAsk])
 
@@ -71,6 +71,7 @@ export function useFlowData(turns, onAsk, defaultModel, defaultVideoEnabled, def
         defaultNotesEnabled,
         followUpCount:       followUpCounts[nodeId(turn)] || 0,
         isLatest:            nodeId(turn) === latestId,
+        isSelected:          selectedNodeId != null && (nodeId(turn) === selectedNodeId),
       },
     }))
 
@@ -85,5 +86,5 @@ export function useFlowData(turns, onAsk, defaultModel, defaultVideoEnabled, def
       }))
 
     return { nodes: layoutWithDagre(nodes, edges), edges }
-  }, [turns, defaultModel, defaultVideoEnabled, defaultNotesEnabled])
+  }, [turns, defaultModel, defaultVideoEnabled, defaultNotesEnabled, selectedNodeId])
 }

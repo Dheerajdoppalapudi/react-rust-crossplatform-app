@@ -25,6 +25,7 @@ import { relativeTime } from '../Studio/constants'
 import { useAuth } from '../../contexts/AuthContext'
 import { PALETTE, RADIUS } from '../../theme/tokens.js'
 import { metaText } from '../../theme/styleUtils.js'
+import { TIMINGS } from '../../constants/timings.js'
 
 const DRAWER_OPEN   = 260
 const DRAWER_CLOSED = 56
@@ -85,7 +86,7 @@ const LogoButton = ({ onToggle }) => {
 }
 
 // ─── Single nav item — icon always visible, text fades via CSS ───────────────
-const NavItem = ({ item, open, isActive, onClick }) => {
+const NavItem = memo(({ item, open, isActive, onClick }) => {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
   const activeBg = isDark ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.06)'
@@ -131,7 +132,7 @@ const NavItem = ({ item, open, isActive, onClick }) => {
       </ListItem>
     </Tooltip>
   )
-}
+})
 
 // ─── Single conversation row ───────────────────────────────────────────────────
 const ConvItem = memo(({ conv, isActive, onSelect, onRename, onStar, onDelete }) => {
@@ -413,8 +414,17 @@ const Sidebar = ({
 
   const [open, setOpen]       = useState(false)
   const [search, setSearch]   = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [renamingConv, setRenamingConv] = useState(null)
-  const searchRef = useRef(null)
+  const searchRef     = useRef(null)
+  const debounceTimer = useRef(null)
+
+  // Debounce search so filtering only runs after the user pauses typing
+  const handleSearchChange = useCallback((val) => {
+    setSearch(val)
+    clearTimeout(debounceTimer.current)
+    debounceTimer.current = setTimeout(() => setDebouncedSearch(val), 150)
+  }, [])
 
   const toggleOpen = useCallback(() => setOpen(p => !p), [])
 
@@ -439,7 +449,7 @@ const Sidebar = ({
       if (mod && !e.shiftKey && e.key.toLowerCase() === 'k') {
         e.preventDefault()
         setOpen(true)
-        setTimeout(() => searchRef.current?.focus(), 150)
+        setTimeout(() => searchRef.current?.focus(), TIMINGS.SEARCH_OPEN_FOCUS_DELAY_MS)
       }
     }
     window.addEventListener('keydown', handler)
@@ -447,16 +457,16 @@ const Sidebar = ({
   }, [isMac, onNewConversation])
 
   const filtered = useMemo(() => {
-    if (!search.trim()) return conversations
-    const q = search.toLowerCase()
+    if (!debouncedSearch.trim()) return conversations
+    const q = debouncedSearch.toLowerCase()
     return conversations.filter((c) => (c.title || '').toLowerCase().includes(q))
-  }, [conversations, search])
+  }, [conversations, debouncedSearch])
 
   const starred    = useMemo(() => filtered.filter((c) => c.starred), [filtered])
   const unstarred  = useMemo(() => filtered.filter((c) => !c.starred), [filtered])
   const grouped    = useMemo(() => groupConversations(unstarred), [unstarred])
   const resultCount  = filtered.length
-  const isSearching  = search.trim().length > 0
+  const isSearching  = debouncedSearch.trim().length > 0
 
   const convItemProps = (conv) => ({
     conv,
@@ -625,9 +635,9 @@ const Sidebar = ({
                 <InputBase
                   inputRef={searchRef}
                   value={search}
-                  onChange={(e) => setSearch(e.target.value)}
+                  onChange={(e) => handleSearchChange(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === 'Escape') { setSearch(''); searchRef.current?.blur() }
+                    if (e.key === 'Escape') { setSearch(''); setDebouncedSearch(''); searchRef.current?.blur() }
                   }}
                   placeholder="Search chats…"
                   sx={{

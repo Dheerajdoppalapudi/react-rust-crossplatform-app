@@ -35,7 +35,12 @@ function createTurnSSEHandler(id, { setTurns, toast, donePayloadRef }) {
       case 'error':
         toast.error(event.message || 'Generation failed. Please try again.')
         setTurns(prev => prev.map(t => t.tempId === id
-          ? { ...t, isLoading: false, ...(t.videoPhase !== 'disabled' ? { videoPhase: 'error' } : {}) }
+          ? {
+              ...t,
+              isLoading: false,
+              generationFailed: true,
+              ...(t.videoPhase !== 'disabled' ? { videoPhase: 'error' } : {}),
+            }
           : t
         ))
         break

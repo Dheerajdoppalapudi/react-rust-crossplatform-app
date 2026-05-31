@@ -57,7 +57,7 @@ export const PALETTE = {
   oliveGray:       '#7c837f',  // secondary text on light
   stoneGray:       '#808583',  // tertiary text, disabled, metadata
   charcoalWarm:    '#5e746d',  // neutral button text / neutral action color
-  warmSilver:      '#ecf4f0',  // primary text on dark
+  warmSilver:      '#f2f4f3',  // primary text on dark
   darkWarm:        '#9bb3ab',  // emphasized secondary text
 
   // Borders & dividers — collapsed to two canonical values

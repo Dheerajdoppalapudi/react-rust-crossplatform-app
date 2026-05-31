@@ -14,6 +14,7 @@ import ConversationMiniTree from '../components/Studio/ConversationMiniTree'
 import { useToast }         from '../contexts/ToastContext'
 import { DEFAULT_MODEL, DEFAULT_RENDER_MODE, DEFAULT_MODE, FOLLOWUP_SUGGESTIONS, MODES } from '../components/Studio/constants'
 import { STORAGE_KEYS } from '../constants/storage.js'
+import { TIMINGS }      from '../constants/timings.js'
 
 import { useVideoStream }   from '../hooks/useVideoStream'
 import { usePauseContext }  from '../hooks/usePauseContext'
@@ -64,9 +65,10 @@ export default function Studio({
   const [viewMode, setViewMode]                     = useState('chat')
   const [selectedTextContext, setSelectedTextContext] = useState(null)
 
-  const inputRef        = useRef(null)
-  const threadBottomRef = useRef(null)
-  const contentScrollRef = useRef(null)
+  const inputRef          = useRef(null)
+  const threadBottomRef   = useRef(null)
+  const contentScrollRef  = useRef(null)
+  const userScrolledUpRef = useRef(false)  // true when user has manually scrolled up
 
   const scrollToTop = useCallback(() => {
     if (contentScrollRef.current) contentScrollRef.current.scrollTop = 0
@@ -158,15 +160,29 @@ export default function Studio({
     return () => window.removeEventListener('beforeunload', guard)
   }, [isAnyGenerating])
 
-  // Auto-scroll to the latest turn when a new one is appended.
+  // Track whether the user has manually scrolled up so we can pause auto-scroll.
   useEffect(() => {
-    threadBottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    const el = contentScrollRef.current
+    if (!el) return
+    const onScroll = () => {
+      const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+      userScrolledUpRef.current = distanceFromBottom > 80
+    }
+    el.addEventListener('scroll', onScroll, { passive: true })
+    return () => el.removeEventListener('scroll', onScroll)
+  }, [])
+
+  // Auto-scroll to the latest turn only when user is already near the bottom.
+  useEffect(() => {
+    if (!userScrolledUpRef.current) {
+      threadBottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
   }, [turns.length])
 
   // Focus the prompt bar when the thread is empty (new conversation).
   useEffect(() => {
     if (!isBootstrapping && turns.length === 0) {
-      const t = setTimeout(() => inputRef.current?.focus(), 100)
+      const t = setTimeout(() => inputRef.current?.focus(), TIMINGS.EMPTY_STATE_FOCUS_DELAY_MS)
       return () => clearTimeout(t)
     }
   }, [isBootstrapping, turns.length])
@@ -181,6 +197,7 @@ export default function Studio({
     if (activeConvId && activeConvId !== loadedConvIdRef.current) {
       abortAllVideoStreams()
       loadedConvIdRef.current = activeConvId
+      userScrolledUpRef.current = false
       loadConversationById(activeConvId)
     } else if (!activeConvId && loadedConvIdRef.current !== null) {
       abortAllVideoStreams()
@@ -293,7 +310,7 @@ export default function Studio({
 
   const handleTextSelection = useCallback((text) => {
     setSelectedTextContext(text)
-    setTimeout(() => inputRef.current?.focus(), 50)
+    setTimeout(() => inputRef.current?.focus(), TIMINGS.TEXT_SELECT_FOCUS_DELAY_MS)
   }, [])
 
   // ── Learning canvas (full-screen takeover) ──────────────────────────────────
@@ -438,7 +455,17 @@ export default function Studio({
                       Follow-ups
                     </Typography>
                     {followUpSuggestions.map((s, i) => (
-                      <Box key={s}>
+                      <Box
+                        key={s}
+                        sx={{
+                          animation: 'chipFadeIn 0.3s ease both',
+                          animationDelay: `${i * 0.07}s`,
+                          '@keyframes chipFadeIn': {
+                            from: { opacity: 0, transform: 'translateY(6px)' },
+                            to:   { opacity: 1, transform: 'translateY(0)' },
+                          },
+                        }}
+                      >
                         {i > 0 && <Divider sx={{ opacity: 0.2 }} />}
                         <Box
                           onClick={() => handleSuggestionClick(s)}

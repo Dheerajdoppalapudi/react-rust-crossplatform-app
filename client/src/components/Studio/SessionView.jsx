@@ -137,6 +137,10 @@ function SlideDialog({ open, frameIndex, captions, images, sessionId, onClose, o
   const caption = captions[frameIndex] ?? ''
   const type    = getFrameType(images[frameIndex])
   const imgUrl  = getFrameUrl(frameIndex)
+  const [slideLoading, setSlideLoading] = useState(true)
+
+  // Reset shimmer whenever the frame changes
+  useEffect(() => { setSlideLoading(true) }, [frameIndex])
 
   const goPrev = () => onFrameChange((f) => Math.max(f - 1, 0))
   const goNext = () => onFrameChange((f) => Math.min(f + 1, total - 1))
@@ -197,11 +201,34 @@ function SlideDialog({ open, frameIndex, captions, images, sessionId, onClose, o
           position: 'relative', bgcolor: PALETTE.pureBlack,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
+          {/* Shimmer skeleton while slide loads */}
+          {type === 'image' && imgUrl && slideLoading && (
+            <Box sx={{
+              width: '100%', aspectRatio: '16/9',
+              bgcolor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.06)',
+              overflow: 'hidden',
+              '&::after': {
+                content: '""', display: 'block', width: '100%', height: '100%',
+                background: isDark
+                  ? 'linear-gradient(90deg,transparent 20%,rgba(255,255,255,0.07) 50%,transparent 80%)'
+                  : 'linear-gradient(90deg,transparent 20%,rgba(255,255,255,0.65) 50%,transparent 80%)',
+                backgroundSize: '200% 100%',
+                animation: 'slideShimmer 1.4s ease-in-out infinite',
+              },
+              '@keyframes slideShimmer': {
+                '0%':   { backgroundPosition: '-200% 0' },
+                '100%': { backgroundPosition:  '200% 0' },
+              },
+            }} />
+          )}
           {type === 'image' && imgUrl ? (
             <img
               src={imgUrl}
               alt={caption}
-              style={{ width: '100%', maxHeight: '70vh', objectFit: 'contain', display: 'block' }}
+              onLoad={() => setSlideLoading(false)}
+              onError={() => setSlideLoading(false)}
+              style={{ width: '100%', maxHeight: '70vh', objectFit: 'contain', display: 'block',
+                       opacity: slideLoading ? 0 : 1, transition: 'opacity 0.25s' }}
             />
           ) : (
             <Box sx={{

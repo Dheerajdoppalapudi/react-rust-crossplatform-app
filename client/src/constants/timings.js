@@ -12,6 +12,11 @@ export const TIMINGS = {
   // How long after setPauseContext() before the input receives focus
   PAUSE_FOCUS_DELAY_MS:           120,
 
+  // Focus delays for UI transitions
+  EMPTY_STATE_FOCUS_DELAY_MS:     100,   // new / empty conversation → focus prompt input
+  TEXT_SELECT_FOCUS_DELAY_MS:      50,   // after text selection popup action → focus input
+  SEARCH_OPEN_FOCUS_DELAY_MS:     150,   // after opening sidebar search (Cmd+K)
+
   // How long 'Copied!' check-mark shows in copy buttons
   COPY_FEEDBACK_DURATION_MS:    2_000,
 

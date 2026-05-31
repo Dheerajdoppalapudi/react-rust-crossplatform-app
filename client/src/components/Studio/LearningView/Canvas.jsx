@@ -15,12 +15,12 @@ import { PALETTE } from '../../../theme/tokens.js'
 const nodeTypes = { sessionNode: SessionNode, askNode: AskNode }
 const edgeTypes = { flowEdge: FlowEdge }
 
-export default function Canvas({ turns, onNodeClick, onAsk, defaultModel, defaultVideoEnabled, defaultNotesEnabled }) {
+export default function Canvas({ turns, onNodeClick, onAsk, defaultModel, defaultVideoEnabled, defaultNotesEnabled, selectedNodeId }) {
   const theme   = useTheme()
   const isDark  = theme.palette.mode === 'dark'
   const primary = theme.palette.primary.main
 
-  const { nodes: layoutNodes, edges: layoutEdges } = useFlowData(turns, onAsk, defaultModel, defaultVideoEnabled, defaultNotesEnabled)
+  const { nodes: layoutNodes, edges: layoutEdges } = useFlowData(turns, onAsk, defaultModel, defaultVideoEnabled, defaultNotesEnabled, selectedNodeId)
 
   const [nodes, setNodes, onNodesChange] = useNodesState(layoutNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState([])

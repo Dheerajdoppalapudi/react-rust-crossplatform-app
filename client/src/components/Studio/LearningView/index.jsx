@@ -237,6 +237,7 @@ export default function LearningView({ turns, conversationId, onExit, onAskFromL
           defaultModel={defaultModel}
           defaultVideoEnabled={defaultVideoEnabled}
           defaultNotesEnabled={notesEnabled}
+          selectedNodeId={selectedNode?.id ?? selectedNode?.tempId ?? null}
         />
 
         {/* Node detail panel — resizable 20–65vw, default 30vw */}
@@ -283,7 +284,14 @@ export default function LearningView({ turns, conversationId, onExit, onAskFromL
 
           {/* Inner content box clips NodeModal within the panel bounds */}
           {selectedNode && (
-            <Box sx={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
+            <Box sx={{
+              position: 'absolute', inset: 0, overflow: 'hidden',
+              animation: 'panelFadeIn 0.2s ease',
+              '@keyframes panelFadeIn': {
+                from: { opacity: 0, transform: 'translateX(8px)' },
+                to:   { opacity: 1, transform: 'translateX(0)' },
+              },
+            }}>
               <NodeModal
                 node={selectedNode}
                 onClose={() => setSelectedNode(null)}

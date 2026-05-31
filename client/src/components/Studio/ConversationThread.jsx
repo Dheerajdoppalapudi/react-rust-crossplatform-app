@@ -101,6 +101,34 @@ const TurnView = memo(function TurnView({ turn, onPauseAsk, onRetryTurn, onRetry
           />
         )}
 
+        {/* Persistent inline error for interactive generation failures */}
+        {turn.generationFailed && turn.render_path === 'interactive' && !turn.title && !(turn.blocks ?? []).length && !turn.synthesisText && (
+          <Box sx={{
+            display: 'flex', alignItems: 'center', gap: 1.5,
+            py: 2, px: 2.5, borderRadius: '12px', mt: 0.5,
+            backgroundColor: isDark ? 'rgba(255,59,59,0.06)' : '#fff5f5',
+            border: `1px solid ${isDark ? 'rgba(255,59,59,0.18)' : '#fecaca'}`,
+          }}>
+            <Typography sx={{ fontSize: 13.5, color: theme.palette.text.secondary, flex: 1, lineHeight: 1.5 }}>
+              Generation failed — this is usually temporary.
+            </Typography>
+            <Button
+              size="small"
+              startIcon={<RefreshIcon sx={{ fontSize: 14 }} />}
+              onClick={() => onRetryGeneration(turn)}
+              sx={{
+                textTransform: 'none', fontSize: 12.5, fontWeight: 600,
+                borderRadius: '8px', flexShrink: 0,
+                color: theme.palette.text.secondary,
+                border: `1px solid ${isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.10)'}`,
+                '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)', color: theme.palette.text.primary },
+              }}
+            >
+              Retry
+            </Button>
+          </Box>
+        )}
+
         {turn.render_path === 'interactive' ? (
           (turn.title || (turn.blocks ?? []).length > 0 || turn.synthesisText || (!turn.isLoading && turn.sources?.length > 0)) ? (
             (turn.synthesisText || turn.sources?.length > 0) ? (

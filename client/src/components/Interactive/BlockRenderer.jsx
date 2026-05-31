@@ -66,6 +66,18 @@ function BlockRenderer({ turnId, title, learningObjective, blocks = [], isLoadin
         </Box>
       )}
 
+      {!isLoading && blocks.length === 0 && !title && !learningObjective && (
+        <Box sx={{
+          py: 3, px: 2, borderRadius: `${RADIUS.lg}px`, textAlign: 'center',
+          backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
+          border: `1px solid ${isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)'}`,
+        }}>
+          <Typography sx={{ fontSize: TYPOGRAPHY.sizes.bodySm, color: 'text.disabled' }}>
+            Content couldn't be loaded. Try asking again.
+          </Typography>
+        </Box>
+      )}
+
       {blocks.map(block => {
         if (block.type === 'text') {
           return <MarkdownText key={block.id} content={block.content} />
