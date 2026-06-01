@@ -92,7 +92,7 @@ export default function TableViewer({
     else { setSortKey(key); setSortDir('asc') }
   }
 
-  const borderColor = isDark ? PALETTE.borderDark : PALETTE.borderCream
+  const borderColor = isDark ? PALETTE.borderDark : PALETTE.border
   const headerBg    = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)'
   const mutedText   = isDark ? 'rgba(255,255,255,0.4)'  : 'rgba(0,0,0,0.4)'
 

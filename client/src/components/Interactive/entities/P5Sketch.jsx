@@ -48,7 +48,7 @@ export default function P5Sketch({
       <Box sx={{
         position: 'relative', height,
         borderRadius: `${RADIUS.lg}px`, overflow: 'hidden',
-        border: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.borderCream}`,
+        border: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.border}`,
       }}>
         {!html ? (
           <Skeleton
@@ -91,7 +91,7 @@ export default function P5Sketch({
           flexShrink: 0,
           display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
           px: 1.5, py: 0.75,
-          borderBottom: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.borderCream}`,
+          borderBottom: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.border}`,
           gap: 0.5,
         }}>
           <Tooltip title="Reload">

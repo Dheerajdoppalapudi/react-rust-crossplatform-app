@@ -35,7 +35,7 @@ export function UserBubble({ prompt }) {
         color: theme.palette.text.primary,
         borderRadius: '18px 18px 4px 18px',
         fontSize: 14.5, fontWeight: 400, lineHeight: 1.6,
-        border: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.borderWarm}`,
+        border: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.border}`,
       }}>
         {prompt}
       </Box>
@@ -83,12 +83,16 @@ function RetryBanner({ turn, onRetry }) {
   )
 }
 
-const TurnView = memo(function TurnView({ turn, onPauseAsk, onRetryTurn, onRetryGeneration, notesEnabled }) {
+const TurnView = memo(function TurnView({ turn, onPauseAsk, onRetryTurn, onRetryGeneration, notesEnabled, registerTurnRef }) {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
 
   return (
-    <Box data-turn-id={turn.tempId} sx={{ mb: 2, '&:last-child': { mb: 0 } }}>
+    <Box
+      ref={registerTurnRef ? (el) => registerTurnRef(turn.tempId, el) : undefined}
+      data-turn-id={turn.tempId}
+      sx={{ mb: 2, '&:last-child': { mb: 0 } }}
+    >
       <ContentColumn>
         <UserBubble prompt={turn.prompt} />
 
@@ -193,21 +197,21 @@ const TurnView = memo(function TurnView({ turn, onPauseAsk, onRetryTurn, onRetry
   )
 })
 
-const TurnWithBoundary = memo(function TurnWithBoundary({ turn, onPauseAsk, onRetryTurn, onRetryGeneration, notesEnabled }) {
+const TurnWithBoundary = memo(function TurnWithBoundary({ turn, onPauseAsk, onRetryTurn, onRetryGeneration, notesEnabled, registerTurnRef }) {
   return (
     <ErrorBoundary level="component" key={`${turn.tempId}-boundary`}>
-      <TurnView turn={turn} onPauseAsk={onPauseAsk} onRetryTurn={onRetryTurn} onRetryGeneration={onRetryGeneration} notesEnabled={notesEnabled} />
+      <TurnView turn={turn} onPauseAsk={onPauseAsk} onRetryTurn={onRetryTurn} onRetryGeneration={onRetryGeneration} notesEnabled={notesEnabled} registerTurnRef={registerTurnRef} />
     </ErrorBoundary>
   )
 })
 
-const ConversationThread = memo(function ConversationThread({ turns, onPauseAsk, onRetryTurn, onRetryGeneration, notesEnabled, onTextSelect }) {
+const ConversationThread = memo(function ConversationThread({ turns, onPauseAsk, onRetryTurn, onRetryGeneration, notesEnabled, onTextSelect, registerTurnRef }) {
   const containerRef = useRef(null)
 
   return (
     <Box ref={containerRef} sx={{ display: 'flex', flexDirection: 'column', pt: 1, pb: 1, position: 'relative' }}>
       {turns.map((turn) => (
-        <TurnWithBoundary key={turn.tempId} turn={turn} onPauseAsk={onPauseAsk} onRetryTurn={onRetryTurn} onRetryGeneration={onRetryGeneration} notesEnabled={notesEnabled} />
+        <TurnWithBoundary key={turn.tempId} turn={turn} onPauseAsk={onPauseAsk} onRetryTurn={onRetryTurn} onRetryGeneration={onRetryGeneration} notesEnabled={notesEnabled} registerTurnRef={registerTurnRef} />
       ))}
       {onTextSelect && (
         <TextSelectionPopup containerRef={containerRef} onAskFollowUp={onTextSelect} />

@@ -166,7 +166,7 @@ export default function MoleculeViewer({
         height,
         borderRadius: `${RADIUS.lg}px`,
         overflow: 'hidden',
-        border: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.borderCream}`,
+        border: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.border}`,
         backgroundColor: bgColor,
       }}>
         {status === 'loading' && (

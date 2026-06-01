@@ -228,7 +228,7 @@ export default function TimelineViewer({
   return (
     <Box>
       <Box sx={{
-        border: isExpanded ? 'none' : `1px solid ${isDark ? PALETTE.borderDark : PALETTE.borderCream}`,
+        border: isExpanded ? 'none' : `1px solid ${isDark ? PALETTE.borderDark : PALETTE.border}`,
         borderRadius: isExpanded ? 0 : `${RADIUS.lg}px`,
         backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.01)',
         overflow: 'hidden',
@@ -237,7 +237,7 @@ export default function TimelineViewer({
         <Box sx={{
           display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 0.25,
           px: 1, py: 0.5,
-          borderBottom: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.borderCream}`,
+          borderBottom: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.border}`,
           backgroundColor: isDark ? 'rgba(255,255,255,0.01)' : 'rgba(0,0,0,0.01)',
         }}>
           <Tooltip title="Zoom out (or Ctrl+scroll)">

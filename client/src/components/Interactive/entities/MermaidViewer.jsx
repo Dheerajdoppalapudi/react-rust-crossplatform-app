@@ -64,7 +64,10 @@ export default function MermaidViewer({ entityId, diagram, caption }) {
           if (!rendered || rendered.includes('Syntax error') || rendered.includes('Parse error') || rendered.includes('mermaid-error')) {
             setError('Could not render diagram — the generated syntax had errors.')
           } else {
-            setSvg(rendered)
+            // Patch every anchor in the SVG so links can't access window.opener.
+            // securityLevel:'loose' lets Mermaid render links but doesn't add rel attributes.
+            const safeSvg = rendered.replace(/<a /g, '<a target="_blank" rel="noopener noreferrer" ')
+            setSvg(safeSvg)
           }
         })
         .catch(() => { if (!cancelled) setError('Could not render diagram — the generated syntax had errors.') })

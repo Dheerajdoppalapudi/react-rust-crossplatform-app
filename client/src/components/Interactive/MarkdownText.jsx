@@ -34,7 +34,7 @@ function MarkdownText({ content, sx = {} }) {
         p: 2, mb: 1.5, mt: 0,
         borderRadius: `${RADIUS.md}px`,
         backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
-        border: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.borderCream}`,
+        border: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.border}`,
         '& code': { backgroundColor: 'transparent', p: 0 },
       },
       '& h1, & h2, & h3': {

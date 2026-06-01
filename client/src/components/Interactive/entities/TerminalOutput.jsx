@@ -96,8 +96,8 @@ export default function TerminalOutput({
   } : {
     bg:          PALETTE.warmSand,
     headerBg:    PALETTE.ivory,
-    headerBorder:PALETTE.borderCream,
-    border:      PALETTE.borderCream,
+    headerBorder:PALETTE.border,
+    border:      PALETTE.border,
     title:       PALETTE.oliveGray,
     copy:        'rgba(0,0,0,0.3)',
     copyHover:   'rgba(0,0,0,0.6)',

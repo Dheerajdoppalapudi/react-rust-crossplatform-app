@@ -57,7 +57,7 @@ export const buildTheme = (mode) => {
           '::-webkit-scrollbar': { width: '3px', height: '3px' },
           '::-webkit-scrollbar-track': { background: 'transparent' },
           '::-webkit-scrollbar-thumb': {
-            background: isDark ? PALETTE.borderDark : PALETTE.borderWarm,
+            background: isDark ? PALETTE.borderDark : PALETTE.border,
             borderRadius: '2px',
           },
         },

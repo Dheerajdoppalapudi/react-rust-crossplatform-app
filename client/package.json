@@ -22,6 +22,7 @@
     "@react-three/fiber": "^9.6.1",
     "@sentry/react": "^10.51.0",
     "@tanstack/react-query": "^5.100.14",
+    "@tanstack/react-virtual": "^3.13.26",
     "@tiptap/extension-bubble-menu": "^2.27.2",
     "@tiptap/extension-floating-menu": "^2.27.2",
     "@tiptap/extension-link": "^2.27.2",

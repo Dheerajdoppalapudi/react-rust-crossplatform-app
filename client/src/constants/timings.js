@@ -2,7 +2,10 @@
 // Named constants make intent clear and make global tuning a one-line change.
 
 export const TIMINGS = {
-  // Optimistic stage-label delays in useGeneration (non-first turn, video mode)
+  // UX-optimistic label delays for non-first-turn video generation (useGeneration).
+  // These fire client-side timers to show "Generating…" / "Rendering…" labels while
+  // the server works. They do NOT reflect actual server progress — adjust if the
+  // median server latency changes significantly (monitor via Sentry performance spans).
   STAGE_DELAY_GENERATING_MS:    2_500,
   STAGE_DELAY_RENDERING_MS:     6_000,
 

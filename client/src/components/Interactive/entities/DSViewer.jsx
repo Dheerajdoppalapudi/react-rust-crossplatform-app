@@ -149,7 +149,7 @@ function NodeRect({ value, highlighted, isDark }) {
       backgroundColor: highlighted
         ? (isDark ? `${accent}28` : `${accent}14`)
         : (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)'),
-      border: `2px solid ${highlighted ? accent : (isDark ? PALETTE.borderDark : PALETTE.borderCream)}`,
+      border: `2px solid ${highlighted ? accent : (isDark ? PALETTE.borderDark : PALETTE.border)}`,
       boxShadow: highlighted ? `0 0 0 3px ${accent}28` : 'none',
       transition: 'all 0.22s ease',
     }}>
@@ -216,7 +216,7 @@ function LinkedListView({ items, highlighted, isDark, type }) {
 
 function StackView({ items, highlighted, isDark }) {
   const accent = BRAND.primary
-  const borderCol = isDark ? PALETTE.borderDark : PALETTE.borderCream
+  const borderCol = isDark ? PALETTE.borderDark : PALETTE.border
   const reversed = [...items].reverse()
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 1.5 }}>
@@ -255,7 +255,7 @@ function StackView({ items, highlighted, isDark }) {
 
 function QueueView({ items, highlighted, isDark }) {
   const accent = BRAND.primary
-  const borderCol = isDark ? PALETTE.borderDark : PALETTE.borderCream
+  const borderCol = isDark ? PALETTE.borderDark : PALETTE.border
   return (
     <Box sx={{ overflowX: 'auto', pb: 1 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 2, px: 1, minWidth: 'max-content' }}>
@@ -331,7 +331,7 @@ function TreeView({ root, highlighted, isDark }) {
                   width: '100%', height: '100%', borderRadius: '50%',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   backgroundColor: isHl ? (isDark ? `${accent}30` : `${accent}18`) : (isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.04)'),
-                  border: `2px solid ${isHl ? accent : (isDark ? PALETTE.borderDark : PALETTE.borderCream)}`,
+                  border: `2px solid ${isHl ? accent : (isDark ? PALETTE.borderDark : PALETTE.border)}`,
                   boxShadow: isHl ? `0 0 0 3px ${accent}28` : 'none',
                   transition: 'all 0.22s ease',
                 }}>
@@ -350,7 +350,7 @@ function TreeView({ root, highlighted, isDark }) {
 
 function HashTableView({ entries, numBuckets, highlighted, isDark }) {
   const accent    = BRAND.primary
-  const borderCol = isDark ? PALETTE.borderDark : PALETTE.borderCream
+  const borderCol = isDark ? PALETTE.borderDark : PALETTE.border
 
   const buckets = useMemo(() => {
     const b = Array.from({ length: numBuckets }, () => [])
@@ -422,7 +422,7 @@ function OpsBtn({ label, onClick, primary = false, disabled = false }) {
   return (
     <Box component="button" onClick={onClick} disabled={disabled} sx={{
       px: 1.5, py: 0.55, fontSize: 11, fontWeight: 600, letterSpacing: '0.02em',
-      border: primary ? 'none' : `1px solid ${isDark ? PALETTE.borderDark : PALETTE.borderCream}`,
+      border: primary ? 'none' : `1px solid ${isDark ? PALETTE.borderDark : PALETTE.border}`,
       borderRadius: `${RADIUS.sm}px`,
       cursor: disabled ? 'not-allowed' : 'pointer',
       opacity: disabled ? 0.45 : 1,
@@ -446,7 +446,7 @@ function OpsInput({ value, onChange, placeholder, width = 88, onEnter }) {
       placeholder={placeholder}
       sx={{
         width, height: 28, px: 1, fontSize: 12,
-        border: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.borderCream}`,
+        border: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.border}`,
         borderRadius: `${RADIUS.sm}px`,
         backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)',
         color: 'text.primary', outline: 'none',
@@ -624,7 +624,7 @@ export default function DSViewer({
   }, [type, data, val, hashKey_, flash, isTree, isHash, isStack, isQueue])
 
   // ── Render ──────────────────────────────────────────────────────────────
-  const borderCol = isDark ? PALETTE.borderDark : PALETTE.borderCream
+  const borderCol = isDark ? PALETTE.borderDark : PALETTE.border
   const elemCount = isTree ? null : Array.isArray(data) ? data.length : null
 
   return (

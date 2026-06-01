@@ -12,7 +12,7 @@ import java       from 'react-syntax-highlighter/dist/esm/languages/hljs/java'
 import cpp        from 'react-syntax-highlighter/dist/esm/languages/hljs/cpp'
 import go         from 'react-syntax-highlighter/dist/esm/languages/hljs/go'
 import bash       from 'react-syntax-highlighter/dist/esm/languages/hljs/bash'
-import { TYPOGRAPHY, RADIUS, PALETTE, STATUS } from '../../../theme/tokens'
+import { TYPOGRAPHY, RADIUS, PALETTE, SEMANTIC } from '../../../theme/tokens'
 import EntityCaption from './EntityCaption'
 
 SyntaxHighlighter.registerLanguage('python',     python)
@@ -55,9 +55,9 @@ function LineNumber({ n, isDark }) {
 }
 
 function SplitPanel({ lines, language, hlStyle, isDark, side, editMode, editValue, onEdit }) {
-  const borderColor  = isDark ? PALETTE.borderDark : PALETTE.borderCream
+  const borderColor  = isDark ? PALETTE.borderDark : PALETTE.border
   const label        = side === 'before' ? 'Before' : 'After'
-  const labelColor   = side === 'before' ? STATUS.error : STATUS.success
+  const labelColor   = side === 'before' ? SEMANTIC.danger : SEMANTIC.success
   let lineNum = 0
 
   return (
@@ -97,9 +97,9 @@ function SplitPanel({ lines, language, hlStyle, isDark, side, editMode, editValu
                 ? (isDark ? 'rgba(46,160,67,0.15)' : 'rgba(46,160,67,0.08)')
                 : 'transparent'
             const borderLeft = entry.type === 'delete' && side === 'before'
-              ? `3px solid ${STATUS.error}`
+              ? `3px solid ${SEMANTIC.danger}`
               : entry.type === 'insert' && side === 'after'
-                ? `3px solid ${STATUS.success}`
+                ? `3px solid ${SEMANTIC.success}`
                 : '3px solid transparent'
             if (!visible) return (
               <Box key={i} sx={{ display: 'flex', alignItems: 'center', px: 1, minHeight: 22, borderLeft: '3px solid transparent' }}>
@@ -124,7 +124,7 @@ function SplitPanel({ lines, language, hlStyle, isDark, side, editMode, editValu
 }
 
 function UnifiedView({ diff, language, hlStyle, isDark }) {
-  const borderColor = isDark ? PALETTE.borderDark : PALETTE.borderCream
+  const borderColor = isDark ? PALETTE.borderDark : PALETTE.border
   let beforeNum = 0, afterNum = 0
   return (
     <Box sx={{ overflowX: 'auto' }}>
@@ -137,8 +137,8 @@ function UnifiedView({ diff, language, hlStyle, isDark }) {
         if (entry.type !== 'insert') beforeNum++
         if (entry.type !== 'delete') afterNum++
         const bg          = entry.type === 'delete' ? (isDark ? 'rgba(248,81,73,0.15)' : 'rgba(248,81,73,0.08)') : entry.type === 'insert' ? (isDark ? 'rgba(46,160,67,0.15)' : 'rgba(46,160,67,0.08)') : 'transparent'
-        const borderLeft  = entry.type === 'delete' ? `3px solid ${STATUS.error}` : entry.type === 'insert' ? `3px solid ${STATUS.success}` : '3px solid transparent'
-        const prefixColor = entry.type === 'delete' ? STATUS.error : entry.type === 'insert' ? STATUS.success : (isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)')
+        const borderLeft  = entry.type === 'delete' ? `3px solid ${SEMANTIC.danger}` : entry.type === 'insert' ? `3px solid ${SEMANTIC.success}` : '3px solid transparent'
+        const prefixColor = entry.type === 'delete' ? SEMANTIC.danger : entry.type === 'insert' ? SEMANTIC.success : (isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)')
         const prefix      = entry.type === 'delete' ? '-' : entry.type === 'insert' ? '+' : ' '
         return (
           <Box key={i} sx={{ display: 'flex', alignItems: 'flex-start', backgroundColor: bg, borderLeft, pl: 1 }}>
@@ -192,7 +192,7 @@ function ToolbarBtn({ active, onClick, title, children }) {
 }
 
 function DiffToolbar({ activeMode, setActiveMode, editMode, setEditMode, additions, deletions, isDark, onExpand, onClose }) {
-  const borderColor = isDark ? PALETTE.borderDark : PALETTE.borderCream
+  const borderColor = isDark ? PALETTE.borderDark : PALETTE.border
   return (
     <Box sx={{
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -202,8 +202,8 @@ function DiffToolbar({ activeMode, setActiveMode, editMode, setEditMode, additio
       gap: 1, flexWrap: 'wrap', flexShrink: 0,
     }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-        {additions > 0 && <Typography sx={{ fontSize: TYPOGRAPHY.sizes.caption, color: STATUS.success, fontWeight: TYPOGRAPHY.weights.semibold }}>+{additions}</Typography>}
-        {deletions > 0 && <Typography sx={{ fontSize: TYPOGRAPHY.sizes.caption, color: STATUS.error,   fontWeight: TYPOGRAPHY.weights.semibold }}>−{deletions}</Typography>}
+        {additions > 0 && <Typography sx={{ fontSize: TYPOGRAPHY.sizes.caption, color: SEMANTIC.success, fontWeight: TYPOGRAPHY.weights.semibold }}>+{additions}</Typography>}
+        {deletions > 0 && <Typography sx={{ fontSize: TYPOGRAPHY.sizes.caption, color: SEMANTIC.danger,   fontWeight: TYPOGRAPHY.weights.semibold }}>−{deletions}</Typography>}
         {additions === 0 && deletions === 0 && (
           <Typography sx={{ fontSize: TYPOGRAPHY.sizes.caption, color: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)' }}>No changes</Typography>
         )}
@@ -252,7 +252,7 @@ export default function DiffViewer({
     return () => window.removeEventListener('keydown', handler)
   }, [expanded, close])
 
-  const borderColor = isDark ? PALETTE.borderDark : PALETTE.borderCream
+  const borderColor = isDark ? PALETTE.borderDark : PALETTE.border
   const codeBg      = isDark ? PALETTE.sidebarDark : PALETTE.warmSand
 
   const diffBody = (

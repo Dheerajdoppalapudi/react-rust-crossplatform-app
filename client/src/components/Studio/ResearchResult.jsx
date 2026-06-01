@@ -5,6 +5,7 @@ import BlockRenderer   from '../Interactive/BlockRenderer'
 import ResponseToolbar from './ResponseToolbar'
 import { safeHref }    from '../../utils/safeHref'
 import { SEMANTIC }    from '../../theme/tokens.js'
+import { cursorBlink } from '../../theme/animations.js'
 
 // ── Citation chip ─────────────────────────────────────────────────────────────
 
@@ -277,23 +278,26 @@ export default function ResearchResult({
 
   return (
     <Box ref={contentRef}>
-      {/* Synthesis text */}
+      {/* Synthesis text — aria-live so screen readers announce streamed content */}
       {synthesisText && (
-        <Box sx={{
-          mb: hasBlocks ? 2 : 0,
-          pb: hasBlocks ? 2 : 0,
-          borderBottom: hasBlocks
-            ? `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.07)'}`
-            : 'none',
-        }}>
+        <Box
+          aria-live="polite"
+          aria-atomic="false"
+          sx={{
+            mb: hasBlocks ? 2 : 0,
+            pb: hasBlocks ? 2 : 0,
+            borderBottom: hasBlocks
+              ? `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.07)'}`
+              : 'none',
+          }}
+        >
           <CitedMarkdown text={synthesisText} sources={sources} />
           {!synthesisComplete && isLoading && (
             <Box component="span" sx={{
               display: 'inline-block', width: 8, height: 14, ml: 0.5,
               backgroundColor: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.5)',
               borderRadius: '2px',
-              animation: 'blink 1s step-end infinite',
-              '@keyframes blink': { '0%, 100%': { opacity: 1 }, '50%': { opacity: 0 } },
+              animation: `${cursorBlink} 1s step-end infinite`,
             }} />
           )}
         </Box>

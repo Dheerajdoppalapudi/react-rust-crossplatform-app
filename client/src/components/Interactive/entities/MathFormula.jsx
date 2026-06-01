@@ -61,7 +61,7 @@ function FormulaDisplay({ latex, displayMode, fontSize, highlights, isDark }) {
 
 function StepCard({ step, index, displayMode, fontSize, highlights, isDark }) {
   const stepColor   = isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.42)'
-  const borderColor = isDark ? PALETTE.borderDark : PALETTE.borderCream
+  const borderColor = isDark ? PALETTE.borderDark : PALETTE.border
 
   return (
     <Box sx={{
@@ -148,7 +148,7 @@ export default function MathFormula({
     )
   }
 
-  const borderColor      = isDark ? PALETTE.borderDark : PALETTE.borderCream
+  const borderColor      = isDark ? PALETTE.borderDark : PALETTE.border
   const navDisabledColor = isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.18)'
   const navActiveColor   = isDark ? PALETTE.warmSilver : PALETTE.nearBlackText
 

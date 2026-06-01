@@ -165,7 +165,7 @@ function PromptBar({
   const canSend        = prompt.trim() && !isGenerating
   const activeMode     = selectedMode ?? MODES[0]
 
-  const promptBorder = isDark ? PALETTE.dividerDark : PALETTE.borderCream
+  const promptBorder = isDark ? PALETTE.borderDark : PALETTE.border
   const cardBg       = isDark ? PALETTE.darkSurface : PALETTE.ivory
 
   // Stable handlers so Pill + menu items don't re-render on every keystroke

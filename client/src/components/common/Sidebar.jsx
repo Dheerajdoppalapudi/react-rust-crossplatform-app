@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef, useCallback, memo } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import {
   Drawer, List, ListItem, ListItemButton, ListItemIcon, ListItemText,
   Tooltip, Typography, Box, Divider, useTheme, useMediaQuery, InputBase, IconButton,
@@ -21,9 +22,9 @@ import StarIcon                from '@mui/icons-material/Star'
 import DriveFileRenameOutlineIcon from '@mui/icons-material/DriveFileRenameOutline'
 import DeleteOutlineIcon       from '@mui/icons-material/DeleteOutline'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { relativeTime } from '../Studio/constants'
+import { relativeTime } from '../../utils/formatTime'
 import { useAuth } from '../../contexts/AuthContext'
-import { PALETTE, RADIUS } from '../../theme/tokens.js'
+import { PALETTE, RADIUS, SEMANTIC } from '../../theme/tokens.js'
 import { metaText } from '../../theme/styleUtils.js'
 import { TIMINGS } from '../../constants/timings.js'
 
@@ -263,7 +264,7 @@ const ConvItem = memo(({ conv, isActive, onSelect, onRename, onStar, onDelete })
         <MenuItem onClick={handleStar} sx={menuItemSx(isDark, false)}>
           {!!conv.starred
             ? <><StarIcon sx={{ fontSize: 15, color: PALETTE.starGold }} /> Unstar</>
-            : <><StarOutlineIcon sx={{ fontSize: 15 }} /> Star</>
+            : <><StarOutlineIcon sx={{ fontSize: 15, color: 'inherit' }} /> Star</>
           }
         </MenuItem>
         <MenuItem onClick={handleRename} sx={menuItemSx(isDark, false)}>
@@ -281,7 +282,7 @@ const ConvItem = memo(({ conv, isActive, onSelect, onRename, onStar, onDelete })
 function menuItemSx(isDark, danger) {
   return {
     fontSize: 13, gap: 1.25, px: 1.5, py: 0.75, borderRadius: '6px', mx: 0.5,
-    color: danger ? PALETTE.errorRed : (isDark ? PALETTE.warmSilver : PALETTE.nearBlackText),
+    color: danger ? SEMANTIC.danger : (isDark ? PALETTE.warmSilver : PALETTE.nearBlackText),
     '&:hover': {
       bgcolor: danger
         ? (isDark ? 'rgba(239,68,68,0.1)' : 'rgba(239,68,68,0.07)')
@@ -291,13 +292,14 @@ function menuItemSx(isDark, danger) {
 }
 
 // ─── Conversation list skeleton ───────────────────────────────────────────────
-function ConvSkeletons() {
+const SKELETON_WIDTHS = [80, 120, 95, 110, 70]
+function ConvSkeletons({ count = 5 }) {
   return (
     <Box sx={{ px: 1.5, pt: 0.5 }}>
-      {[80, 120, 95, 110, 70].map((w, i) => (
+      {Array.from({ length: count }, (_, i) => (
         <Box key={i} sx={{ py: 0.6, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-          <Skeleton variant="text" width={`${w}%`} height={14} sx={{ borderRadius: '4px' }} />
-          <Skeleton variant="text" width="40%"    height={11} sx={{ borderRadius: '4px' }} />
+          <Skeleton variant="text" width={`${SKELETON_WIDTHS[i % SKELETON_WIDTHS.length]}%`} height={14} sx={{ borderRadius: '4px' }} />
+          <Skeleton variant="text" width="40%" height={11} sx={{ borderRadius: '4px' }} />
         </Box>
       ))}
     </Box>
@@ -325,7 +327,7 @@ function RenameDialog({ conv, onClose, onConfirm }) {
       PaperProps={{
         sx: {
           bgcolor: isDark ? PALETTE.darkSurface : PALETTE.ivory,
-          border: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.borderCream}`,
+          border: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.border}`,
           borderRadius: '14px',
           boxShadow: isDark ? '0 24px 60px rgba(0,0,0,0.6)' : '0 24px 60px rgba(0,0,0,0.15)',
         },
@@ -378,7 +380,7 @@ function SectionLabel({ children }) {
   const isDark = theme.palette.mode === 'dark'
   return (
     <Typography sx={{
-      fontSize: 9.5, fontWeight: 600, letterSpacing: '0.07em',
+      fontSize: 10, fontWeight: 600, letterSpacing: '0.07em',
       color: metaText(isDark),
       px: 2, pt: 1.25, pb: 0.4, textTransform: 'uppercase',
     }}>
@@ -426,6 +428,9 @@ const Sidebar = ({
     debounceTimer.current = setTimeout(() => setDebouncedSearch(val), 150)
   }, [])
 
+  // Clear any pending debounce timer on unmount to prevent state updates on an unmounted component.
+  useEffect(() => () => clearTimeout(debounceTimer.current), [])
+
   const toggleOpen = useCallback(() => setOpen(p => !p), [])
 
   // On mobile the drawer is controlled by parent; on desktop it's self-managed.
@@ -467,6 +472,43 @@ const Sidebar = ({
   const grouped    = useMemo(() => groupConversations(unstarred), [unstarred])
   const resultCount  = filtered.length
   const isSearching  = debouncedSearch.trim().length > 0
+
+  // ── Virtualized list ────────────────────────────────────────────────────────
+  const listScrollRef = useRef(null)
+
+  // Flatten the grouped conversation tree into a single indexed array so the
+  // virtualizer can address every item (headers, rows, divider, load-more) by index.
+  const flatItems = useMemo(() => {
+    const visible = isMobile || open
+    if (!visible || isLoading || conversations.length === 0) return []
+    if (isSearching && resultCount === 0) return []
+    const items = []
+    if (starred.length > 0) {
+      items.push({ type: 'header', label: 'Starred' })
+      starred.forEach((conv) => items.push({ type: 'conv', conv }))
+      if (unstarred.length > 0) items.push({ type: 'divider' })
+    }
+    grouped.forEach(([label, convList]) => {
+      items.push({ type: 'header', label })
+      convList.forEach((conv) => items.push({ type: 'conv', conv }))
+    })
+    if (!isSearching && hasMore) items.push({ type: 'load-more' })
+    return items
+  }, [starred, unstarred, grouped, isSearching, resultCount, hasMore, isLoading, conversations.length, isMobile, open])
+
+  const virtualizer = useVirtualizer({
+    count:           flatItems.length,
+    getScrollElement: () => listScrollRef.current,
+    estimateSize:    (i) => {
+      const item = flatItems[i]
+      if (!item) return 36
+      if (item.type === 'header')    return 28
+      if (item.type === 'divider')   return 8
+      if (item.type === 'load-more') return 44
+      return 36
+    },
+    overscan: 5,
+  })
 
   const convItemProps = (conv) => ({
     conv,
@@ -549,7 +591,7 @@ const Sidebar = ({
         <Box sx={{ flexShrink: 0, pt: 1 }}>
           {(isMobile || open) && (
             <Typography sx={{
-              fontSize: 9.5, fontWeight: 600, color: theme.palette.text.secondary,
+              fontSize: 10, fontWeight: 600, color: theme.palette.text.secondary,
               textTransform: 'uppercase', letterSpacing: '0.8px',
               px: 2, mb: 0.5, opacity: 0.5,
             }}>
@@ -594,7 +636,7 @@ const Sidebar = ({
                   New chat
                 </Typography>
                 {!isMobile && (
-                  <Typography sx={{ fontSize: 9.5, color: theme.palette.text.disabled, opacity: 0.5, letterSpacing: '0.02em', ml: 'auto', mr: 0.5 }}>
+                  <Typography sx={{ fontSize: 10, color: theme.palette.text.disabled, opacity: 0.5, letterSpacing: '0.02em', ml: 'auto', mr: 0.5 }}>
                     {newChatShortcut}
                   </Typography>
                 )}
@@ -612,7 +654,7 @@ const Sidebar = ({
             <Box sx={{ flexShrink: 0, mb: 0.5 }}>
               <Box sx={{ px: 1.75, mb: 0.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Typography sx={{
-                  fontSize: 9.5, fontWeight: 600, color: theme.palette.text.secondary,
+                  fontSize: 10, fontWeight: 600, color: theme.palette.text.secondary,
                   textTransform: 'uppercase', letterSpacing: '0.8px', opacity: 0.5,
                 }}>
                   Your Chats
@@ -649,7 +691,7 @@ const Sidebar = ({
                   }}
                 />
                 {!search && !isMobile && (
-                  <Typography sx={{ fontSize: 9.5, color: theme.palette.text.disabled, opacity: 0.45, flexShrink: 0, letterSpacing: '0.02em' }}>
+                  <Typography sx={{ fontSize: 10, color: theme.palette.text.disabled, opacity: 0.45, flexShrink: 0, letterSpacing: '0.02em' }}>
                     {searchShortcut}
                   </Typography>
                 )}
@@ -674,73 +716,68 @@ const Sidebar = ({
             </Tooltip>
           )}
 
-          {/* Scrollable list */}
-          <Box sx={{
-            flex: 1, overflowY: 'auto', overflowX: 'hidden', pb: 1,
-            '&::-webkit-scrollbar': { width: 3 },
-            '&::-webkit-scrollbar-thumb': { backgroundColor: theme.palette.divider, borderRadius: 2 },
-          }}>
+          {/* Scrollable list — virtualised so 500+ conversations stay smooth */}
+          <Box
+            ref={listScrollRef}
+            sx={{
+              flex: 1, overflowY: 'auto', overflowX: 'hidden', pb: 1,
+              '&::-webkit-scrollbar': { width: 3 },
+              '&::-webkit-scrollbar-thumb': { backgroundColor: theme.palette.divider, borderRadius: 2 },
+            }}
+          >
+            {/* Non-virtualised fallback states */}
             {(isMobile || open) && isLoading && <ConvSkeletons />}
 
             {(isMobile || open) && !isLoading && conversations.length === 0 && (
-              <Typography sx={{
-                fontSize: 12, color: theme.palette.text.secondary,
-                textAlign: 'center', pt: 3, opacity: 0.45,
-              }}>
+              <Typography sx={{ fontSize: 12, color: theme.palette.text.secondary, textAlign: 'center', pt: 3, opacity: 0.45 }}>
                 No chats yet — start one above!
               </Typography>
             )}
 
             {(isMobile || open) && !isLoading && isSearching && resultCount === 0 && (
-              <Typography sx={{
-                fontSize: 12, color: theme.palette.text.secondary,
-                textAlign: 'center', pt: 2, opacity: 0.45, px: 2,
-              }}>
+              <Typography sx={{ fontSize: 12, color: theme.palette.text.secondary, textAlign: 'center', pt: 2, opacity: 0.45, px: 2 }}>
                 No chats match "{search}"
               </Typography>
             )}
 
-            {/* ── Starred section ─────────────────────────────────────────── */}
-            {(isMobile || open) && !isLoading && starred.length > 0 && (
-              <Box>
-                <SectionLabel>Starred</SectionLabel>
-                {starred.map((conv) => (
-                  <ConvItem key={conv.id} {...convItemProps(conv)} />
-                ))}
-                {unstarred.length > 0 && (
-                  <Divider sx={{ mx: 1.5, my: 0.75, borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }} />
-                )}
-              </Box>
-            )}
-
-            {/* ── Time-grouped chats ──────────────────────────────────────── */}
-            {(isMobile || open) && !isLoading && grouped.map(([label, items]) => (
-              <Box key={label}>
-                <SectionLabel>{label}</SectionLabel>
-                {items.map((conv) => (
-                  <ConvItem key={conv.id} {...convItemProps(conv)} />
-                ))}
-              </Box>
-            ))}
-
-            {/* ── Load more button ─────────────────────────────────────────── */}
-            {(isMobile || open) && !isLoading && !isSearching && hasMore && (
-              <Box sx={{ px: 1.5, pt: 0.5, pb: 1 }}>
-                <Button
-                  fullWidth
-                  size="small"
-                  variant="text"
-                  disabled={isLoadingMore}
-                  onClick={onLoadMore}
-                  sx={{
-                    fontSize: 11.5, fontWeight: 400, textTransform: 'none',
-                    color: theme.palette.text.disabled, borderRadius: `${RADIUS.ui}px`,
-                    py: 0.5,
-                    '&:hover': { color: theme.palette.text.secondary },
-                  }}
-                >
-                  {isLoadingMore ? 'Loading…' : 'Load more'}
-                </Button>
+            {/* Virtualised conversation list */}
+            {flatItems.length > 0 && (
+              <Box style={{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }}>
+                {virtualizer.getVirtualItems().map((vItem) => {
+                  const item = flatItems[vItem.index]
+                  if (!item) return null
+                  return (
+                    <Box
+                      key={vItem.key}
+                      style={{
+                        position: 'absolute', top: 0, left: 0, width: '100%',
+                        height: `${vItem.size}px`,
+                        transform: `translateY(${vItem.start}px)`,
+                      }}
+                    >
+                      {item.type === 'header' && <SectionLabel>{item.label}</SectionLabel>}
+                      {item.type === 'conv'   && <ConvItem {...convItemProps(item.conv)} />}
+                      {item.type === 'divider' && (
+                        <Divider sx={{ mx: 1.5, my: 0.75, borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }} />
+                      )}
+                      {item.type === 'load-more' && (
+                        <Box sx={{ px: 1.5, pt: 0.5, pb: 1 }}>
+                          <Button
+                            fullWidth size="small" variant="text"
+                            disabled={isLoadingMore} onClick={onLoadMore}
+                            sx={{
+                              fontSize: 11.5, fontWeight: 400, textTransform: 'none',
+                              color: theme.palette.text.disabled, borderRadius: `${RADIUS.ui}px`, py: 0.5,
+                              '&:hover': { color: theme.palette.text.secondary },
+                            }}
+                          >
+                            {isLoadingMore ? 'Loading…' : 'Load more'}
+                          </Button>
+                        </Box>
+                      )}
+                    </Box>
+                  )
+                })}
               </Box>
             )}
           </Box>

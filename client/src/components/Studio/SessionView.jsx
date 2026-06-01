@@ -13,6 +13,7 @@ import NotesPanel                  from './NotesPanel'
 import { getFrameType }            from './constants'
 import { useMediaUrl }             from '../../hooks/useMediaUrl'
 import { PALETTE }                 from '../../theme/tokens.js'
+import { slideShimmer }            from '../../theme/animations.js'
 
 function NavButton({ onClick, disabled, 'aria-label': ariaLabel, children }) {
   return (
@@ -38,6 +39,8 @@ function FrameStrip({ sessionId, captions, images, activeFrame, onFrameChange, o
   const theme       = useTheme()
   const isDark      = theme.palette.mode === 'dark'
   const stripRef    = useRef(null)
+  // Single token fetch shared across all thumbnails — prevents N intervals for N frames.
+  const { getFrameUrl } = useMediaUrl(sessionId)
   const [canScrollLeft,  setCanScrollLeft]  = useState(false)
   const [canScrollRight, setCanScrollRight] = useState(false)
 
@@ -104,8 +107,8 @@ function FrameStrip({ sessionId, captions, images, activeFrame, onFrameChange, o
       >
         {captions.map((caption, i) => (
           <FrameThumbnail
-            key={i}
-            sessionId={sessionId}
+            key={`${sessionId}-${i}`}
+            getFrameUrl={getFrameUrl}
             frameIndex={i}
             caption={caption}
             type={getFrameType(images[i])}
@@ -142,8 +145,8 @@ function SlideDialog({ open, frameIndex, captions, images, sessionId, onClose, o
   // Reset shimmer whenever the frame changes
   useEffect(() => { setSlideLoading(true) }, [frameIndex])
 
-  const goPrev = () => onFrameChange((f) => Math.max(f - 1, 0))
-  const goNext = () => onFrameChange((f) => Math.min(f + 1, total - 1))
+  const goPrev = useCallback(() => onFrameChange((f) => Math.max(f - 1, 0)), [onFrameChange])
+  const goNext = useCallback(() => onFrameChange((f) => Math.min(f + 1, total - 1)), [onFrameChange, total])
 
   useEffect(() => {
     if (!open) return
@@ -153,7 +156,7 @@ function SlideDialog({ open, frameIndex, captions, images, sessionId, onClose, o
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [open, frameIndex, total]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, goPrev, goNext])
 
   return (
     <Dialog
@@ -213,11 +216,7 @@ function SlideDialog({ open, frameIndex, captions, images, sessionId, onClose, o
                   ? 'linear-gradient(90deg,transparent 20%,rgba(255,255,255,0.07) 50%,transparent 80%)'
                   : 'linear-gradient(90deg,transparent 20%,rgba(255,255,255,0.65) 50%,transparent 80%)',
                 backgroundSize: '200% 100%',
-                animation: 'slideShimmer 1.4s ease-in-out infinite',
-              },
-              '@keyframes slideShimmer': {
-                '0%':   { backgroundPosition: '-200% 0' },
-                '100%': { backgroundPosition:  '200% 0' },
+                animation: `${slideShimmer} 1.4s ease-in-out infinite`,
               },
             }} />
           )}

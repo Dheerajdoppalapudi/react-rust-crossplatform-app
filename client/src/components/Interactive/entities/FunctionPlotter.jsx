@@ -147,7 +147,7 @@ export default function FunctionPlotter({
     )
   }
 
-  const borderColor = isDark ? PALETTE.borderDark : PALETTE.borderCream
+  const borderColor = isDark ? PALETTE.borderDark : PALETTE.border
 
   return (
     <Box>

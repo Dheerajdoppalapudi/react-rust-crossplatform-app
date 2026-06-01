@@ -58,7 +58,7 @@ function buildNodes(rawNodes, highlightedNodeIds, nodeColors, isDark) {
           ? `2px solid ${isDark ? 'rgba(255,255,255,0.40)' : 'rgba(0,0,0,0.35)'}`
           : customColor
           ? `1.5px solid ${customColor}`
-          : `1px solid ${isDark ? PALETTE.borderDark : PALETTE.borderCream}`,
+          : `1px solid ${isDark ? PALETTE.borderDark : PALETTE.border}`,
         color: isDark ? PALETTE.warmSilver : PALETTE.nearBlackText,
         transition: 'all 0.25s ease',
       },
@@ -146,7 +146,7 @@ function GraphInner({ rawNodes, rawEdges, layout, directed, height, showMinimap,
         position: 'relative',
         borderRadius: isFluid ? 0 : `${RADIUS.lg}px`,
         overflow: 'hidden',
-        border: isFluid ? 'none' : `1px solid ${isDark ? PALETTE.borderDark : PALETTE.borderCream}`,
+        border: isFluid ? 'none' : `1px solid ${isDark ? PALETTE.borderDark : PALETTE.border}`,
       }}>
         <ReactFlow
           nodes={displayNodes}
@@ -173,7 +173,7 @@ function GraphInner({ rawNodes, rawEdges, layout, directed, height, showMinimap,
           <Box sx={{
             position: 'absolute', bottom: 12, left: '50%', transform: 'translateX(-50%)',
             backgroundColor: isDark ? 'rgba(13,17,23,0.95)' : 'rgba(255,255,255,0.97)',
-            border: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.borderCream}`,
+            border: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.border}`,
             borderRadius: `${RADIUS.md}px`,
             px: 1.5, py: 0.75, maxWidth: 320, zIndex: 10,
             boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
@@ -273,7 +273,7 @@ export default function GraphCanvas({
           flexShrink: 0,
           display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
           px: 1.5, py: 0.75,
-          borderBottom: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.borderCream}`,
+          borderBottom: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.border}`,
         }}>
           <Tooltip title="Close">
             <IconButton size="small" onClick={handleCollapse}

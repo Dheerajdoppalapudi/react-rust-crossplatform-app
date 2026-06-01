@@ -16,7 +16,7 @@ const Settings = () => {
       <Typography variant="body1" color="text.secondary" sx={{ mb: 3, maxWidth: 600 }}>
         Manage your account preferences and configurations.
       </Typography>
-      <Paper elevation={0} sx={{ borderRadius: 2, border: `1px solid ${PALETTE.borderWarm}` }}>
+      <Paper elevation={0} sx={{ borderRadius: 2, border: `1px solid ${PALETTE.border}` }}>
         {settingsItems.map((item, index) => (
           <Box key={item.label}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 3 }}>

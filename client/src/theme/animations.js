@@ -18,3 +18,17 @@ export const zenithSpin = keyframes`
   66.67%  { transform: rotate(360deg); }
   100%    { transform: rotate(360deg); }
 `
+// Sweeps a light band across a skeleton/shimmer element (background-position based)
+export const thumbShimmer = keyframes`
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+`
+// Same sweep — named separately so imports are self-documenting at call sites
+export const slideShimmer = thumbShimmer
+// Fade-in-up for staggered list items (e.g. follow-up suggestions)
+export const chipFadeIn = keyframes`
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+`
+// Cursor blink for streaming text — step-end keeps it sharp (not cross-fade)
+export const cursorBlink = keyframes`0%, 100% { opacity: 1; } 50% { opacity: 0; }`

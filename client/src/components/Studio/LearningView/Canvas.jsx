@@ -77,19 +77,19 @@ export default function Canvas({ turns, onNodeClick, onAsk, defaultModel, defaul
       height: '100%',
       '& .react-flow__controls': {
         boxShadow: 'none',
-        border: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.borderWarm}`,
+        border: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.border}`,
         borderRadius: '10px', overflow: 'hidden',
         bgcolor: isDark ? PALETTE.darkSurface : PALETTE.ivory,
       },
       '& .react-flow__controls-button': {
         bgcolor:     isDark ? PALETTE.darkSurface : PALETTE.ivory,
         color:       isDark ? 'rgba(255,255,255,0.7)' : PALETTE.charcoalWarm,
-        borderColor: isDark ? PALETTE.borderDark : PALETTE.borderWarm,
+        borderColor: isDark ? PALETTE.borderDark : PALETTE.border,
         '&:hover': { bgcolor: isDark ? PALETTE.darkSubsurface : PALETTE.warmSand },
       },
       '& .react-flow__minimap': {
         borderRadius: '10px',
-        border: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.borderWarm}`,
+        border: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.border}`,
         overflow: 'hidden',
       },
       '& .react-flow__attribution': { display: 'none' },
@@ -114,7 +114,7 @@ export default function Canvas({ turns, onNodeClick, onAsk, defaultModel, defaul
           color={isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.18)'} />
         <Controls />
         <MiniMap
-          nodeColor={isDark ? PALETTE.dividerDark : PALETTE.borderWarm}
+          nodeColor={isDark ? PALETTE.borderDark : PALETTE.border}
           maskColor={isDark ? 'rgba(0,0,0,0.4)' : 'rgba(245,244,237,0.7)'}
           style={{ background: isDark ? PALETTE.darkSurface : PALETTE.ivory }}
         />

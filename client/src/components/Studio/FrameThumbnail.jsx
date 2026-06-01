@@ -2,22 +2,26 @@ import { useState, memo } from 'react'
 import { Box, Typography, useTheme } from '@mui/material'
 import ZenithLogo from '../common/ZenithLogo'
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline'
-import { useMediaUrl } from '../../hooks/useMediaUrl'
 import { PALETTE } from '../../theme/tokens.js'
 import { neutralBorderDefault, neutralBorderStrong, neutralBorderHover } from '../../theme/styleUtils.js'
+import { thumbShimmer } from '../../theme/animations.js'
 
-// CRIT-2: FrameThumbnail receives getFrameUrl from useMediaUrl (called in the parent
-// FrameStrip or SessionView) so all thumbnails in a session share one token fetch.
-// If sessionId + frameIndex are known here, we call useMediaUrl locally.
-
-function FrameThumbnail({ sessionId, frameIndex, caption, type, isActive, onClick }) {
+// getFrameUrl is provided by the parent (FrameStrip or SessionView) so that all
+// thumbnails in one session share a single useMediaUrl instance and one refresh interval.
+function FrameThumbnail({
+  getFrameUrl,
+  frameIndex,
+  caption,
+  type,
+  isActive,
+  onClick,
+  role,
+  'aria-selected': ariaSelected,
+}) {
   const theme       = useTheme()
   const isDark      = theme.palette.mode === 'dark'
   const [imgError,   setImgError]   = useState(false)
   const [imgLoading, setImgLoading] = useState(true)
-
-  // CRIT-2: use media token URL instead of embedding the main access JWT.
-  const { getFrameUrl } = useMediaUrl(sessionId)
 
   const frameUrl = getFrameUrl(frameIndex)
   // Show placeholder when: not an image type, token not loaded yet (empty URL), or img load failed.
@@ -26,6 +30,8 @@ function FrameThumbnail({ sessionId, frameIndex, caption, type, isActive, onClic
   return (
     <Box
       onClick={onClick}
+      role={role}
+      aria-selected={ariaSelected}
       sx={{
         width: 130, height: 78,
         flexShrink: 0, borderRadius: '8px', overflow: 'hidden',
@@ -51,11 +57,7 @@ function FrameThumbnail({ sessionId, frameIndex, caption, type, isActive, onClic
               ? 'linear-gradient(90deg,transparent 20%,rgba(255,255,255,0.08) 50%,transparent 80%)'
               : 'linear-gradient(90deg,transparent 20%,rgba(255,255,255,0.7) 50%,transparent 80%)',
             backgroundSize: '200% 100%',
-            animation: 'thumbShimmer 1.4s ease-in-out infinite',
-          },
-          '@keyframes thumbShimmer': {
-            '0%':   { backgroundPosition: '-200% 0' },
-            '100%': { backgroundPosition:  '200% 0' },
+            animation: `${thumbShimmer} 1.4s ease-in-out infinite`,
           },
         }} />
       )}
@@ -82,7 +84,7 @@ function FrameThumbnail({ sessionId, frameIndex, caption, type, isActive, onClic
             : <ZenithLogo sx={{ fontSize: 18, color: theme.palette.text.secondary, opacity: 0.35 }} />
           }
           <Typography sx={{
-            fontSize: 9, color: theme.palette.text.secondary, opacity: 0.7,
+            fontSize: 10, color: theme.palette.text.secondary, opacity: 0.7,
             textAlign: 'center', lineHeight: 1.3, px: 0.5,
             overflow: 'hidden', display: '-webkit-box',
             WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
@@ -99,7 +101,7 @@ function FrameThumbnail({ sessionId, frameIndex, caption, type, isActive, onClic
         backgroundColor: 'rgba(0,0,0,0.6)',
         display: 'flex', alignItems: 'center', justifyContent: 'center', px: 0.5,
       }}>
-        <Typography sx={{ fontSize: 8, color: '#fff', fontWeight: 700, lineHeight: 1 }}>
+        <Typography sx={{ fontSize: 9, color: '#fff', fontWeight: 700, lineHeight: 1 }}>
           {frameIndex + 1}
         </Typography>
       </Box>
@@ -118,10 +120,12 @@ function FrameThumbnail({ sessionId, frameIndex, caption, type, isActive, onClic
 }
 
 export default memo(FrameThumbnail, (prev, next) =>
-  prev.sessionId   === next.sessionId   &&
-  prev.frameIndex  === next.frameIndex  &&
-  prev.caption     === next.caption     &&
-  prev.type        === next.type        &&
-  prev.isActive    === next.isActive    &&
-  prev.onClick     === next.onClick
+  prev.getFrameUrl          === next.getFrameUrl          &&
+  prev.frameIndex           === next.frameIndex           &&
+  prev.caption              === next.caption              &&
+  prev.type                 === next.type                 &&
+  prev.isActive             === next.isActive             &&
+  prev.onClick              === next.onClick              &&
+  prev.role                 === next.role                 &&
+  prev['aria-selected']     === next['aria-selected']
 )

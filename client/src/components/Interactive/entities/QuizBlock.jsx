@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { Box, Typography, LinearProgress, useTheme } from '@mui/material'
-import { TYPOGRAPHY, RADIUS, PALETTE, STATUS } from '../../../theme/tokens'
+import { TYPOGRAPHY, RADIUS, PALETTE, SEMANTIC } from '../../../theme/tokens'
 import EntityCaption from './EntityCaption'
 import { useExpanded } from '../BlockWrapper'
 
@@ -30,7 +30,7 @@ function QuizQuestion({ q, index, total, onAnswer, isDark }) {
     }
     if (!revealed) return {
       ...base,
-      borderColor: isDark ? PALETTE.borderDark : PALETTE.borderCream,
+      borderColor: isDark ? PALETTE.borderDark : PALETTE.border,
       backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
       '&:hover': {
         borderColor: isDark ? 'rgba(255,255,255,0.30)' : 'rgba(0,0,0,0.22)',
@@ -38,16 +38,16 @@ function QuizQuestion({ q, index, total, onAnswer, isDark }) {
       },
     }
     if (i === q.correctIndex) return {
-      ...base, borderColor: STATUS.success,
+      ...base, borderColor: SEMANTIC.success,
       backgroundColor: isDark ? 'rgba(46,160,67,0.12)' : 'rgba(46,160,67,0.08)',
     }
     if (i === selected && i !== q.correctIndex) return {
-      ...base, borderColor: STATUS.error,
+      ...base, borderColor: SEMANTIC.danger,
       backgroundColor: isDark ? 'rgba(248,81,73,0.12)' : 'rgba(248,81,73,0.08)',
     }
     return {
       ...base, opacity: 0.45,
-      borderColor: isDark ? PALETTE.borderDark : PALETTE.borderCream,
+      borderColor: isDark ? PALETTE.borderDark : PALETTE.border,
       backgroundColor: 'transparent',
     }
   }
@@ -96,10 +96,10 @@ function QuizQuestion({ q, index, total, onAnswer, isDark }) {
         {displayOptions.map((opt, i) => (
           <Box key={i} component="button" type="button" disabled={revealed} onClick={() => handleSelect(i)} sx={{ ...optionStyle(i), fontFamily: 'inherit', textAlign: 'left', width: '100%' }}>
             {revealed && i === q.correctIndex && (
-              <Typography component="span" sx={{ color: STATUS.success, fontWeight: 700, flexShrink: 0, lineHeight: 1 }}>✓</Typography>
+              <Typography component="span" sx={{ color: SEMANTIC.success, fontWeight: 700, flexShrink: 0, lineHeight: 1 }}>✓</Typography>
             )}
             {revealed && i === selected && i !== q.correctIndex && (
-              <Typography component="span" sx={{ color: STATUS.error, fontWeight: 700, flexShrink: 0, lineHeight: 1 }}>✗</Typography>
+              <Typography component="span" sx={{ color: SEMANTIC.danger, fontWeight: 700, flexShrink: 0, lineHeight: 1 }}>✗</Typography>
             )}
             {(!revealed || (i !== q.correctIndex && i !== selected)) && (
               <Typography component="span" sx={{
@@ -127,7 +127,7 @@ function QuizQuestion({ q, index, total, onAnswer, isDark }) {
         <Box sx={{
           mt: 2, p: 1.5, borderRadius: `${RADIUS.md}px`,
           backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
-          borderLeft: `3px solid ${selected === q.correctIndex ? STATUS.success : STATUS.error}`,
+          borderLeft: `3px solid ${selected === q.correctIndex ? SEMANTIC.success : SEMANTIC.danger}`,
         }}>
           <Typography sx={{
             fontSize: TYPOGRAPHY.sizes.caption,
@@ -146,7 +146,7 @@ function ScoreSummary({ answers, questions, onRetry, isDark }) {
   const correct = answers.filter(Boolean).length
   const total   = questions.length
   const pct     = Math.round((correct / total) * 100)
-  const color   = pct >= 80 ? STATUS.success : pct >= 50 ? STATUS.warning : STATUS.error
+  const color   = pct >= 80 ? SEMANTIC.success : pct >= 50 ? SEMANTIC.warning : SEMANTIC.danger
 
   return (
     <Box sx={{ textAlign: 'center', py: 1 }}>
@@ -165,7 +165,7 @@ function ScoreSummary({ answers, questions, onRetry, isDark }) {
         {questions.map((q, i) => (
           <Box key={i} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
             <Typography component="span" sx={{
-              fontSize: 13, color: answers[i] ? STATUS.success : STATUS.error,
+              fontSize: 13, color: answers[i] ? SEMANTIC.success : SEMANTIC.danger,
               flexShrink: 0, mt: '1px', lineHeight: 1,
             }}>
               {answers[i] ? '✓' : '✗'}
@@ -251,7 +251,7 @@ export default function QuizBlock({
   return (
     <Box>
       <Box sx={{
-        border: isExpanded ? 'none' : `1px solid ${isDark ? PALETTE.borderDark : PALETTE.borderCream}`,
+        border: isExpanded ? 'none' : `1px solid ${isDark ? PALETTE.borderDark : PALETTE.border}`,
         borderRadius: isExpanded ? 0 : `${RADIUS.lg}px`,
         p: isExpanded ? 3 : 2.5,
         backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.01)',

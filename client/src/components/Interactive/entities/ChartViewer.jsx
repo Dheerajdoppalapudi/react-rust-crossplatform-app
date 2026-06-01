@@ -14,12 +14,12 @@ import {
   ComposedChart,
   XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, Legend, ReferenceLine, ReferenceDot,
 } from 'recharts'
-import { TYPOGRAPHY, RADIUS, PALETTE, BRAND } from '../../../theme/tokens'
+import { TYPOGRAPHY, RADIUS, PALETTE, BRAND, SEMANTIC } from '../../../theme/tokens'
 import EntityCaption from './EntityCaption'
 
 const DEFAULT_COLORS = [
   BRAND.primary, BRAND.accent,
-  PALETTE.warningOrange, PALETTE.successGreen,
+  SEMANTIC.warning, SEMANTIC.success,
   '#e879f9', '#38bdf8', '#fb7185', '#a3e635',
 ]
 
@@ -33,7 +33,7 @@ function buildTooltipStyle(isDark) {
   return {
     contentStyle: {
       backgroundColor: isDark ? PALETTE.darkSubsurface : '#ffffff',
-      border: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.borderCream}`,
+      border: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.border}`,
       borderRadius: RADIUS.md,
       fontSize: TYPOGRAPHY.sizes.caption,
       color: isDark ? PALETTE.warmSilver : PALETTE.nearBlackText,
@@ -228,9 +228,9 @@ export default function ChartViewer({
       key={`ann-${i}`}
       x={a.x} y={a.y}
       r={5}
-      fill={a.color ?? PALETTE.warningOrange}
+      fill={a.color ?? SEMANTIC.warning}
       stroke="none"
-      label={{ value: a.label ?? '', position: 'top', fontSize: 11, fill: a.color ?? PALETTE.warningOrange }}
+      label={{ value: a.label ?? '', position: 'top', fontSize: 11, fill: a.color ?? SEMANTIC.warning }}
     />
   ))
 
@@ -256,9 +256,9 @@ export default function ChartViewer({
           key={`rl-${rl.axis ?? 'y'}-${rl.value ?? i}`}
           x={rl.axis === 'x' ? rl.value : undefined}
           y={rl.axis !== 'x' ? rl.value : undefined}
-          stroke={rl.color ?? PALETTE.successGreen}
+          stroke={rl.color ?? SEMANTIC.success}
           strokeDasharray="4 3"
-          label={{ value: rl.label ?? '', fill: rl.color ?? PALETTE.successGreen, fontSize: TYPOGRAPHY.sizes.caption }}
+          label={{ value: rl.label ?? '', fill: rl.color ?? SEMANTIC.success, fontSize: TYPOGRAPHY.sizes.caption }}
         />
       ))}
       {annotationDots}

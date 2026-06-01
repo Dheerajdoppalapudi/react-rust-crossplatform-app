@@ -153,7 +153,7 @@ function DownloadDropdown({ onHtml, onPptx, pptxLoading, iconOnly = false, isDar
           sx: {
             mt: 0.75, minWidth: 190,
             backgroundColor: isDark ? PALETTE.darkSubsurface : PALETTE.ivory,
-            border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : PALETTE.borderCream}`,
+            border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : PALETTE.border}`,
             boxShadow: '0 12px 40px rgba(0,0,0,0.25)',
             borderRadius: '10px',
             overflow: 'hidden',
@@ -194,7 +194,7 @@ function DownloadDropdown({ onHtml, onPptx, pptxLoading, iconOnly = false, isDar
 
 function InlineToolbar({ onToggleFullscreen, onHtml, onPptx, pptxLoading, title, isDark }) {
   const toolbarBg     = isDark ? PALETTE.darkSurface     : PALETTE.warmSand
-  const toolbarBorder = isDark ? 'rgba(255,255,255,0.08)' : PALETTE.borderCream
+  const toolbarBorder = isDark ? 'rgba(255,255,255,0.08)' : PALETTE.border
   return (
     <Box sx={{
       display: 'flex', alignItems: 'center',
@@ -242,7 +242,7 @@ function InlineToolbar({ onToggleFullscreen, onHtml, onPptx, pptxLoading, title,
 
 function FullscreenToolbar({ tab, onTabChange, onToggleFullscreen, onHtml, onPptx, pptxLoading, isDark }) {
   const toolbarBg     = isDark ? PALETTE.darkSurface     : PALETTE.warmSand
-  const toolbarBorder = isDark ? 'rgba(255,255,255,0.07)' : PALETTE.borderCream
+  const toolbarBorder = isDark ? 'rgba(255,255,255,0.07)' : PALETTE.border
   return (
     <Box sx={{
       display: 'flex', alignItems: 'center',
@@ -313,7 +313,7 @@ function SlideIframe({ html, height = '100%' }) {
 function CodePane({ value, editable, onChange, onReset, originalHtml, isDark }) {
   const isDirty   = editable && value !== originalHtml
   const paneBg    = isDark ? PALETTE.sidebarDark : PALETTE.parchment
-  const paneBorder= isDark ? 'rgba(255,255,255,0.06)' : PALETTE.borderCream
+  const paneBorder= isDark ? 'rgba(255,255,255,0.06)' : PALETTE.border
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%' }}>
       {editable && (
@@ -405,7 +405,7 @@ export default function SlideDeck({ entityId, html, title, spec, caption }) {
     }
   }, [activeHtml, presentationTitle, pptxLoading])
 
-  const borderColor = isDark ? PALETTE.borderDark : PALETTE.borderCream
+  const borderColor = isDark ? PALETTE.borderDark : PALETTE.border
   const cardBg      = isDark ? PALETTE.darkSurface : PALETTE.ivory
   const dlProps     = { onHtml: handleDownloadHtml, onPptx: handleDownloadPptx, pptxLoading, isDark }
 

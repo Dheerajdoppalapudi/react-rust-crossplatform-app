@@ -93,7 +93,7 @@ export default function MapViewer({
         height,
         borderRadius: `${RADIUS.lg}px`,
         overflow: 'hidden',
-        border: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.borderCream}`,
+        border: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.border}`,
         '& .leaflet-container': { height: '100%', width: '100%' },
         '& .leaflet-control-attribution': { fontSize: '9px', opacity: 0.6 },
       }}>
@@ -156,7 +156,7 @@ export default function MapViewer({
         <Box sx={{
           mt: 1, px: 2, py: 1.25,
           borderRadius: `${RADIUS.md}px`,
-          border: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.borderCream}`,
+          border: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.border}`,
           backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
           borderLeft: `3px solid ${activeMarker.color ?? '#4B72FF'}`,
         }}>

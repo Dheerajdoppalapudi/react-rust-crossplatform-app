@@ -104,13 +104,9 @@ export const INITIAL_SUGGESTIONS = [
 ]
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
-export function relativeTime(isoStr) {
-  const diff = Math.floor((Date.now() - new Date(isoStr).getTime()) / 1000)
-  if (diff < 60)    return 'Just now'
-  if (diff < 3600)  return `${Math.floor(diff / 60)}m ago`
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
-  return `${Math.floor(diff / 86400)}d ago`
-}
+// relativeTime lives in src/utils/formatTime.js — re-exported here for any remaining
+// call sites. Import directly from utils/formatTime for new code.
+export { relativeTime } from '../../utils/formatTime'
 
 export function getFrameType(imagePath) {
   if (!imagePath) return 'placeholder'

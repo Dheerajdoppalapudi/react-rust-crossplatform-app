@@ -6,7 +6,7 @@ import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
 import ShuffleIcon      from '@mui/icons-material/Shuffle'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useSceneStore } from '../useSceneStore'
-import { TYPOGRAPHY, RADIUS, PALETTE, STATUS, SEMANTIC } from '../../../theme/tokens'
+import { TYPOGRAPHY, RADIUS, PALETTE, SEMANTIC } from '../../../theme/tokens'
 import EntityCaption from './EntityCaption'
 
 const MotionDiv = motion.div
@@ -21,9 +21,9 @@ function shuffleArray(arr) {
 }
 
 const CONFIDENCE = [
-  { key: 'again', label: 'Again', color: STATUS.error,   bg: 'rgba(248,81,73,0.12)' },
-  { key: 'hard',  label: 'Hard',  color: STATUS.warning, bg: 'rgba(240,136,62,0.12)' },
-  { key: 'good',  label: 'Good',  color: STATUS.success, bg: 'rgba(46,160,67,0.12)' },
+  { key: 'again', label: 'Again', color: SEMANTIC.danger,   bg: 'rgba(248,81,73,0.12)' },
+  { key: 'hard',  label: 'Hard',  color: SEMANTIC.warning, bg: 'rgba(240,136,62,0.12)' },
+  { key: 'good',  label: 'Good',  color: SEMANTIC.success, bg: 'rgba(46,160,67,0.12)' },
   { key: 'easy',  label: 'Easy',  color: SEMANTIC.success, bg: 'rgba(46,160,67,0.12)' },
 ]
 
@@ -85,7 +85,7 @@ export default function FlashcardDeck({
   return (
     <Box>
       <Box sx={{
-        border: isExpanded ? 'none' : `1px solid ${isDark ? PALETTE.borderDark : PALETTE.borderCream}`,
+        border: isExpanded ? 'none' : `1px solid ${isDark ? PALETTE.borderDark : PALETTE.border}`,
         borderRadius: isExpanded ? 0 : `${RADIUS.lg}px`,
         p: isExpanded ? 3 : 2,
         backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.01)',

@@ -75,18 +75,6 @@ function AppInner() {
   const isNoPadding  = NO_PADDING_PAGES.includes(location.pathname)
   const isLoginPage  = location.pathname === ROUTES.LOGIN || location.pathname === ROUTES.REGISTER
 
-  // Update document title on navigation so screen readers announce the new page.
-  useEffect(() => {
-    const PAGE_TITLES = {
-      [ROUTES.HOME]:     'Home',
-      [ROUTES.LOGIN]:    'Sign in',
-      [ROUTES.REGISTER]: 'Create account',
-      [ROUTES.SETTINGS]: 'Settings',
-    }
-    const base = location.pathname.startsWith(ROUTES.STUDIO) ? 'Studio' : (PAGE_TITLES[location.pathname] ?? 'Page')
-    document.title = `${base} — Zenith`
-  }, [location.pathname])
-
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
   const [mobileHeaderSlot, setMobileHeaderSlot] = useState(null)
   const slotCtx = useMemo(() => ({ setSlot: setMobileHeaderSlot }), [])
@@ -103,6 +91,28 @@ function AppInner() {
   // ChatGPT (/c/:id) and Claude (/chat/:id) handle conversation routing.
   const studioMatch  = useMatch(ROUTES.STUDIO_CONV)
   const activeConvId = studioMatch?.params?.convId ?? null
+
+  // Update document title on navigation and conversation switch.
+  // Placed here so both activeConvId and conversations are already declared.
+  useEffect(() => {
+    const PAGE_TITLES = {
+      [ROUTES.HOME]:     'Home',
+      [ROUTES.LOGIN]:    'Sign in',
+      [ROUTES.REGISTER]: 'Create account',
+      [ROUTES.SETTINGS]: 'Settings',
+    }
+    if (location.pathname.startsWith(ROUTES.STUDIO)) {
+      if (activeConvId) {
+        const conv = conversations.find((c) => c.id === activeConvId)
+        document.title = conv?.title ? `${conv.title} — Zenith` : 'Zenith'
+      } else {
+        document.title = 'Zenith'
+      }
+      return
+    }
+    const label = PAGE_TITLES[location.pathname] ?? 'Page'
+    document.title = `${label} — Zenith`
+  }, [location.pathname, activeConvId, conversations])
 
   // Passed to Studio as onActiveConvIdChange. Studio calls this when a new
   // conversation is created so the URL updates to /studio/:newId.
@@ -225,6 +235,7 @@ function AppInner() {
           )}
           <Box
             component="main"
+            id="main-content"
             sx={{
               flex: 1,
               p: (isFullHeight || isNoPadding || isLoginPage) ? 0 : 3,

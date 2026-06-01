@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
-import { Box, Typography, Divider, useTheme, useMediaQuery, CircularProgress } from '@mui/material'
+import { Box, Typography, Divider, useTheme, useMediaQuery, CircularProgress, ButtonBase } from '@mui/material'
 import { useMobileHeaderSlot } from '../App'
 import StudioToolbar from '../components/Studio/StudioToolbar'
+import { chipFadeIn } from '../theme/animations.js'
 
 import LoadingView          from '../components/Studio/LoadingView'
 import EmptyView            from '../components/Studio/EmptyView'
@@ -69,6 +70,7 @@ export default function Studio({
   const threadBottomRef   = useRef(null)
   const contentScrollRef  = useRef(null)
   const userScrolledUpRef = useRef(false)  // true when user has manually scrolled up
+  const turnRefsMap       = useRef(new Map())
 
   const scrollToTop = useCallback(() => {
     if (contentScrollRef.current) contentScrollRef.current.scrollTop = 0
@@ -303,9 +305,15 @@ export default function Studio({
     setStagedFiles(prev => prev.filter(f => f.id !== id))
   }, [])
 
+  // Stable callback passed to ConversationThread → TurnView so each card registers
+  // itself in turnRefsMap on mount and removes itself on unmount.
+  const registerTurnRef = useCallback((tempId, el) => {
+    if (el) turnRefsMap.current.set(tempId, el)
+    else    turnRefsMap.current.delete(tempId)
+  }, [])
+
   const handleMiniTreeNavigate = useCallback((tempId) => {
-    document.querySelector(`[data-turn-id="${tempId}"]`)
-      ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    turnRefsMap.current.get(tempId)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [])
 
   const handleTextSelection = useCallback((text) => {
@@ -358,18 +366,17 @@ export default function Studio({
         minWidth: 0,
       }}>
 
-        {/* ── Toolbar — hidden on mobile (controls move to MobileHeader slot) ── */}
-        <Box sx={{
-          position: 'absolute', top: 14, right: 16, zIndex: 10,
-          display: { xs: 'none', sm: 'flex' }, alignItems: 'center', gap: 1,
-        }}>
-          <StudioToolbar
-            viewMode={viewMode}
-            onViewModeChange={setViewMode}
-            userNotesOpen={userNotesOpen}
-            onToggleUserNotes={toggleUserNotes}
-          />
-        </Box>
+        {/* Toolbar — only mounted on desktop; mobile controls live in MobileHeader slot */}
+        {!isMobile && (
+          <Box sx={{ position: 'absolute', top: 14, right: 16, zIndex: 10, display: 'flex', alignItems: 'center', gap: 1 }}>
+            <StudioToolbar
+              viewMode={viewMode}
+              onViewModeChange={setViewMode}
+              userNotesOpen={userNotesOpen}
+              onToggleUserNotes={toggleUserNotes}
+            />
+          </Box>
+        )}
 
         {/* ── Content area ────────────────────────────────────────────────────── */}
         <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
@@ -447,6 +454,7 @@ export default function Studio({
                   onRetryGeneration={handleRetryGeneration}
                   notesEnabled={notesEnabled}
                   onTextSelect={handleTextSelection}
+                  registerTurnRef={registerTurnRef}
                 />
 
                 {followUpSuggestions.length > 0 && (
@@ -458,28 +466,31 @@ export default function Studio({
                       <Box
                         key={s}
                         sx={{
-                          animation: 'chipFadeIn 0.3s ease both',
+                          animation: `${chipFadeIn} 0.3s ease both`,
                           animationDelay: `${i * 0.07}s`,
-                          '@keyframes chipFadeIn': {
-                            from: { opacity: 0, transform: 'translateY(6px)' },
-                            to:   { opacity: 1, transform: 'translateY(0)' },
-                          },
                         }}
                       >
                         {i > 0 && <Divider sx={{ opacity: 0.2 }} />}
-                        <Box
+                        <ButtonBase
                           onClick={() => handleSuggestionClick(s)}
+                          focusRipple
                           sx={{
-                            display: 'flex', alignItems: 'center', gap: 1.5,
-                            py: 0.9, px: 0.5, cursor: 'pointer', userSelect: 'none',
+                            width: '100%', display: 'flex', alignItems: 'center',
+                            justifyContent: 'flex-start',
+                            gap: 1.5, py: 0.9, px: 0.5, borderRadius: '6px',
+                            textAlign: 'left', userSelect: 'none',
                             color: theme.palette.text.secondary,
                             '&:hover': { color: theme.palette.text.primary },
+                            '&:focus-visible': {
+                              outline: `2px solid ${theme.palette.primary.main}`,
+                              outlineOffset: 1,
+                            },
                             transition: 'color 0.15s',
                           }}
                         >
                           <Typography sx={{ fontSize: 14.5, opacity: 0.35, flexShrink: 0, lineHeight: 1 }}>↳</Typography>
                           <Typography sx={{ fontSize: 14.5, fontWeight: 400, lineHeight: 1.6 }}>{s}</Typography>
-                        </Box>
+                        </ButtonBase>
                       </Box>
                     ))}
                   </Box>

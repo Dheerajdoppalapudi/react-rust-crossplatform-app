@@ -184,23 +184,3 @@ export const INTENT_COLORS = {
   math:    { bg: '#dbeafe', text: '#1d4ed8', accent: '#bfdbfe' },  // math, manim
   concept: { bg: '#fef3c7', text: '#b45309', accent: '#fde68a' },  // concept_analogy, comparison
 }
-
-// ─── DEPRECATED ALIASES ───────────────────────────────────────────────────────
-// TODO(cleanup): Delete this block once all callers are migrated.
-// As of 2026-05-28, theme/index.js has been updated to use canonical tokens.
-// Search for remaining usages before removing: PALETTE.errorRed, PALETTE.successGreen,
-// PALETTE.warningOrange, PALETTE.borderCream, PALETTE.borderWarm,
-// PALETTE.dividerLight, PALETTE.dividerDark, STATUS.success/error/warning
-export const STATUS = {
-  success: SEMANTIC.success,
-  error:   SEMANTIC.danger,
-  warning: SEMANTIC.warning,
-}
-
-PALETTE.errorRed      = SEMANTIC.danger
-PALETTE.successGreen  = SEMANTIC.success
-PALETTE.warningOrange = SEMANTIC.warning
-PALETTE.borderCream   = PALETTE.border
-PALETTE.borderWarm    = PALETTE.border
-PALETTE.dividerLight  = PALETTE.border
-PALETTE.dividerDark   = PALETTE.borderDark

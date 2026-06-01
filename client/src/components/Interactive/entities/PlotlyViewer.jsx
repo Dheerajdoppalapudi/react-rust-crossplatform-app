@@ -139,7 +139,7 @@ export default function PlotlyViewer({ entityId, data, layout: userLayout, confi
         borderRadius: `${RADIUS.lg}px`,
         overflow: 'hidden',
         border: '1px solid',
-        borderColor: isDark ? PALETTE.borderDark : PALETTE.borderCream,
+        borderColor: isDark ? PALETTE.borderDark : PALETTE.border,
         backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.01)',
         '& .js-plotly-plot': { borderRadius: `${RADIUS.lg}px` },
         '& .modebar': { top: '4px !important', right: '8px !important' },

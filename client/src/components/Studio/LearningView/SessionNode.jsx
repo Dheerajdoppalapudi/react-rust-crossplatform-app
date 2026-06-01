@@ -36,7 +36,7 @@ import { BRAND, PALETTE, INTENT_COLORS } from '../../../theme/tokens.js'
 import { isTextTurn, getFrameCount, formatIntentType } from '../studioUtils'
 import { getActiveStageLabel }     from './utils'
 import { pulse, shimmer, fadeIn }  from '../../../theme/animations'
-import { relativeTime }            from '../constants'
+import { relativeTime }            from '../../../utils/formatTime'
 
 // ─── Thumbnail height inside video cards ──────────────────────────────────────
 const THUMB_H = 138
