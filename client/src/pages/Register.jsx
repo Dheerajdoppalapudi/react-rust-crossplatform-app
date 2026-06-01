@@ -37,7 +37,7 @@ function StarField() {
           </linearGradient>
         </defs>
 
-        {/* Central Zenith mark — stylised Z */}
+        {/* Central Paralyte mark — stylised Z */}
         <motion.g
           initial={reduced ? undefined : { opacity: 0, scale: 0.8 }}
           animate={reduced ? undefined : { opacity: 1, scale: 1 }}
@@ -183,7 +183,7 @@ function LeftPanel({ isMobile }) {
             WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
             lineHeight: 1, mb: 2,
           }}>
-            Zenith
+            Paralyte
           </Typography>
           <Typography sx={{ fontSize: isMobile ? 14 : 17, color: 'rgba(255,255,255,0.45)', lineHeight: 1.7, maxWidth: 420 }}>
             Deploy your own inference-powered<br />learning environment.
@@ -328,7 +328,7 @@ export default function Register() {
               Create your account
             </Typography>
             <Typography sx={{ fontSize: 15, color: 'text.secondary' }}>
-              Get started with Zenith for free.
+              Get started with Paralyte for free.
             </Typography>
           </Box>
 

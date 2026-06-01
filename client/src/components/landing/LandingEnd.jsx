@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import { ROUTES } from '../../constants/routes.js'
 import StarsCanvas from './StarsCanvas.jsx'
 import { useLandingTheme } from './tokens.js'
+import ParalyteLogo from '../common/ParalyteLogo.jsx'
 
 const M    = motion(Box)
 const EASE = [0.16, 1, 0.3, 1]
@@ -212,12 +213,7 @@ function FooterLogo() {
   const P = useLandingTheme()
   return (
     <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: '10px' }}>
-      <svg width="30" height="30" viewBox="0 0 32 32" fill="none" aria-hidden="true">
-        <circle cx="16" cy="16" r="14" stroke={`rgba(${P.violetRgb},0.55)`} strokeWidth="1" strokeDasharray="3 5" style={{ animation: 'spin 26s linear infinite', transformOrigin: 'center' }} />
-        <circle cx="16" cy="16" r="9"  stroke={`rgba(${P.greenRgb},0.8)`}   strokeWidth="1.4" strokeDasharray="6 6" style={{ animation: 'spinRev 18s linear infinite', transformOrigin: 'center' }} />
-        <circle cx="16" cy="16" r="3" fill={P.green} />
-        <style>{`@keyframes spin{to{transform:rotate(360deg)}}@keyframes spinRev{to{transform:rotate(-360deg)}}`}</style>
-      </svg>
+      <ParalyteLogo sx={{ fontSize: 30, color: P.green }} />
       <Box sx={{ fontFamily: P.fontDisplay, fontWeight: 700, fontSize: 18, letterSpacing: '-0.02em', color: P.text0 }}>
         Paralyte
       </Box>

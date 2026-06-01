@@ -104,14 +104,14 @@ function AppInner() {
     if (location.pathname.startsWith(ROUTES.STUDIO)) {
       if (activeConvId) {
         const conv = conversations.find((c) => c.id === activeConvId)
-        document.title = conv?.title ? `${conv.title} — Zenith` : 'Zenith'
+        document.title = conv?.title ? `${conv.title} — Paralyte` : 'Paralyte'
       } else {
-        document.title = 'Zenith'
+        document.title = 'Paralyte'
       }
       return
     }
     const label = PAGE_TITLES[location.pathname] ?? 'Page'
-    document.title = `${label} — Zenith`
+    document.title = `${label} — Paralyte`
   }, [location.pathname, activeConvId, conversations])
 
   // Passed to Studio as onActiveConvIdChange. Studio calls this when a new

@@ -13,7 +13,7 @@ import AddIcon                 from '@mui/icons-material/Add'
 import DarkModeOutlinedIcon    from '@mui/icons-material/DarkModeOutlined'
 import LightModeOutlinedIcon   from '@mui/icons-material/LightModeOutlined'
 import ChevronLeftIcon         from '@mui/icons-material/ChevronLeft'
-import ZenithLogo              from './ZenithLogo'
+import ParalyteLogo            from './ParalyteLogo'
 import ChevronRightIcon        from '@mui/icons-material/ChevronRight'
 import LogoutOutlinedIcon      from '@mui/icons-material/LogoutOutlined'
 import MoreHorizIcon           from '@mui/icons-material/MoreHoriz'
@@ -79,7 +79,7 @@ const LogoButton = ({ onToggle }) => {
       >
         {hovered
           ? <ChevronRightIcon sx={{ fontSize: 18, color: theme.palette.text.secondary }} />
-          : <ZenithLogo sx={{ fontSize: 30, color: theme.palette.text.primary }} />
+          : <ParalyteLogo sx={{ fontSize: 30, color: theme.palette.text.primary }} />
         }
       </Box>
     </Tooltip>
@@ -563,7 +563,7 @@ const Sidebar = ({
 
           {/* Open / mobile — logo on left */}
           {(isMobile || open) && (
-            <ZenithLogo sx={{ fontSize: 34, color: theme.palette.text.primary }} />
+            <ParalyteLogo sx={{ fontSize: 34, color: theme.palette.text.primary }} />
           )}
 
           {/* Close / collapse button on right */}

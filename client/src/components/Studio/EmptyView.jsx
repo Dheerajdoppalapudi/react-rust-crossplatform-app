@@ -1,7 +1,7 @@
 import { Box, Typography, useTheme } from '@mui/material'
 import PromptBar      from './PromptBar'
 import SuggestionBoxes from './SuggestionBoxes'
-import ZenithLogo from '../common/ZenithLogo'
+import ParalyteLogo from '../common/ParalyteLogo'
 import { PALETTE } from '../../theme/tokens.js'
 
 export default function EmptyView({ onSuggestionClick, ...promptBarProps }) {
@@ -24,7 +24,7 @@ export default function EmptyView({ onSuggestionClick, ...promptBarProps }) {
       <Box sx={{ textAlign: 'center', mb: 5 }}>
 
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1.5, mb: 0.5 }}>
-          <ZenithLogo sx={{ fontSize: { xs: 34, sm: 42 }, color: theme.palette.text.primary }} />
+          <ParalyteLogo sx={{ fontSize: { xs: 34, sm: 42 }, color: theme.palette.text.primary }} />
           <Typography sx={{
             fontSize:      { xs: 26, sm: 32 },
             fontWeight:    600,
@@ -41,7 +41,7 @@ export default function EmptyView({ onSuggestionClick, ...promptBarProps }) {
           color:      isDark ? PALETTE.stoneGray : PALETTE.oliveGray,
           lineHeight: 1.6,
         }}>
-          Type a topic and Zenith generates a visual lesson.
+          Type a topic and Paralyte generates a visual lesson.
         </Typography>
       </Box>
 

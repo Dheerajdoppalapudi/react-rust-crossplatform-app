@@ -1,4 +1,4 @@
-// ─── Zenith Design Tokens ─────────────────────────────────────────────────────
+// ─── Paralyte Design Tokens ─────────────────────────────────────────────────────
 // Single source of truth for all design values.
 // Change a value here and it propagates to the MUI theme, CSS custom properties,
 // and every component that imports from this file.

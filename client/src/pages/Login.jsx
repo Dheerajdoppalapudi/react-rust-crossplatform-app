@@ -253,7 +253,7 @@ function LeftPanel({ isMobile }) {
             WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
             lineHeight: 1, mb: 2,
           }}>
-            Zenith
+            Paralyte
           </Typography>
           <Typography sx={{ fontSize: isMobile ? 14 : 17, color: 'rgba(255,255,255,0.45)', lineHeight: 1.7, maxWidth: 420 }}>
             From raw curiosity to structured knowledge —<br />
@@ -438,7 +438,7 @@ function LoginForm({ isMobile }) {
             Welcome back
           </Typography>
           <Typography sx={{ fontSize: 15, color: 'text.secondary' }}>
-            Sign in to your Zenith account.
+            Sign in to your Paralyte account.
           </Typography>
         </Box>
 

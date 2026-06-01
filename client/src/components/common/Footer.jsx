@@ -18,7 +18,7 @@ const Footer = () => {
       }}
     >
       <Typography sx={{ fontSize: 11.5, color: theme.palette.text.secondary }}>
-        © {new Date().getFullYear()} Zenith
+        © {new Date().getFullYear()} Paralyte
       </Typography>
       <Typography sx={{ fontSize: 11.5, color: theme.palette.text.secondary, opacity: 0.4 }}>
         v0.1.0

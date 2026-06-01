@@ -21,7 +21,7 @@ function buildFilename(prompt, sessionId) {
       .slice(0, 48)
     return `${slug}.mp4`
   }
-  return `zenith_${sessionId.slice(0, 8)}.mp4`
+  return `paralyte_${sessionId.slice(0, 8)}.mp4`
 }
 
 /** Format seconds as WebVTT timestamp: HH:MM:SS.mmm */
@@ -149,7 +149,7 @@ function ReadyState({ sessionId, prompt, onPauseAsk, captions, frameCount, onFra
 
   return (
     <Box sx={{ position: 'relative', borderRadius: '12px', overflow: 'hidden', backgroundColor: '#000',
-      // Style the native WebVTT cue to match the Zenith aesthetic.
+      // Style the native WebVTT cue to match the Paralyte aesthetic.
       // ::cue can only be targeted via a <style> tag; we inject it as a child.
     }}>
 

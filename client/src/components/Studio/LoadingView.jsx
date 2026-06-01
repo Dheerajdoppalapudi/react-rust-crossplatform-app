@@ -4,20 +4,20 @@ import { useIsDark } from '../../hooks/useIsDark'
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline'
 import KeyboardArrowDownIcon  from '@mui/icons-material/KeyboardArrowDown'
 import KeyboardArrowUpIcon    from '@mui/icons-material/KeyboardArrowUp'
-import { zenithSpin }         from '../../theme/animations'
-import ZenithLogo             from '../common/ZenithLogo'
+import { paralyteSpin }        from '../../theme/animations'
+import ParalyteLogo            from '../common/ParalyteLogo'
 import { metaText }           from '../../theme/styleUtils'
 import { StageRow, EntityChipsBar } from './LoadingStageRow'
 
-// ── Zenith logo spinner ───────────────────────────────────────────────────────
+// ── Paralyte logo spinner ─────────────────────────────────────────────────────
 
-function ZenithSpinner() {
+function ParalyteSpinner() {
   return (
     <Box sx={{ display: 'flex', mt: 2.5, mb: 0.5, pl: '2px' }}>
-      <ZenithLogo sx={{
+      <ParalyteLogo sx={{
         fontSize: 28,
         color: 'text.secondary',
-        animation: `${zenithSpin} 1.5s ease-in-out infinite`,
+        animation: `${paralyteSpin} 1.5s ease-in-out infinite`,
       }} />
     </Box>
   )
@@ -109,9 +109,9 @@ export default function LoadingView({
         <EntityChipsBar entities={selectedEntities} isDark={isDark} />
       </Collapse>
 
-      {/* Zenith spinner — shown while any stage is still active */}
+      {/* Paralyte spinner — shown while any stage is still active */}
       {!allDone && displayStages.some(s => s.status === 'active') && (
-        <ZenithSpinner />
+        <ParalyteSpinner />
       )}
     </Box>
   )

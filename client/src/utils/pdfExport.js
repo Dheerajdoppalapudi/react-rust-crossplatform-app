@@ -26,7 +26,7 @@ export function downloadMarkdown({ prompt, synthesisText, sources = [] }) {
 //  1. Clone the target DOM node into an off-screen container.
 //  2. Force every element to white/light colours (text dark, bg white).
 //  3. html2canvas screenshots the clone at 2× scale.
-//  4. jsPDF packs the canvas into A4 pages, prepending a Zenith header on p.1.
+//  4. jsPDF packs the canvas into A4 pages, prepending a Paralyte header on p.1.
 
 export async function downloadVisualPDF({ element, prompt, sources = [] }) {
   // ── 1. Build an off-screen light-mode clone ────────────────────────────────
@@ -34,7 +34,7 @@ export async function downloadVisualPDF({ element, prompt, sources = [] }) {
   const A4_W_MM     = 210
   const A4_H_MM     = 297
   const CONTENT_W_MM = A4_W_MM - MARGIN_MM * 2   // 186 mm
-  const HEADER_H_MM = 22                          // space reserved for Zenith header
+  const HEADER_H_MM = 22                          // space reserved for Paralyte header
 
   // Wrapper that forces light colours regardless of MUI theme
   const wrapper = document.createElement('div')
@@ -77,7 +77,7 @@ export async function downloadVisualPDF({ element, prompt, sources = [] }) {
     const contentW   = pageW - MARGIN_MM * 2              // 186
     const date       = new Date().toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' })
 
-    // ── 4. Draw Zenith header on page 1 ──────────────────────────────────────
+    // ── 4. Draw Paralyte header on page 1 ──────────────────────────────────────
     drawHeader(pdf, { pageW, marginMm: MARGIN_MM, date })
 
     // ── 5. Slice canvas into A4 pages ─────────────────────────────────────────
@@ -117,12 +117,12 @@ export async function downloadVisualPDF({ element, prompt, sources = [] }) {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function slugify(text) {
-  return (text || 'zenith')
+  return (text || 'paralyte')
     .slice(0, 50)
     .replace(/[^a-z0-9\s-]/gi, '')
     .trim()
     .replace(/\s+/g, '-')
-    .toLowerCase() || 'zenith'
+    .toLowerCase() || 'paralyte'
 }
 
 // Recursively force white background + dark text on a DOM subtree
@@ -175,7 +175,7 @@ function isLight(cssColor) {
   return lum !== null && lum > 180
 }
 
-// Draw the Zenith branded header at the top of the page
+// Draw the Paralyte branded header at the top of the page
 function drawHeader(pdf, { pageW, marginMm, date }) {
   // Gradient-blue square logo mark (jsPDF doesn't support gradients; use solid blue)
   pdf.setFillColor(24, 71, 214)       // #1847D6
@@ -187,11 +187,11 @@ function drawHeader(pdf, { pageW, marginMm, date }) {
   pdf.setFontSize(7)
   pdf.text('Z', marginMm + 2.5, marginMm + 5.8)
 
-  // "Zenith" wordmark
+  // "Paralyte" wordmark
   pdf.setTextColor(17, 17, 17)
   pdf.setFont('helvetica', 'bold')
   pdf.setFontSize(13)
-  pdf.text('Zenith', marginMm + 10.5, marginMm + 6.2)
+  pdf.text('Paralyte', marginMm + 10.5, marginMm + 6.2)
 
   // Date (right-aligned)
   pdf.setFont('helvetica', 'normal')

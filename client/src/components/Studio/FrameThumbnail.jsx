@@ -1,6 +1,6 @@
 import { useState, memo } from 'react'
 import { Box, Typography, useTheme } from '@mui/material'
-import ZenithLogo from '../common/ZenithLogo'
+import ParalyteLogo from '../common/ParalyteLogo'
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline'
 import { PALETTE } from '../../theme/tokens.js'
 import { neutralBorderDefault, neutralBorderStrong, neutralBorderHover } from '../../theme/styleUtils.js'
@@ -81,7 +81,7 @@ function FrameThumbnail({
         }}>
           {type === 'video'
             ? <PlayCircleOutlineIcon sx={{ fontSize: 22, color: theme.palette.text.secondary, opacity: 0.7 }} />
-            : <ZenithLogo sx={{ fontSize: 18, color: theme.palette.text.secondary, opacity: 0.35 }} />
+            : <ParalyteLogo sx={{ fontSize: 18, color: theme.palette.text.secondary, opacity: 0.35 }} />
           }
           <Typography sx={{
             fontSize: 10, color: theme.palette.text.secondary, opacity: 0.7,
