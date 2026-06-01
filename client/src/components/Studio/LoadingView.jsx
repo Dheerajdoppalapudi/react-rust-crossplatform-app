@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Box, Typography, Collapse, useTheme } from '@mui/material'
+import { Box, Typography, Collapse } from '@mui/material'
+import { useIsDark } from '../../hooks/useIsDark'
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline'
 import KeyboardArrowDownIcon  from '@mui/icons-material/KeyboardArrowDown'
 import KeyboardArrowUpIcon    from '@mui/icons-material/KeyboardArrowUp'
@@ -35,8 +36,7 @@ export default function LoadingView({
   selectedEntities = [],
   blockCount       = 0,
 }) {
-  const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
+  const isDark = useIsDark()
 
   // 'designing' is a generate.py wrapper that spans the entire interactive pipeline —
   // now redundant since widgets/planning/building_* sub-stages provide granular feedback.

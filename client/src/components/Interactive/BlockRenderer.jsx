@@ -1,21 +1,23 @@
 import { useEffect, Suspense } from 'react'
-import { Box, Stack, Skeleton, Typography, useTheme } from '@mui/material'
+import { Box, Stack, Skeleton, Typography } from '@mui/material'
 import { withProfiler } from '../../lib/sentry.js'
 import MarkdownText from './MarkdownText'
 import { resolveEntity, getBlockMeta } from './registry'
 import { TurnIdContext, useSceneStore } from './useSceneStore'
 import ErrorBoundary from '../error/ErrorBoundary'
 import BlockWrapper from './BlockWrapper'
-import { TYPOGRAPHY, RADIUS, BRAND } from '../../theme/tokens.js'
+import { TYPOGRAPHY, RADIUS } from '../../theme/tokens.js'
+import { useIsDark } from '../../hooks/useIsDark'
+import { neutralGhost, neutralSurface, neutralBorderFaint, neutralBorder } from '../../theme/styleUtils.js'
 
 function FallbackCard({ entityType }) {
-  const theme = useTheme()
-  const isDark = theme.palette.mode === 'dark'
+  const isDark = useIsDark()
   return (
     <Box sx={{
       p: 2,
       borderRadius: `${RADIUS.md}px`,
-      border: `1px solid ${theme.palette.error.main}`,
+      border: `1px solid`,
+      borderColor: 'error.main',
       backgroundColor: isDark ? 'rgba(181,51,51,0.08)' : '#fff5f5',
     }}>
       <Typography sx={{ fontSize: TYPOGRAPHY.sizes.caption, color: 'error.main' }}>
@@ -27,8 +29,7 @@ function FallbackCard({ entityType }) {
 
 function BlockRenderer({ turnId, title, learningObjective, blocks = [], isLoading }) {
   const clearTurn = useSceneStore(s => s.clearTurn)
-  const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
+  const isDark    = useIsDark()
 
   useEffect(() => () => { if (turnId) clearTurn(turnId) }, [turnId, clearTurn])
 
@@ -50,8 +51,8 @@ function BlockRenderer({ turnId, title, learningObjective, blocks = [], isLoadin
         <Box sx={{
           px: 2, py: 1.25,
           borderRadius: `${RADIUS.md}px`,
-          backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
-          borderLeft: `3px solid ${isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.15)'}`,
+          backgroundColor: neutralGhost(isDark),
+          borderLeft: `3px solid ${neutralBorder(isDark)}`,
         }}>
           <Typography sx={{
             fontSize: TYPOGRAPHY.sizes.caption,
@@ -69,8 +70,8 @@ function BlockRenderer({ turnId, title, learningObjective, blocks = [], isLoadin
       {!isLoading && blocks.length === 0 && !title && !learningObjective && (
         <Box sx={{
           py: 3, px: 2, borderRadius: `${RADIUS.lg}px`, textAlign: 'center',
-          backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
-          border: `1px solid ${isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)'}`,
+          backgroundColor: neutralGhost(isDark),
+          border: `1px solid ${neutralBorderFaint(isDark)}`,
         }}>
           <Typography sx={{ fontSize: TYPOGRAPHY.sizes.bodySm, color: 'text.disabled' }}>
             Content couldn't be loaded. Try asking again.

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { Box, Typography, IconButton, Tooltip } from '@mui/material'
 import ContentCopyRoundedIcon from '@mui/icons-material/ContentCopyRounded'
 import FormatQuoteRoundedIcon from '@mui/icons-material/FormatQuoteRounded'
-import { useTheme } from '@mui/material'
+import { useIsDark } from '../../hooks/useIsDark'
 
 /**
  * Floating mini-toolbar that appears when the user selects text inside the
@@ -13,8 +13,7 @@ import { useTheme } from '@mui/material'
  *   onAskFollowUp(text) — called when the user clicks "Ask follow-up"
  */
 export default function TextSelectionPopup({ containerRef, onAskFollowUp }) {
-  const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
+  const isDark = useIsDark()
 
   const [popup, setPopup]     = useState(null)  // { x, y, text } or null
   const [copied, setCopied]   = useState(false)

@@ -1,11 +1,11 @@
 import { memo } from 'react'
 import ReactMarkdown from 'react-markdown'
-import { Box, useTheme } from '@mui/material'
+import { Box } from '@mui/material'
+import { useIsDark } from '../../hooks/useIsDark'
 import { TYPOGRAPHY, RADIUS, PALETTE } from '../../theme/tokens.js'
 
 function MarkdownText({ content, sx = {} }) {
-  const theme = useTheme()
-  const isDark = theme.palette.mode === 'dark'
+  const isDark = useIsDark()
 
   if (!content) return null
 

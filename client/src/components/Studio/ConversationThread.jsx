@@ -14,14 +14,6 @@ import { BRAND, PALETTE } from '../../theme/tokens.js'
 import BlockRenderer   from '../Interactive/BlockRenderer'
 import ResearchResult  from './ResearchResult'
 
-function ContentColumn({ children }) {
-  return (
-    <Box sx={{ width: '100%', maxWidth: 760, mx: 'auto', px: { xs: 2, sm: 3 } }}>
-      {children}
-    </Box>
-  )
-}
-
 // Exported so Studio.jsx can reuse it for the bootstrap prompt display.
 export function UserBubble({ prompt }) {
   const theme  = useTheme()
@@ -93,7 +85,7 @@ const TurnView = memo(function TurnView({ turn, onPauseAsk, onRetryTurn, onRetry
       data-turn-id={turn.tempId}
       sx={{ mb: 2, '&:last-child': { mb: 0 } }}
     >
-      <ContentColumn>
+      <Box sx={{ width: '100%', maxWidth: 760, mx: 'auto', px: { xs: 2, sm: 3 } }}>
         <UserBubble prompt={turn.prompt} />
 
         {!turn.isLoading && (turn.stages?.length ?? 0) >= 2 && (
@@ -192,7 +184,7 @@ const TurnView = memo(function TurnView({ turn, onPauseAsk, onRetryTurn, onRetry
         ) : turn.id ? (
           <SessionView session={turn} videoPhase={turn.videoPhase} framesData={turn.framesData} onPauseAsk={onPauseAsk} notesEnabled={notesEnabled} />
         ) : null}
-      </ContentColumn>
+      </Box>
     </Box>
   )
 })

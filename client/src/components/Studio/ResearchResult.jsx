@@ -1,5 +1,6 @@
 import { useState, useRef, useMemo, Children } from 'react'
 import { Box, Typography, Collapse, Tooltip, useTheme } from '@mui/material'
+import { useIsDark } from '../../hooks/useIsDark'
 import ReactMarkdown   from 'react-markdown'
 import BlockRenderer   from '../Interactive/BlockRenderer'
 import ResponseToolbar from './ResponseToolbar'
@@ -10,8 +11,7 @@ import { cursorBlink } from '../../theme/animations.js'
 // ── Citation chip ─────────────────────────────────────────────────────────────
 
 function CitationChip({ num, source }) {
-  const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
+  const isDark = useIsDark()
   const label  = source?.title ?? `[${num}]`
 
   const chip = (
@@ -165,8 +165,7 @@ function CitedMarkdown({ text, sources }) {
 // ── Sources panel (controlled) ────────────────────────────────────────────────
 
 function SourcesPanel({ sources, open }) {
-  const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
+  const isDark = useIsDark()
 
   if (!sources?.length) return null
 
@@ -263,8 +262,7 @@ export default function ResearchResult({
   learningObjective = null,
   isLoading         = false,
 }) {
-  const theme      = useTheme()
-  const isDark     = theme.palette.mode === 'dark'
+  const isDark     = useIsDark()
   const [sourcesOpen, setSourcesOpen] = useState(false)
   // Ref on the content wrapper — passed to toolbar so html2canvas knows what to capture
   const contentRef = useRef(null)

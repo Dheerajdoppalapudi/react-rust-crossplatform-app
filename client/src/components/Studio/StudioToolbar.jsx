@@ -1,8 +1,14 @@
 import { memo } from 'react'
 import PropTypes from 'prop-types'
-import { Box, Typography, Tooltip, IconButton, useTheme } from '@mui/material'
+import { Box, Typography, Tooltip, IconButton } from '@mui/material'
 import EditNoteIcon           from '@mui/icons-material/EditNote'
 import MenuBookOutlinedIcon   from '@mui/icons-material/MenuBookOutlined'
+import { useIsDark }          from '../../hooks/useIsDark'
+import { BRAND }              from '../../theme/tokens.js'
+import {
+  glassPanelBg, glassPanelShadow,
+  neutralBorderFaint, neutralHover, neutralSubtle,
+} from '../../theme/styleUtils.js'
 
 const VIEWS = ['Chat', 'Learn']
 
@@ -17,8 +23,7 @@ function StudioToolbar({
   userNotesOpen,
   onToggleUserNotes,
 }) {
-  const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
+  const isDark = useIsDark()
 
   const isMac = typeof navigator !== 'undefined' && navigator.platform.toUpperCase().includes('MAC')
 
@@ -27,14 +32,12 @@ function StudioToolbar({
     <Box sx={{
       display:     'inline-flex',
       alignItems:  'center',
-      bgcolor:     isDark ? 'rgba(20,20,20,0.94)' : 'rgba(255,255,255,0.94)',
-      border:      `1px solid ${isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.10)'}`,
+      bgcolor:     glassPanelBg(isDark),
+      border:      `1px solid ${neutralBorderFaint(isDark)}`,
       borderRadius:'10px',
       p:           0.5,
       gap:         0.25,
-      boxShadow:   isDark
-        ? '0 2px 12px rgba(0,0,0,0.5)'
-        : '0 2px 12px rgba(0,0,0,0.10)',
+      boxShadow:   glassPanelShadow(isDark),
       backdropFilter: 'blur(12px)',
     }}>
       {VIEWS.map((label) => {
@@ -54,14 +57,14 @@ function StudioToolbar({
               cursor: 'pointer', userSelect: 'none',
               border: 'none', fontFamily: 'inherit',
               bgcolor: active
-                ? (isDark ? '#2FD4B5' : '#0E7C66')
+                ? (isDark ? BRAND.accent : BRAND.primary)
                 : 'transparent',
               color: active
                 ? (isDark ? '#0d1f1b' : '#fff')
                 : (isDark ? 'rgba(255,255,255,0.42)' : 'rgba(0,0,0,0.42)'),
               transition: 'background 0.18s, color 0.18s',
               '&:hover': !active ? {
-                bgcolor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+                bgcolor: neutralHover(isDark),
                 color:   isDark ? 'rgba(255,255,255,0.80)' : 'rgba(0,0,0,0.72)',
               } : {},
             }}
@@ -84,12 +87,8 @@ function StudioToolbar({
   )
 
   // ── Notes button — standalone, same visual weight as the pill ────────────
-  const notesBg     = userNotesOpen
-    ? (isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)')
-    : (isDark ? 'rgba(20,20,20,0.94)' : 'rgba(255,255,255,0.94)')
-  const notesBorder = `1px solid ${userNotesOpen
-    ? (isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.18)')
-    : (isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.10)')}`
+  const notesBg     = userNotesOpen ? neutralHover(isDark)   : glassPanelBg(isDark)
+  const notesBorder = `1px solid ${userNotesOpen ? neutralBorderFaint(isDark) : neutralBorderFaint(isDark)}`
 
   const userNotesBtn = (
     <IconButton
@@ -104,11 +103,11 @@ function StudioToolbar({
         color:        userNotesOpen
           ? (isDark ? 'rgba(255,255,255,0.90)' : 'rgba(0,0,0,0.80)')
           : (isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.45)'),
-        boxShadow: isDark ? '0 2px 12px rgba(0,0,0,0.5)' : '0 2px 12px rgba(0,0,0,0.10)',
+        boxShadow: glassPanelShadow(isDark),
         backdropFilter: 'blur(12px)',
         transition: 'all 0.15s',
         '&:hover': {
-          bgcolor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.07)',
+          bgcolor: neutralSubtle(isDark),
           color:   isDark ? 'rgba(255,255,255,0.80)' : 'rgba(0,0,0,0.72)',
         },
       }}

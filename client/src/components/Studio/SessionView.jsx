@@ -3,6 +3,7 @@ import PropTypes from 'prop-types'
 import {
   Box, Typography, Chip, Dialog, DialogContent, IconButton, useTheme,
 } from '@mui/material'
+import { useIsDark } from '../../hooks/useIsDark'
 import CloseIcon                  from '@mui/icons-material/Close'
 import ArrowBackIosNewIcon         from '@mui/icons-material/ArrowBackIosNew'
 import ArrowForwardIosIcon         from '@mui/icons-material/ArrowForwardIos'
@@ -36,8 +37,7 @@ function NavButton({ onClick, disabled, 'aria-label': ariaLabel, children }) {
 }
 
 function FrameStrip({ sessionId, captions, images, activeFrame, onFrameChange, onExpandFrame }) {
-  const theme       = useTheme()
-  const isDark      = theme.palette.mode === 'dark'
+  const isDark      = useIsDark()
   const stripRef    = useRef(null)
   // Single token fetch shared across all thumbnails — prevents N intervals for N frames.
   const { getFrameUrl } = useMediaUrl(sessionId)
@@ -133,8 +133,7 @@ function FrameStrip({ sessionId, captions, images, activeFrame, onFrameChange, o
 FrameStrip = memo(FrameStrip)
 
 function SlideDialog({ open, frameIndex, captions, images, sessionId, onClose, onFrameChange, onAsk }) {
-  const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
+  const isDark = useIsDark()
   const { getFrameUrl } = useMediaUrl(sessionId)
   const total   = captions.length
   const caption = captions[frameIndex] ?? ''

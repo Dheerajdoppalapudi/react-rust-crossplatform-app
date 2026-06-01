@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, createContext, useContext } from 'react'
-import { Box, IconButton, Tooltip, Dialog, DialogContent, useTheme } from '@mui/material'
+import { Box, IconButton, Tooltip, Dialog, DialogContent } from '@mui/material'
+import { useIsDark } from '../../hooks/useIsDark'
 import OpenInFullIcon  from '@mui/icons-material/OpenInFull'
 import CloseIcon       from '@mui/icons-material/Close'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
@@ -14,8 +15,7 @@ export default function BlockWrapper({ children, copyText, label, noExpand = fal
   const [focused,  setFocused]  = useState(false)
   const [expanded, setExpanded] = useState(false)
   const [copied,   setCopied]   = useState(false)
-  const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
+  const isDark = useIsDark()
 
   const handleCopy = useCallback(async () => {
     if (!copyText) return

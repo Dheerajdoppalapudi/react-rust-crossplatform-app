@@ -30,6 +30,11 @@ export const menuShadow = (d) =>
 export const brandColor = (d) => d ? BRAND.accent  : BRAND.primary
 export const brandHover = ()  => BRAND.hover
 
+// ─── Glass panel background (toolbar pills, floating controls) ─────────────────
+// High-opacity surface with backdrop blur — distinct from solid card backgrounds.
+export const glassPanelBg     = (d) => d ? 'rgba(20,20,20,0.94)' : 'rgba(255,255,255,0.94)'
+export const glassPanelShadow = (d) => d ? '0 2px 12px rgba(0,0,0,0.5)' : '0 2px 12px rgba(0,0,0,0.10)'
+
 // ─── Meta text ─────────────────────────────────────────────────────────────────
 // For timestamps, domains, counts, and other tertiary metadata.
 // Meets WCAG AA 3:1 minimum for non-body text at these opacities.
@@ -49,11 +54,3 @@ export const shimmerTextSx = (d) => ({
   animation:            `${textShimmer} 1.6s linear infinite`,
   transition:           'none',
 })
-
-
-
-// Planatrix
-// Intugence
-// Intuplex
-// Paralume
-// Soana

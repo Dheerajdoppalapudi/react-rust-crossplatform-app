@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
-import { Box, Typography, Collapse, IconButton, Tooltip, useTheme } from '@mui/material'
+import { Box, Typography, Collapse, IconButton, Tooltip } from '@mui/material'
+import { useIsDark } from '../../hooks/useIsDark'
 import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import ContentCopyIcon  from '@mui/icons-material/ContentCopy'
 import CheckIcon        from '@mui/icons-material/Check'
@@ -27,8 +28,7 @@ function toBullets(notes) {
 }
 
 export default function NotesPanel({ notes }) {
-  const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
+  const isDark = useIsDark()
   const [open,   setOpen]   = useState(true)
   const [copied, setCopied] = useState(false)
   const copyTimerRef = useRef(null)

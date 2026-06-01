@@ -1,7 +1,7 @@
 import { Box } from '@mui/material'
 import MovieCreationOutlinedIcon from '@mui/icons-material/MovieCreationOutlined'
-import { useTheme } from '@mui/material'
 import { keyframes } from '@mui/material'
+import { useIsDark } from '../../hooks/useIsDark'
 import LoadingView from './LoadingView'
 
 const shimmer = keyframes`
@@ -14,8 +14,7 @@ function shimmerBg(isDark) {
 }
 
 export default function VideoAssemblingView({ turn }) {
-  const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
+  const isDark = useIsDark()
 
   return (
     <Box>
