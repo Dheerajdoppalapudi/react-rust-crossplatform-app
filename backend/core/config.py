@@ -46,9 +46,8 @@ GEMINI_API_KEY: str    = os.getenv("GEMINI_API_KEY", "")
 OPENAI_MODEL: str  = os.getenv("OPENAI_MODEL",  "gpt-4.1")
 CLAUDE_MODEL: str  = os.getenv("CLAUDE_MODEL",  "claude-haiku-4-5-20251001")
 GEMINI_MODEL: str  = os.getenv("GEMINI_MODEL",  "gemini-2.5-flash")
-# Cheap/fast model used only for intent classification (~300 tokens, simple task).
-# Always uses Haiku regardless of the user's chosen model.
-CLASSIFY_MODEL: str = os.getenv("CLASSIFY_MODEL", "claude-haiku-4-5-20251001")
+# Fast model used only for intent classification + planning (~300 tokens, simple task).
+CLASSIFY_MODEL: str = os.getenv("CLASSIFY_MODEL", "gemini-2.5-flash")
 
 # Models the user may request — validated on every /api/generate call.
 # Add new models here when they become available; never trust raw user input.

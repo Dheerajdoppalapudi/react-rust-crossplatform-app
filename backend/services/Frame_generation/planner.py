@@ -25,7 +25,7 @@ from typing import List, Union
 from pydantic import BaseModel, field_validator
 
 from core.config import CLASSIFY_MODEL
-from services.llm_service import LLMService, ClaudeProvider, OpenAIProvider, default_llm_service
+from services.llm_service import LLMService, ClaudeProvider, default_llm_service, _make_service_for_model
 
 # Per-request lifecycle log. main.py sets this before each pipeline run.
 request_log: ContextVar[list | None] = ContextVar("request_log", default=None)
@@ -38,7 +38,7 @@ token_usage: ContextVar[dict | None] = ContextVar("token_usage", default=None)
 # default_llm_service — allows the UI to choose Claude vs OpenAI per request.
 request_llm_service: ContextVar[LLMService | None] = ContextVar("request_llm_service", default=None)
 
-_classify_service = LLMService(provider=OpenAIProvider(model="gpt-4.1-mini"))
+_classify_service = _make_service_for_model(CLASSIFY_MODEL)
 
 # Calibrated max_tokens per planning call type.
 # These are generous upper bounds based on observed output sizes; setting them
@@ -417,71 +417,67 @@ def _extract_json(text: str) -> dict:
 # Unified first call — plan_and_classify
 # ---------------------------------------------------------------------------
 
-# Mode-specific output schema injected into planning_classify.md via {{MODE_RULES}}.
+
+"""
+Mode-specific rules injected into planning_classify.md via {{MODE_RULES}}.
+ 
+Design principle: the base prompt (planning_classify.md) owns EVERYTHING shared —
+the domain enum, enriched_prompt rules, suggested_followups, needs_search triggers,
+search_queries phrasing rules, and the worked example. These mode rules add ONLY the
+delta for that mode. This kills the prompt-drift problem (no repeated schemas).
+ 
+Key:  (mode, video_enabled)  ->  delta text
+  mode:           "instant" | "deep_research"
+  video_enabled:  False (text answer) | True (video lesson)
+ 
+The base prompt already defines the full text-mode JSON schema and all query rules,
+so the text entries below are tiny. Video entries add the storyboard fields.
+"""
+ 
 _MODE_RULES: dict[tuple[str, bool], str] = {
+ 
+    # ---- TEXT: instant answer ----------------------------------------------
+    # Nothing extra needed beyond the base prompt. Optionally nudge brevity.
     ("instant", False): """\
-## Output schema (JSON only — no prose, no markdown fences)
-{
-  "domain": "physics|cs|chemistry|biology|math|history|economics|general",
-  "enriched_prompt": "<2-4 sentence specific learning spec with mechanisms and numbers>",
-  "suggested_followups": ["<q1>", "<q2>", "<q3>"],
-  "needs_search": false
-}
-Set needs_search=true and add "search_queries":["q1","q2","q3"] when the question
-requires current statistics, recent events, or specific data the model cannot reliably
-produce from training data alone. Never add search_queries if needs_search is false.""",
-
+## Mode: INSTANT
+Favor a tight, direct enriched_prompt. Keep search_queries to the minimum that
+covers the question (often 1-2). Do not over-expand scope.""",
+ 
+    # ---- TEXT: deep research -----------------------------------------------
+    # Base handles query phrasing; here we only raise the breadth expectation.
     ("deep_research", False): """\
-## Output schema (JSON only — no prose, no markdown fences)
-{
-  "domain": "physics|cs|chemistry|biology|math|history|economics|general",
-  "enriched_prompt": "<2-4 sentence specific learning spec with mechanisms and numbers>",
-  "suggested_followups": ["<q1>", "<q2>", "<q3>"],
-  "search_queries": ["<precise query 1>", "<q2>", "<q3>", "<q4>", "<q5>"]
-}
-Query quality rules — write like a domain expert searching primary literature:
-- Each query targets a DIFFERENT facet: mechanism, quantitative data, recent advances, applications, failure modes
-- Use precise technical vocabulary — no "what is X" / "how does Y work" / "explain Z"
-- Include specific terminology, named protocols, algorithms, compounds, or metrics where relevant
-- BAD: "how does HTTPS work" → GOOD: "TLS 1.3 handshake certificate chain asymmetric key exchange"
-- BAD: "bitcoin mining explained" → GOOD: "proof-of-work SHA-256 hashrate difficulty adjustment bitcoin"
-- If prior conversation context is given: target queries at NEW gaps, never repeat covered concepts""",
-
+## Mode: DEEP RESEARCH
+When needs_search is true, write 4-5 search_queries, each targeting a DISTINCT
+facet (mechanism, quantitative data, recent developments, applications,
+limitations/criticism). Breadth and source diversity matter more than in instant
+mode. (All query phrasing rules from the base prompt still apply.)""",
+ 
+    # ---- VIDEO: instant lesson  (fill in when you build the video path) ----
+    # Adds storyboard fields. The base schema fields still apply; these are EXTRA
+    # keys to include in the JSON object.
     ("instant", True): """\
-## Output schema (JSON only — no prose, no markdown fences)
-{
-  "domain": "physics|cs|chemistry|biology|math|history|economics|general",
+## Mode: INSTANT VIDEO
+In addition to the base fields, ALSO include these keys in the JSON object:
   "intent_type": "math|process|architecture|timeline|concept_analogy|comparison|illustration",
-  "frame_count": <integer 2-6>,
-  "notes": ["<key fact 1>", "<fact 2>", "<fact 3>", "<fact 4>", "<fact 5>"],
-  "enriched_prompt": "<2-4 sentence learning spec>",
-  "suggested_followups": ["<q1>", "<q2>", "<q3>"],
-  "needs_search": false
-}
-Frame count: math(2-5), process/timeline(3-5), others(2-4). Fewer is better — never pad.
-Biology / natural science → always illustration intent_type.
-Set needs_search=true and add "search_queries":["q1","q2","q3"] for current data needs.""",
-
+  "frame_count": <integer>,
+  "notes": ["<key fact 1>", "...", up to 5]
+Frame count by intent_type: math 2-5, process/timeline 3-5, others 2-4. Fewer is
+better — never pad. Default biology/natural-science to "illustration" unless the
+question is clearly analytical (then pick the fitting type). "notes" = the key
+facts each frame must convey, in order.""",
+ 
+    # ---- VIDEO: deep research lesson  (fill in when you build the video path)
     ("deep_research", True): """\
-## Output schema (JSON only — no prose, no markdown fences)
-{
-  "domain": "physics|cs|chemistry|biology|math|history|economics|general",
+## Mode: DEEP RESEARCH VIDEO
+In addition to the base fields (including 4-5 distinct-facet search_queries when
+needs_search is true), ALSO include these keys:
   "intent_type": "math|process|architecture|timeline|concept_analogy|comparison|illustration",
-  "frame_count": <integer 2-6>,
-  "notes": ["<key fact 1>", "<fact 2>", "<fact 3>", "<fact 4>", "<fact 5>"],
-  "enriched_prompt": "<2-4 sentence learning spec>",
-  "suggested_followups": ["<q1>", "<q2>", "<q3>"],
-  "search_queries": ["<precise query 1>", "<q2>", "<q3>", "<q4>", "<q5>"]
+  "frame_count": <integer>,
+  "notes": ["<key fact 1>", "...", up to 5]
+Frame count by intent_type: math 2-5, process/timeline 3-5, others 2-4. Default
+biology to "illustration" unless clearly analytical. "notes" = ordered key facts
+per frame.""",
 }
-Frame count: math(2-5), process/timeline(3-5), others(2-4). Biology → illustration.
-Query quality rules — write like a domain expert searching primary literature:
-- Each query targets a DIFFERENT facet: mechanism, quantitative data, applications, failure modes
-- Use precise technical vocabulary — no "what is X" / "how does Y work" / "explain Z"
-- Include specific terminology, named protocols, algorithms, compounds, or metrics where relevant
-- BAD: "how does HTTPS work" → GOOD: "TLS 1.3 handshake certificate chain asymmetric key exchange"
-- If prior conversation context is given: target queries at NEW gaps only""",
-}
-
 
 async def plan_and_classify(
     message:              str,
@@ -496,7 +492,7 @@ async def plan_and_classify(
     Returns a dict with all fields needed by the generation pipeline:
       Interactive: domain, enriched_prompt, suggested_followups, needs_search?, search_queries?
       Video:       + intent_type, frame_count, notes
-    Always uses Haiku (_classify_service) regardless of the per-request model.
+    Always uses _classify_service (CLASSIFY_MODEL from config) regardless of the per-request model.
     """
     _prompts_dir = os.path.join(os.path.dirname(__file__), "prompts")
     with open(os.path.join(_prompts_dir, "planning_classify.md")) as f:
@@ -512,9 +508,11 @@ async def plan_and_classify(
         context_parts.append(f"Conversation history:\n{conversation_context}")
     context_block = ("\n\n".join(context_parts) + "\n\n") if context_parts else ""
 
+    current_year = time.strftime("%Y", time.gmtime())
     prompt = (
         template
         .replace("{{MODE_RULES}}", mode_rules)
+        .replace("{{CURRENT_YEAR}}", current_year)
         .replace("{{USER_PROMPT}}", message)
         .replace("{{CONVERSATION_CONTEXT}}", context_block)
     )
