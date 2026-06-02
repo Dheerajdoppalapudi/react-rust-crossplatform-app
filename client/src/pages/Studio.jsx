@@ -392,9 +392,7 @@ export default function Studio({
             {showLoader && (
               <Box sx={{ width: '100%', maxWidth: 760, mx: 'auto', px: { xs: 2, sm: 3 } }}>
                 {bootstrap?.prompt && (
-                  <Box sx={{ display: 'flex', justifyContent: 'flex-end', pt: 3, pb: 1.5 }}>
-                    <UserBubble prompt={bootstrap.prompt} />
-                  </Box>
+                  <UserBubble prompt={bootstrap.prompt} />
                 )}
                 <LoadingView
                   stages={bootstrap?.stages?.length ? bootstrap.stages : null}
@@ -475,7 +473,7 @@ export default function Studio({
                           onClick={() => handleSuggestionClick(s)}
                           focusRipple
                           sx={{
-                            width: '100%', display: 'flex', alignItems: 'center',
+                            width: '100%', minWidth: 0, display: 'flex', alignItems: 'center',
                             justifyContent: 'flex-start',
                             gap: 1.5, py: 0.9, px: 0.5, borderRadius: '6px',
                             textAlign: 'left', userSelect: 'none',

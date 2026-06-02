@@ -11,8 +11,8 @@ Pipeline stages:
   2. _plan_scene        → SceneIR (uses full schemas for selected entities + injects sources)
   3. codegen (if needed) for freeform_html / p5_sketch blocks
 
-Entity selector always receives the SHORT original question — not synthesis_text or enriched_prompt.
-Scene planner receives enriched_prompt + raw research sources injected for [N] citation.
+Entity selector receives enriched_prompt from plan_and_classify + domain; outputs visual_brief + entities.
+Scene planner receives enriched_prompt (from plan_and_classify) + visual_brief + raw research sources.
 
 Adding a new entity type:
   1. Add its component to the frontend registry (registry.js)
@@ -73,7 +73,7 @@ _PROMPTS_DIR = os.path.join(os.path.dirname(__file__), "prompts")
 
 @dataclass
 class SelectionResult:
-    enriched_prompt: str
+    visual_brief: str = ""
     entities: list[str] = field(default_factory=list)
     model: str = "claude-sonnet-4-6"
 
@@ -208,22 +208,21 @@ async def _run_slide_codegen(spec: str, user_prompt: str, svc: LLMService = None
 
 
 async def _select_entities(
-    original_message: str,
+    enriched_prompt: str,
     domain: str,
     conversation_context: str,
 ) -> SelectionResult:
     """
-    Sonnet 4.6 call — enriches the question, selects 2–5 entities, recommends a model.
+    Entity selector call — picks 2–5 entities, writes visual_brief, recommends a model.
 
-    Always receives the SHORT original question, not synthesis_text or enriched_prompt,
-    so entity selection stays focused on what the user actually asked.
+    Receives enriched_prompt from plan_and_classify. Does NOT re-enrich the question.
     """
     slim_index = _load_prompt("slim_index.md")
     selector_template = _load_prompt("entity_selector.md")
     selector_prompt = selector_template.replace("{{SLIM_INDEX}}", slim_index)
 
     context_block = f"Conversation context:\n{conversation_context}\n\n" if conversation_context else ""
-    user_msg = f"{context_block}Domain: {domain}\n\nQuestion: {original_message}"
+    user_msg = f"{context_block}Domain: {domain}\n\nenriched_prompt: {enriched_prompt}"
 
     try:
         from services.llm_service import get_task_service
@@ -241,25 +240,22 @@ async def _select_entities(
                     cache_create=(_usage or {}).get("cache_creation_input_tokens", 0))
         _log({"event": "llm_call", "prompt_name": "entity_selector", "usage": _usage or {}})
         if raw is None:
-            return SelectionResult(enriched_prompt=original_message)
+            return SelectionResult()
 
         data = _extract_json(raw)
         entities: list[str] = data.get("entities", [])
-        enriched = data.get("enriched_prompt") or original_message
+        visual_brief = data.get("visual_brief", "")
         model = data.get("model", "claude-sonnet-4-6")
 
         if model not in ("gpt-4.1", "claude-sonnet-4-6"):
             model = "claude-sonnet-4-6"
 
-        if "code_walkthrough" in entities and "step_controls" not in entities:
-            entities.append("step_controls")
-
-        logger.info("entity_selected", enriched=enriched[:80], entities=entities, model=model)
-        return SelectionResult(enriched_prompt=enriched, entities=entities, model=model)
+        logger.info("entity_selected", visual_brief=visual_brief[:80], entities=entities, model=model)
+        return SelectionResult(visual_brief=visual_brief, entities=entities, model=model)
 
     except Exception as exc:
         logger.warning("entity_selector_failed_fallback", error=str(exc))
-        return SelectionResult(enriched_prompt=original_message)
+        return SelectionResult()
 
 
 async def _plan_scene(
@@ -269,6 +265,7 @@ async def _plan_scene(
     selected_entities: list[str],
     sources: list[dict],
     svc: LLMService = None,
+    visual_brief: str = "",
 ) -> SceneIR:
     """Call the planner LLM and parse the Scene IR. Injects research sources for [N] citations."""
     base       = _load_prompt("base_planner.md")
@@ -286,7 +283,8 @@ async def _plan_scene(
         if conversation_context else ""
     )
     sources_block = _build_sources_block(sources)
-    user_msg = f"{context_block}{sources_block}USER QUESTION: {enriched_prompt}"
+    visual_brief_block = f"Visual brief: {visual_brief}\n\n" if visual_brief else ""
+    user_msg = f"{context_block}{sources_block}{visual_brief_block}USER QUESTION: {enriched_prompt}"
 
     from services.llm_service import get_task_service
     svc = svc or get_task_service("scene_planner")
@@ -351,7 +349,7 @@ async def run_interactive_pipeline(
 
     logger.info("interactive_pipeline_start", session=session_id, domain=domain, sources=len(sources))
 
-    # Stage 1: Enrich prompt + select entities + recommend model.
+    # Stage 1: Select entities + visual brief + recommend model.
     entity_input = enriched_prompt or original_message
     topic = _short_topic(entity_input)
     _t0 = time.monotonic()
@@ -373,13 +371,14 @@ async def run_interactive_pipeline(
         scene_planner_svc = get_task_service("scene_planner")
         codegen_svc       = _get_llm_service(selection.model) or get_task_service("codegen")
 
-    # Stage 2: Plan scene IR — enriched prompt + sources for grounded citations
-    plan_topic = _short_topic(selection.enriched_prompt.split('.')[0])
+    # Stage 2: Plan scene IR — enriched prompt (from plan_and_classify) + visual brief + sources
+    plan_topic = _short_topic(entity_input.split('.')[0])
     _t0 = time.monotonic()
     yield {"type": "stage", "stage": "planning", "label": random.choice(_PLANNING_TEMPLATES).format(topic=plan_topic)}
     scene = await _plan_scene(
-        selection.enriched_prompt, domain, conversation_context,
+        entity_input, domain, conversation_context,
         selection.entities, sources, svc=scene_planner_svc,
+        visual_brief=selection.visual_brief,
     )
     yield {"type": "stage_done", "stage": "planning", "duration_s": round(time.monotonic() - _t0, 1)}
     entity_blocks = [b for b in scene.blocks if b.type == "entity"]

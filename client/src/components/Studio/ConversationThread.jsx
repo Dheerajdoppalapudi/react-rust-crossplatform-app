@@ -201,7 +201,7 @@ const ConversationThread = memo(function ConversationThread({ turns, onPauseAsk,
   const containerRef = useRef(null)
 
   return (
-    <Box ref={containerRef} sx={{ display: 'flex', flexDirection: 'column', pt: 1, pb: 1, position: 'relative' }}>
+    <Box ref={containerRef} sx={{ width: '100%', display: 'flex', flexDirection: 'column', pt: 1, pb: 1, position: 'relative' }}>
       {turns.map((turn) => (
         <TurnWithBoundary key={turn.tempId} turn={turn} onPauseAsk={onPauseAsk} onRetryTurn={onRetryTurn} onRetryGeneration={onRetryGeneration} notesEnabled={notesEnabled} registerTurnRef={registerTurnRef} />
       ))}

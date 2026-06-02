@@ -216,7 +216,7 @@ function PromptBar({
 
   const innerSx = embedded
     ? { width: '100%' }
-    : { maxWidth: 760, mx: 'auto' }
+    : { width: '100%', maxWidth: 760, mx: 'auto' }
 
   return (
     <Box sx={{ flexShrink: 0 }}>
