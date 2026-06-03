@@ -19,11 +19,34 @@ _HIGH_AUTHORITY_DOMAINS = frozenset({
     "gov",   # any .gov TLD
 })
 
+# Financial/stock data sources — structured data (tables, price history, filings).
+# These get a higher boost than general authority sites because for economics
+# queries they carry actual numbers, not just prose about numbers.
+FINANCIAL_PRIORITY_DOMAINS = frozenset({
+    "screener.in",          # best Indian stock fundamentals + quarterly tables
+    "trendlyne.com",        # quarterly results, financials, estimates
+    "finance.yahoo.com",    # price history, key stats
+    "moneycontrol.com",     # financials, news, shareholding
+    "nseindia.com",         # official NSE filings
+    "bseindia.com",         # official BSE filings
+    "tickertape.in",        # fundamentals, ratios
+    "ticker.finology.in",   # ratios, historical financials
+    "indmoney.com",         # price history, returns
+    "investing.com",        # global price history
+    "tradingview.com",      # price charts, technicals
+    "wisesheets.io",        # financial data exports
+})
 
-def _domain_boost(domain: str) -> float:
-    """Return a score boost 0.0–0.2 based on domain authority."""
+
+def _domain_boost(domain: str, intent_domain: str = "") -> float:
+    """Return a score boost 0.0–0.25 based on domain authority and query domain."""
     if not domain:
         return 0.0
+    # Financial sources get a strong boost for economics queries
+    if intent_domain == "economics":
+        for fin in FINANCIAL_PRIORITY_DOMAINS:
+            if domain.endswith(fin):
+                return 0.25
     tld = domain.rsplit(".", 1)[-1] if "." in domain else ""
     if tld in ("edu", "gov"):
         return 0.2
@@ -33,11 +56,17 @@ def _domain_boost(domain: str) -> float:
     return 0.0
 
 
-def rank_and_deduplicate(results: list[SearchResult], max_sources: int) -> list[SearchResult]:
+def rank_and_deduplicate(
+    results: list[SearchResult],
+    max_sources: int,
+    intent_domain: str = "",
+) -> list[SearchResult]:
     """
     Score each result, remove duplicate URLs, and return the top max_sources.
 
-    Scoring: tavily_score (0–1) + domain_boost (0–0.2)
+    Scoring: tavily_score (0–1) + domain_boost (0–0.25)
+    Pass intent_domain to apply category-specific boosts (e.g. "economics"
+    lifts financial data sources to the top).
     """
     seen_urls: set[str] = set()
     unique: list[SearchResult] = []
@@ -47,10 +76,9 @@ def rank_and_deduplicate(results: list[SearchResult], max_sources: int) -> list[
         seen_urls.add(r.url)
         unique.append(r)
 
-    # Re-score with domain authority bonus
     scored = sorted(
         unique,
-        key=lambda r: r.score + _domain_boost(r.domain),
+        key=lambda r: r.score + _domain_boost(r.domain, intent_domain),
         reverse=True,
     )
     return scored[:max_sources]

@@ -79,7 +79,7 @@ ALLOWED_GEMINI_MODELS: frozenset[str] = frozenset({
 #   Haiku 4.5        : $0.80/$4 per 1M tokens       — synthesis streaming (native support)
 TASK_MODELS: dict = {
     "entity_selector": os.getenv("MODEL_ENTITY_SELECTOR", "gemini-2.5-flash"),
-    "scene_planner":   os.getenv("MODEL_SCENE_PLANNER",   "claude-haiku-4-5-20251001"),
+    "scene_planner":   os.getenv("MODEL_SCENE_PLANNER",   "gemini-2.5-flash"),
     "vocab_plan":      os.getenv("MODEL_VOCAB_PLAN",       "gemini-2.5-flash"),
     "svg_frame":       os.getenv("MODEL_SVG_FRAME",        "gemini-2.5-flash"),
     "beat_planner":    os.getenv("MODEL_BEAT_PLANNER",     "claude-sonnet-4-6"),
@@ -175,7 +175,7 @@ HEARTBEAT_INTERVAL_SECS:      int = int(os.getenv("HEARTBEAT_INTERVAL_SECS", "20
 CONVERSATION_TITLE_MAX_CHARS: int = int(os.getenv("CONVERSATION_TITLE_MAX_CHARS", "80"))
 LLM_DEFAULT_MAX_TOKENS:       int = int(os.getenv("LLM_DEFAULT_MAX_TOKENS", "4096"))
 MAX_FRAMES_JSON_BYTES:        int = int(os.getenv("MAX_FRAMES_JSON_BYTES", "10000000"))
-SOURCES_SNIPPET_MAX_CHARS:    int = int(os.getenv("SOURCES_SNIPPET_MAX_CHARS", "2500"))
+SOURCES_SNIPPET_MAX_CHARS:    int = int(os.getenv("SOURCES_SNIPPET_MAX_CHARS", "7000"))
 SOURCES_TOP_K:                int = int(os.getenv("SOURCES_TOP_K", "8"))
 SCENE_PLANNER_MAX_TOKENS:     int = int(os.getenv("SCENE_PLANNER_MAX_TOKENS", "8192"))
 

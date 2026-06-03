@@ -98,8 +98,11 @@ def upsert_sources(conversation_id: str, sources: list[dict]) -> None:
     if not client:
         return
 
+    # Truncate to ~500 chars for embedding — semantic similarity needs only a
+    # representative excerpt, not the full extracted content (which can be 7000+
+    # chars after Tavily extract and would exceed the 8192-token model limit).
     texts = [
-        f"{s.get('title', '')} {s.get('snippet', '')}"
+        f"{s.get('title', '')} {(s.get('snippet', '') or '')[:500]}"
         for s in sources
     ]
     embeddings = _embed(texts)

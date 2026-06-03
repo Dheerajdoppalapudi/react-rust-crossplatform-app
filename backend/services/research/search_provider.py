@@ -45,19 +45,28 @@ class TavilyProvider:
     def _available(self) -> bool:
         return self._client is not None
 
-    async def search(self, query: str, max_results: int = 5, timeout: float = 20.0) -> list[SearchResult]:
+    async def search(
+        self,
+        query: str,
+        max_results: int = 5,
+        timeout: float = 20.0,
+        include_domains: list[str] | None = None,
+    ) -> list[SearchResult]:
         if not self._available():
             logger.warning("tavily_not_configured")
             return []
 
+        search_kwargs: dict = {
+            "query": query,
+            "max_results": max_results,
+            "search_depth": "basic",
+        }
+        if include_domains:
+            search_kwargs["include_domains"] = include_domains
+
         try:
             response = await asyncio.wait_for(
-                asyncio.to_thread(
-                    self._client.search,
-                    query=query,
-                    max_results=max_results,
-                    search_depth="basic",
-                ),
+                asyncio.to_thread(self._client.search, **search_kwargs),
                 timeout=timeout,
             )
             results = []

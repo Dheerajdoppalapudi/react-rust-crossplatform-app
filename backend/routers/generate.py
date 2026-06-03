@@ -683,10 +683,17 @@ async def _search_phase(
 
     # One semaphore for the entire request — caps total concurrent Tavily calls
     _tavily_sem = asyncio.Semaphore(3)
+    _intent_domain = intent.get("domain", "")
+
+    # For economics queries, bias Tavily toward financial data sources
+    from services.research.source_processor import FINANCIAL_PRIORITY_DOMAINS
+    _include_domains = (
+        list(FINANCIAL_PRIORITY_DOMAINS) if _intent_domain == "economics" else []
+    )
 
     async def _bounded_search(q: str) -> list:
         async with _tavily_sem:
-            return await tavily.search(q, max_results=5)
+            return await tavily.search(q, max_results=5, include_domains=_include_domains)
 
     max_rounds = _DEEP_MAX_ROUNDS if research_mode == "deep_research" else 1
 
@@ -763,16 +770,37 @@ async def _search_phase(
             ))
 
     # ── Rank ─────────────────────────────────────────────────────────────────
-    ranked    = rank_and_deduplicate(all_results, DEEP_SEARCH_SOURCES)
+    ranked    = rank_and_deduplicate(all_results, DEEP_SEARCH_SOURCES, intent_domain=_intent_domain)
+
+    # ── Extract: replace snippets with full page content for top sources ─────
+    # Tavily snippets are short query-relevant excerpts; full extraction gives
+    # the LLM the actual page content (tables, data, full text).
+    _EXTRACT_TOP_N = 3
+    if ranked:
+        to_extract = ranked[:_EXTRACT_TOP_N]
+
+        async def _bounded_extract(r: SearchResult) -> str:
+            async with _tavily_sem:
+                return await tavily.extract(r.url)
+
+        yield {"type": "stage", "stage": "reading", "label": f"Reading {len(ranked)} sources…"}
+        t_extract = time.time()
+
+        extracted = await asyncio.gather(
+            *[_bounded_extract(r) for r in to_extract],
+            return_exceptions=True,
+        )
+        for result, content in zip(to_extract, extracted):
+            if isinstance(content, str) and content.strip():
+                result.snippet = content
+                logger.info("tavily_extract_applied", url=result.url[:80], chars=len(content))
+
+        yield {"type": "stage_done", "stage": "reading", "duration_s": round(time.time() - t_extract, 2)}
+
     all_final = file_sources + url_sources + ranked
 
     # Top-N fed to the LLM; all sources embedded in ChromaDB for follow-up retrieval
     final = all_final[:DEEP_SOURCES_IN_ANSWER]
-
-    if all_final:
-        yield {"type": "stage", "stage": "reading", "label": f"Reading {len(all_final)} sources…"}
-        t_read = time.time()
-        yield {"type": "stage_done", "stage": "reading", "duration_s": round(time.time() - t_read, 2)}
 
     yield {
         "type":            "_sources_ready",
