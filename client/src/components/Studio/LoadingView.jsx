@@ -35,6 +35,7 @@ export default function LoadingView({
   completedBeats   = null,
   selectedEntities = [],
   blockCount       = 0,
+  active           = false,   // turn is still streaming — keep the spinner up
 }) {
   const isDark = useIsDark()
 
@@ -46,6 +47,13 @@ export default function LoadingView({
   const allDone   = displayStages.length >= 2 && displayStages.every(s => s.status === 'done')
   const doneCount = displayStages.filter(s => s.status === 'done').length
   const [masterOpen, setMasterOpen] = useState(defaultOpen)
+
+  // While the turn is still streaming (`active`), never collapse to the
+  // "Completed N steps" summary and never drop the spinner — even in the brief
+  // gap after one stage finishes and before the next event arrives. This is what
+  // removes the spinner flicker between, e.g., "Reading sources" and the next stage.
+  const showCompletedHeader = allDone && !active
+  const showSpinner         = active || (!allDone && displayStages.some(s => s.status === 'active'))
 
   const subduedColor = metaText(isDark)
 
@@ -66,7 +74,7 @@ export default function LoadingView({
       </Box>
 
       {/* "Completed N steps" collapsible header */}
-      {allDone && (
+      {showCompletedHeader && (
         <Box
           onClick={() => setMasterOpen(v => !v)}
           sx={{
@@ -89,7 +97,7 @@ export default function LoadingView({
       )}
 
       {/* Stage list */}
-      <Collapse in={!allDone || masterOpen} timeout={220}>
+      <Collapse in={!showCompletedHeader || masterOpen} timeout={220}>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
           {displayStages.map((s, i) => (
             <StageRow
@@ -109,10 +117,8 @@ export default function LoadingView({
         <EntityChipsBar entities={selectedEntities} isDark={isDark} />
       </Collapse>
 
-      {/* Paralyte spinner — shown while any stage is still active */}
-      {!allDone && displayStages.some(s => s.status === 'active') && (
-        <ParalyteSpinner />
-      )}
+      {/* Paralyte spinner — stays up for the whole streaming phase (no flicker) */}
+      {showSpinner && <ParalyteSpinner />}
     </Box>
   )
 }

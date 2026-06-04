@@ -108,6 +108,24 @@ export default function Studio({
   const isAnyGenerating    = useMemo(() => isBootstrapping || turns.some((t) => t.isLoading), [isBootstrapping, turns])
   const lastCompletedTurnId = useMemo(() => turns.filter((t) => t.id).at(-1)?.id ?? null, [turns])
 
+  // Signature of the last turn's streaming content. Changes whenever a new block,
+  // stage, source, frame, beat, or ~120 chars of synthesis text arrives — so the
+  // thread auto-follows streaming output, not just the arrival of a whole new turn.
+  // Synthesis is bucketed (not per-token) to keep smooth-scroll from thrashing.
+  const streamSignature = useMemo(() => {
+    const lt = turns[turns.length - 1]
+    if (!lt) return String(turns.length)
+    return [
+      turns.length,
+      lt.blocks?.length ?? 0,
+      lt.stages?.length ?? 0,
+      lt.sources?.length ?? 0,
+      lt.pendingFrames?.length ?? 0,
+      lt.completedBeats?.length ?? 0,
+      Math.floor((lt.synthesisText?.length ?? 0) / 120),
+    ].join(':')
+  }, [turns])
+
   const {
     handleGenerate,
     handleLearnGenerate,
@@ -174,12 +192,13 @@ export default function Studio({
     return () => el.removeEventListener('scroll', onScroll)
   }, [])
 
-  // Auto-scroll to the latest turn only when user is already near the bottom.
+  // Auto-scroll to follow streaming output — fires on each new turn AND as the
+  // latest turn streams in new content — but only while the user is near the bottom.
   useEffect(() => {
     if (!userScrolledUpRef.current) {
-      threadBottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+      threadBottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
     }
-  }, [turns.length])
+  }, [streamSignature])
 
   // Focus the prompt bar when the thread is empty (new conversation).
   useEffect(() => {
@@ -395,6 +414,7 @@ export default function Studio({
                   <UserBubble prompt={bootstrap.prompt} />
                 )}
                 <LoadingView
+                  active
                   stages={bootstrap?.stages?.length ? bootstrap.stages : null}
                   stage={bootstrap?.stage ?? 'planning'}
                   sources={bootstrap?.sources ?? []}

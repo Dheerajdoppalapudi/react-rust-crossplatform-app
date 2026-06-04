@@ -52,8 +52,6 @@ export default function MergeLoadingModal({ open, sessionCount = 0 }) {
     return () => clearInterval(interval)
   }, [open, stepIndex])
 
-  const currentStep = STEPS[stepIndex] || STEPS[STEPS.length - 1]
-
   return (
     <Dialog
       open={open}
@@ -96,7 +94,6 @@ export default function MergeLoadingModal({ open, sessionCount = 0 }) {
         {VISIBLE_STEPS.map((step, i) => {
           const isDone    = i < stepIndex
           const isActive  = i === stepIndex
-          const isPending = i > stepIndex
 
           return (
             <Box key={step.key} sx={{ display: 'flex', gap: 2, alignItems: 'stretch' }}>

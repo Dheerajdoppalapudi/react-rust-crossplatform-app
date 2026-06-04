@@ -93,6 +93,10 @@ export default function Canvas({ turns, onNodeClick, onAsk, defaultModel, defaul
         overflow: 'hidden',
       },
       '& .react-flow__attribution': { display: 'none' },
+      // Selection is rendered inside the node itself (single brand border + glow).
+      // Suppress ReactFlow's default selected outline so there's never a second ring.
+      '& .react-flow__node.selected': { boxShadow: 'none', outline: 'none' },
+      '& .react-flow__node:focus, & .react-flow__node:focus-visible': { outline: 'none' },
     }}>
       <ReactFlow
         nodes={nodes}

@@ -386,10 +386,11 @@ function LoadingNode({ turn, isDark, theme, indexLabel }) {
 
 // ─── INTERACTIVE NODE (render_path === 'interactive') ─────────────────────────
 
-function InteractiveNode({ turn, data, isDark, theme, indexLabel, nodeHovered, isOpen, openPanel }) {
+function InteractiveNode({ turn, data, isDark, theme, indexLabel, nodeHovered, isOpen, openPanel, isSelected }) {
   const typeConfig  = getTypeConfig(turn, isDark)
   const description = getDescription(turn)
   const entityIcons = getUniqueEntityIcons(turn.blocks ?? [])
+  const selColor    = isDark ? BRAND.glow : BRAND.primary
 
   const timestamp = turn.created_at ? relativeTime(turn.created_at) : null
 
@@ -425,15 +426,20 @@ function InteractiveNode({ turn, data, isDark, theme, indexLabel, nodeHovered, i
       <Box sx={{
         width: NODE_W, height: INTERACTIVE_NODE_H,
         borderRadius: '12px',
-        border: `1.5px solid ${typeConfig.cardBorder}`,
+        // Selected (opened) node: a single brand border + soft glow — no second ring.
+        border: `${isSelected ? 2 : 1.5}px solid ${isSelected ? selColor : typeConfig.cardBorder}`,
         bgcolor: isDark ? PALETTE.darkSurface : PALETTE.ivory,
         display: 'flex', flexDirection: 'column',
         overflow: 'hidden', cursor: 'pointer',
-        boxShadow: restShadow(isDark),
+        boxShadow: isSelected
+          ? `${restShadow(isDark)}, 0 0 18px ${isDark ? 'rgba(47,212,181,0.28)' : 'rgba(14,124,102,0.18)'}`
+          : restShadow(isDark),
         transition: 'border-color 0.2s, box-shadow 0.18s, transform 0.15s',
         '&:hover': {
           transform:  'translateY(-1px)',
-          boxShadow:  hoverShadow(isDark),
+          boxShadow:  isSelected
+            ? `${hoverShadow(isDark)}, 0 0 18px ${isDark ? 'rgba(47,212,181,0.28)' : 'rgba(14,124,102,0.18)'}`
+            : hoverShadow(isDark),
         },
       }}>
         <NodeHeader
@@ -501,11 +507,12 @@ function InteractiveNode({ turn, data, isDark, theme, indexLabel, nodeHovered, i
 
 // ─── VIDEO NODE ───────────────────────────────────────────────────────────────
 
-function VideoNode({ turn, data, isDark, theme, indexLabel, nodeHovered, isOpen, openPanel, getFrameUrl, imgError, setImgError, thumbHover, setThumbHover, duration }) {
+function VideoNode({ turn, data, isDark, theme, indexLabel, nodeHovered, isOpen, openPanel, getFrameUrl, imgError, setImgError, thumbHover, setThumbHover, duration, isSelected }) {
   const typeConfig  = getTypeConfig(turn, isDark)
   const description = getDescription(turn)
   const frameCount  = getFrameCount(turn)
   const isReady     = turn.videoPhase === 'ready'
+  const selColor    = isDark ? BRAND.glow : BRAND.primary
 
   const frameUrl = getFrameUrl(0)
 
@@ -539,16 +546,21 @@ function VideoNode({ turn, data, isDark, theme, indexLabel, nodeHovered, isOpen,
       <Box sx={{
         width: NODE_W, height: VIDEO_NODE_H,
         borderRadius: '12px',
-        border: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.border}`,
+        // Selected (opened) node: a single brand border + soft glow — no second ring.
+        border: `${isSelected ? 2 : 1}px solid ${isSelected ? selColor : (isDark ? PALETTE.borderDark : PALETTE.border)}`,
         bgcolor: isDark ? PALETTE.darkSurface : PALETTE.ivory,
         display: 'flex', flexDirection: 'column',
         overflow: 'hidden', cursor: 'pointer',
-        boxShadow: restShadow(isDark),
+        boxShadow: isSelected
+          ? `${restShadow(isDark)}, 0 0 18px ${isDark ? 'rgba(47,212,181,0.28)' : 'rgba(14,124,102,0.18)'}`
+          : restShadow(isDark),
         transition: 'border-color 0.2s, box-shadow 0.18s, transform 0.15s',
         '&:hover': {
-          borderColor: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.16)',
+          borderColor: isSelected ? selColor : (isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.16)'),
           transform:   'translateY(-1px)',
-          boxShadow:   hoverShadow(isDark),
+          boxShadow:   isSelected
+            ? `${hoverShadow(isDark)}, 0 0 18px ${isDark ? 'rgba(47,212,181,0.28)' : 'rgba(14,124,102,0.18)'}`
+            : hoverShadow(isDark),
         },
       }}>
         <NodeHeader
@@ -795,12 +807,8 @@ export default function SessionNode({ data }) {
     )
   }
 
-  // Active-selection ring — thin brand outline drawn outside the card
-  const activeRingSx = isSelected ? {
-    outline: `2px solid ${isDark ? BRAND.glow : BRAND.primary}`,
-    outlineOffset: '2px',
-    borderRadius: '13px',
-  } : {}
+  // Selection is shown by a single brand border + glow inside the card itself
+  // (see InteractiveNode/VideoNode) — no outer offset ring, so no double border.
 
   // ── INTERACTIVE ──────────────────────────────────────────────────────────
   if (isText) {
@@ -808,7 +816,6 @@ export default function SessionNode({ data }) {
       <Box
         onMouseEnter={() => setNodeHovered(true)}
         onMouseLeave={() => { if (!isOpen) setNodeHovered(false) }}
-        sx={activeRingSx}
       >
         {handles}
         <InteractiveNode
@@ -820,6 +827,7 @@ export default function SessionNode({ data }) {
           nodeHovered={nodeHovered}
           isOpen={isOpen}
           openPanel={openPanel}
+          isSelected={isSelected}
         />
       </Box>
     )
@@ -830,7 +838,6 @@ export default function SessionNode({ data }) {
     <Box
       onMouseEnter={() => setNodeHovered(true)}
       onMouseLeave={() => { if (!isOpen) setNodeHovered(false) }}
-      sx={activeRingSx}
     >
       {handles}
       <VideoNode
@@ -848,6 +855,7 @@ export default function SessionNode({ data }) {
         thumbHover={thumbHover}
         setThumbHover={setThumbHover}
         duration={duration}
+        isSelected={isSelected}
       />
     </Box>
   )

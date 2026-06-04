@@ -182,6 +182,73 @@ def _extract_meta_fields(buf: str, blocks_key_start: int) -> dict:
         return {}
 
 
+def _extract_balanced(buf: str, start: int) -> "str | None":
+    """
+    Return the substring from the bracket at `start` to its matching close,
+    respecting JSON string escaping. `start` must point at a '[' or '{'.
+    Returns None if the bracket never closes within the buffer.
+    """
+    if start < 0 or start >= len(buf) or buf[start] not in "[{":
+        return None
+    depth = 0
+    in_string = False
+    escape_next = False
+    for i in range(start, len(buf)):
+        c = buf[i]
+        if escape_next:
+            escape_next = False
+            continue
+        if in_string:
+            if c == "\\":
+                escape_next = True
+            elif c == '"':
+                in_string = False
+            continue
+        if c == '"':
+            in_string = True
+        elif c in "[{":
+            depth += 1
+        elif c in "]}":
+            depth -= 1
+            if depth == 0:
+                return buf[start : i + 1]
+    return None
+
+
+def _extract_meta_anywhere(buf: str) -> dict:
+    """
+    Best-effort recovery of top-level SceneIR meta fields (title, follow_ups,
+    learning_objective) from a scene-planner buffer — regardless of whether the
+    model placed them before or after the blocks array, and even when the strict
+    JSON parse fell back to block-only reconstruction.
+
+    Used to backfill the persisted SceneIR so a reloaded conversation shows the
+    same follow-ups/title the live stream produced. Returns only the keys it
+    could confidently recover.
+    """
+    out: dict = {}
+    for key in ("title", "learning_objective"):
+        m = re.search(rf'"{key}"\s*:\s*"((?:[^"\\]|\\.)*)"', buf)
+        if m:
+            try:
+                out[key] = json.loads('"' + m.group(1) + '"')
+            except Exception:
+                out[key] = m.group(1)
+    m = re.search(r'"follow_ups"\s*:\s*\[', buf)
+    if m:
+        arr = _extract_balanced(buf, m.end() - 1)
+        if arr:
+            try:
+                vals = json.loads(arr)
+                if isinstance(vals, list):
+                    cleaned = [v.strip() for v in vals if isinstance(v, str) and v.strip()]
+                    if cleaned:
+                        out["follow_ups"] = cleaned
+            except Exception:
+                pass
+    return out
+
+
 def _scan_next_block(buf: str, pos: int) -> tuple[int, "str | None"]:
     """
     Scan `buf` starting at `pos` for the next complete JSON object.
@@ -688,12 +755,31 @@ async def _stream_plan_scene(
             except Exception:
                 pass
 
+    # ── Backfill meta the strict parse may have dropped ───────────────────────
+    # The model is told to emit title/follow_ups before blocks, but it sometimes
+    # places them after the array (or the final parse falls back to block-only
+    # reconstruction), leaving the persisted scene with empty meta even though the
+    # data is present in the buffer. Recover it from anywhere in the buffer so a
+    # reloaded conversation shows the same follow-ups the live stream produced.
+    if scene is not None:
+        recovered = _extract_meta_anywhere(buf)
+        if not scene.title and recovered.get("title"):
+            scene.title = recovered["title"]
+        if not scene.follow_ups and recovered.get("follow_ups"):
+            scene.follow_ups = recovered["follow_ups"]
+        if not scene.learning_objective and recovered.get("learning_objective"):
+            scene.learning_objective = recovered["learning_objective"]
+        if not scene.follow_ups:
+            logger.warning("scene_followups_empty", model=_model, buf_chars=len(buf))
+
     _accumulate_tokens(usage)
     logger.info("llm_done", prompt="scene_planner", model=_model,
                 tokens=usage.get("total_tokens", 0),
                 cache_read=usage.get("cache_read_input_tokens", 0),
                 cache_create=usage.get("cache_creation_input_tokens", 0))
-    _log({"event": "llm_call", "prompt_name": "scene_planner", "model": _model, "usage": usage})
+    # Persist the raw buffer so follow-up/title recovery issues stay debuggable.
+    _log({"event": "llm_call", "prompt_name": "scene_planner", "model": _model,
+          "usage": usage, "full_response": buf})
 
     yield {"type": "_done", "scene": scene, "usage": usage}
 

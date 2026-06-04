@@ -315,11 +315,17 @@ async def build_interactive_context(
 
         lines.append(f"Turn {turn['turn_index']}: \"{turn['prompt']}\"")
 
-        scene = await asyncio.to_thread(_s3_download_json, meta_key(session_id, "scene_ir.json"))
+        # DB-first: frames_meta (== the persisted SceneIR) arrives inline with the
+        # ancestor chain, so the common case needs zero file I/O. Fall back to the
+        # scene_ir.json copy only for legacy sessions created before frames_meta
+        # was stored (or the rare case the DB write failed).
+        scene = turn["frames_meta"]
         if scene is None:
-            scene_ir_path = Path(output_dir) / "scene_ir.json"
-            if await asyncio.to_thread(scene_ir_path.exists):
-                scene = json.loads(await asyncio.to_thread(scene_ir_path.read_text, "utf-8"))
+            scene = await asyncio.to_thread(_s3_download_json, meta_key(session_id, "scene_ir.json"))
+            if scene is None:
+                scene_ir_path = Path(output_dir) / "scene_ir.json"
+                if await asyncio.to_thread(scene_ir_path.exists):
+                    scene = json.loads(await asyncio.to_thread(scene_ir_path.read_text, "utf-8"))
 
         if scene:
 

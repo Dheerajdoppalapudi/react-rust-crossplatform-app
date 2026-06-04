@@ -426,19 +426,20 @@ async def collect_ancestor_chain(
             """
             WITH RECURSIVE chain AS (
                 SELECT id, prompt, turn_index, output_dir, parent_session_id,
-                       synthesis_text, 1 AS depth
+                       synthesis_text, frames_meta, 1 AS depth
                 FROM sessions
                 WHERE id = $1 AND status = 'done'
 
                 UNION ALL
 
                 SELECT s.id, s.prompt, s.turn_index, s.output_dir,
-                       s.parent_session_id, s.synthesis_text, c.depth + 1
+                       s.parent_session_id, s.synthesis_text, s.frames_meta, c.depth + 1
                 FROM sessions s
                 JOIN chain c ON s.id = c.parent_session_id
                 WHERE s.status = 'done' AND c.depth < $2
             )
-            SELECT id, prompt, turn_index, output_dir, parent_session_id, synthesis_text
+            SELECT id, prompt, turn_index, output_dir, parent_session_id,
+                   synthesis_text, frames_meta
             FROM chain
             ORDER BY turn_index ASC
             """,

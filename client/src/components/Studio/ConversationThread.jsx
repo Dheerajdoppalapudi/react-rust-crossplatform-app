@@ -91,6 +91,7 @@ function RetryBanner({ turn, onRetry }) {
 function TurnLoadingView({ turn }) {
   return (
     <LoadingView
+      active={turn.isLoading !== false}
       stages={turn.stages}
       sources={turn.sources ?? []}
       compact
