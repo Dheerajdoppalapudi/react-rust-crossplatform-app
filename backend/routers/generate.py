@@ -56,6 +56,7 @@ from core.config import (
     DEEP_MAX_QUERIES,
     UPLOAD_DIR,
 )
+from core.cost import compute_session_cost
 from core.limiter import limiter as _limiter, get_user_key
 from core.db_async import (
     session_output_dir,
@@ -91,6 +92,18 @@ logger = structlog.get_logger(__name__)
 router = APIRouter()
 
 HEARTBEAT_INTERVAL = HEARTBEAT_INTERVAL_SECS
+
+# H1: Strong references to fire-and-forget background tasks. Without this an
+# asyncio task created in a cancellation handler can be garbage-collected
+# before it runs, leaving the session stuck in 'pending'.
+_BACKGROUND_TASKS: set = set()
+
+
+def _spawn_bg(coro) -> None:
+    """Schedule a fire-and-forget coroutine, retaining a strong reference."""
+    task = asyncio.create_task(coro)
+    _BACKGROUND_TASKS.add(task)
+    task.add_done_callback(_BACKGROUND_TASKS.discard)
 
 
 def _sse(data: dict) -> str:
@@ -286,299 +299,340 @@ async def _generate_stream(p: dict):
     _log({"event": "request_received", "prompt": message, "session_id": session_id,
           "model": model_name, "research_mode": research_mode, "video_enabled": video_enabled})
 
-    heartbeat_queue: asyncio.Queue = asyncio.Queue()
+    # ── H2: single merged output queue ────────────────────────────────────────
+    # All pipeline events AND heartbeats flow through one queue. The consumer
+    # loop below drains it, so a heartbeat is delivered even while the pipeline
+    # is awaiting a long synchronous step (e.g. plan_and_classify) that emits no
+    # events of its own — the previous design only flushed heartbeats between
+    # sub-generator iterations, leaving the longest steps unprotected.
+    out_q: asyncio.Queue = asyncio.Queue()
+    _STREAM_DONE = object()
+
+    async def _emit(event: dict) -> None:
+        await out_q.put(event)
 
     async def _heartbeat():
-        t = start_time
         while True:
             await asyncio.sleep(HEARTBEAT_INTERVAL)
-            await heartbeat_queue.put({"type": "heartbeat", "elapsed_s": round(time.time() - t, 1)})
+            await out_q.put({"type": "heartbeat", "elapsed_s": round(time.time() - start_time, 1)})
 
-    heartbeat_task = asyncio.create_task(_heartbeat())
+    async def _produce():
+        try:
+            # ── 0. Init event — URL updates immediately ───────────────────────
+            await _emit({"type": "init", "conversation_id": conversation_id})
 
-    try:
-        # ── 0. Init event — URL updates immediately ───────────────────────────
-        yield _sse({"type": "init", "conversation_id": conversation_id})
-
-        # ── 1. Conversation context ───────────────────────────────────────────
-        if video_enabled:
-            if parent_session_id or pause_session_id:
-                conversation_context = await build_conversation_context(
-                    parent_session_id=parent_session_id,
-                    pause_session_id=pause_session_id,
-                    pause_frame_index=pause_frame_index,
-                    pause_caption=pause_caption,
-                )
+            # ── 1. Conversation context ───────────────────────────────────────
+            if video_enabled:
+                if parent_session_id or pause_session_id:
+                    conversation_context = await build_conversation_context(
+                        parent_session_id=parent_session_id,
+                        pause_session_id=pause_session_id,
+                        pause_frame_index=pause_frame_index,
+                        pause_caption=pause_caption,
+                    )
+                else:
+                    conversation_context = ""
             else:
-                conversation_context = ""
-        else:
-            if parent_session_id:
-                conversation_context = await build_interactive_context(
-                    parent_session_id=parent_session_id,
+                if parent_session_id:
+                    conversation_context = await build_interactive_context(
+                        parent_session_id=parent_session_id,
+                    )
+                else:
+                    conversation_context = ""
+
+            # Append user text-selection context after the conversation history block
+            if selected_text and selected_text.strip():
+                _excerpt = selected_text.strip()
+                _max_chars = 2000
+                if len(_excerpt) > _max_chars:
+                    _excerpt = _excerpt[:_max_chars] + "…"
+                conversation_context += (
+                    "\n## USER TEXT SELECTION CONTEXT\n"
+                    "The user has highlighted the following excerpt from the lesson:\n"
+                    f"\"{_excerpt}\"\n"
+                    "Their follow-up question is specifically about this selected text. "
+                    "Elaborate, clarify, or extend this concept in your response.\n\n"
                 )
-            else:
-                conversation_context = ""
 
-        # Append user text-selection context after the conversation history block
-        if selected_text and selected_text.strip():
-            _excerpt = selected_text.strip()
-            _max_chars = 2000
-            if len(_excerpt) > _max_chars:
-                _excerpt = _excerpt[:_max_chars] + "…"
-            conversation_context += (
-                "\n## USER TEXT SELECTION CONTEXT\n"
-                "The user has highlighted the following excerpt from the lesson:\n"
-                f"\"{_excerpt}\"\n"
-                "Their follow-up question is specifically about this selected text. "
-                "Elaborate, clarify, or extend this concept in your response.\n\n"
-            )
+            # ── 2. Load prior synthesis_text from ancestor chain (branch-aware) ──
+            prior_synthesis = await _load_prior_synthesis(parent_session_id, FOLLOWUP_CONTEXT_TURNS)
 
-        # ── 2. Load prior synthesis_text from ancestor chain (branch-aware) ──
-        prior_synthesis = await _load_prior_synthesis(parent_session_id, FOLLOWUP_CONTEXT_TURNS)
+            # ── 3. Thinking stage + plan_and_classify ─────────────────────────
+            short_q = message.strip()
+            if len(short_q) > 60:
+                short_q = short_q[:60].rsplit(' ', 1)[0] + '…'
+            think_evt = {"type": "stage", "stage": "thinking", "label": f"Thinking about {short_q}"}
+            _apply_stage_log(think_evt)
+            await _emit(think_evt)
+            t_think = time.time()
 
-        # ── 3. Thinking stage + plan_and_classify ─────────────────────────────
-        short_q = message.strip()
-        if len(short_q) > 60:
-            short_q = short_q[:60].rsplit(' ', 1)[0] + '…'
-        think_evt = {"type": "stage", "stage": "thinking", "label": f"Thinking about {short_q}"}
-        _apply_stage_log(think_evt)
-        yield _sse(think_evt)
-        t_think = time.time()
-
-        intent = await plan_and_classify(
-            message=message,
-            research_mode=research_mode,
-            video_enabled=video_enabled,
-            conversation_context=conversation_context,
-            prior_synthesis=prior_synthesis,
-        )
-
-        think_done = {"type": "stage_done", "stage": "thinking", "duration_s": round(time.time() - t_think, 2)}
-        _apply_stage_log(think_done)
-        yield _sse(think_done)
-
-        # ── 4. Search phase (conditional) ─────────────────────────────────────
-        sources:          list[dict] = []
-        sources_full:     list[dict] = []   # top-N for LLM
-        sources_all:      list[dict] = []   # all results for ChromaDB
-
-        should_search = (research_mode == "deep_research") or intent.get("needs_search", False)
-
-        # For instant follow-ups, try ChromaDB before hitting Tavily
-        if should_search and parent_session_id and research_mode == "instant":
-            cached = await asyncio.to_thread(
-                retrieve_sources, conversation_id, message, FOLLOWUP_TOP_K_SOURCES
-            )
-            if len(cached) >= 3:
-                sources      = cached
-                sources_full = cached
-                should_search = False
-                logger.info("chromadb_cache_hit", conv=conversation_id[:8], n=len(cached))
-
-        if should_search:
-            file_paths = _resolve_file_ids(uploaded_file_ids, current_user.id)
-            extra_urls = extract_urls_from_text(message)
-
-            async for event in _search_phase(
-                intent=intent,
+            intent = await plan_and_classify(
                 message=message,
                 research_mode=research_mode,
-                conversation_id=conversation_id,
-                file_paths=file_paths,
-                extra_urls=extra_urls,
-                output_dir=output_dir,
-            ):
-                while not heartbeat_queue.empty():
-                    yield _sse(await heartbeat_queue.get())
-                if event["type"] == "_sources_ready":
-                    sources      = event["sources"]
-                    sources_full = event["sources_for_llm"]
-                    sources_all  = event["sources_all"]
-                else:
-                    _apply_stage_log(event)
-                    yield _sse(event)
-
-        # ── 5. Two-branch pipeline ─────────────────────────────────────────────
-        result_payload: dict = {}
-        synthesis_text: str  = ""
-
-        if video_enabled:
-            # Synthesise sources → text for the frame planner
-            if sources_full:
-                yield _sse({"type": "stage", "stage": "synthesising", "label": "Synthesising answer…"})
-                _apply_stage_log({"type": "stage", "stage": "synthesising", "label": "Synthesising answer…"})
-                t_synth = time.time()
-
-                from services.research.synthesiser import stream as synth_stream
-                from services.research.source_processor import build_evidence_table
-                from services.llm_service import get_task_service
-
-                llm_svc = request_llm_service.get() or get_task_service("synthesiser")
-                sr_list = [SearchResult(
-                    title=s.get("title", ""), url=s.get("url", ""),
-                    snippet=s.get("snippet", ""), content=s.get("content", ""),
-                    domain=s.get("domain", ""), score=float(s.get("score", 0.5)),
-                ) for s in sources_full]
-
-                async for token in synth_stream(message, sr_list, llm_svc, conversation_context):
-                    yield _sse({"type": "token", "text": token})
-                    synthesis_text += token
-
-                yield _sse({"type": "synthesis_done"})
-
-                synth_done = {"type": "stage_done", "stage": "synthesising",
-                              "duration_s": round(time.time() - t_synth, 2)}
-                _apply_stage_log(synth_done)
-                yield _sse(synth_done)
-
-            async for event in run_video_pipeline_from_intent(
-                intent=intent,
-                synthesis_text=synthesis_text,
-                session_id=session_id,
-                output_dir=output_dir,
+                video_enabled=video_enabled,
                 conversation_context=conversation_context,
-                notes_enabled=notes_enabled,
-                forced_render_mode=render_mode,
-            ):
-                while not heartbeat_queue.empty():
-                    yield _sse(await heartbeat_queue.get())
-                _apply_stage_log(event)
-                if event["type"] == "result":
-                    result_payload = event["payload"]
-                else:
-                    yield _sse(event)
+                prior_synthesis=prior_synthesis,
+            )
 
-        else:
-            # Interactive: scene planner gets raw sources + enriched_prompt
-            from services.interactive.interactive_service import run_interactive_pipeline
+            think_done = {"type": "stage_done", "stage": "thinking", "duration_s": round(time.time() - t_think, 2)}
+            _apply_stage_log(think_done)
+            await _emit(think_done)
 
-            design_evt = {"type": "stage", "stage": "designing", "label": "Designing the lesson…"}
-            _apply_stage_log(design_evt)
-            yield _sse(design_evt)
-            t_design = time.time()
+            # ── 4. Search phase (conditional) ─────────────────────────────────
+            sources:          list[dict] = []
+            sources_full:     list[dict] = []   # top-N for LLM
+            sources_all:      list[dict] = []   # all results for ChromaDB
 
-            result_payload = {
-                "session_id":          session_id,
-                "render_path":         "interactive",
-                "frame_count":         0,
-                "intent_type":         "general",
-                "suggested_followups": intent.get("suggested_followups", []),
-            }
+            should_search = (research_mode == "deep_research") or intent.get("needs_search", False)
 
-            async for event in run_interactive_pipeline(
-                original_message=message,
-                enriched_prompt=intent.get("enriched_prompt", ""),
-                session_id=session_id,
-                output_dir=output_dir,
-                conversation_context=conversation_context,
-                domain=intent.get("domain", "general"),
-                sources=sources_full,  # full content for scene planner citations
-            ):
-                while not heartbeat_queue.empty():
-                    yield _sse(await heartbeat_queue.get())
-                if event["type"] == "meta":
-                    result_payload["suggested_followups"] = event.get("follow_ups", [])
-                    yield _sse(event)
-                elif event["type"] == "done":
-                    pass  # router emits the unified done
-                else:
-                    if event["type"] in ("stage", "stage_done"):
+            # For instant follow-ups, try ChromaDB before hitting Tavily
+            if should_search and parent_session_id and research_mode == "instant":
+                cached = await asyncio.to_thread(
+                    retrieve_sources, conversation_id, message, FOLLOWUP_TOP_K_SOURCES
+                )
+                if len(cached) >= 3:
+                    sources      = cached
+                    sources_full = cached
+                    should_search = False
+                    logger.info("chromadb_cache_hit", conv=conversation_id[:8], n=len(cached))
+
+            if should_search:
+                file_paths = _resolve_file_ids(uploaded_file_ids, current_user.id)
+                extra_urls = extract_urls_from_text(message)
+
+                async for event in _search_phase(
+                    intent=intent,
+                    message=message,
+                    research_mode=research_mode,
+                    conversation_id=conversation_id,
+                    file_paths=file_paths,
+                    extra_urls=extra_urls,
+                    output_dir=output_dir,
+                ):
+                    if event["type"] == "_sources_ready":
+                        sources      = event["sources"]
+                        sources_full = event["sources_for_llm"]
+                        sources_all  = event["sources_all"]
+                        try:
+                            from core.s3 import upload_sources_raw
+                            raw_bytes = json.dumps(sources_all, indent=2).encode()
+                            await asyncio.to_thread(upload_sources_raw, raw_bytes, session_id)
+                        except Exception as _exc:
+                            logger.warning("sources_raw_upload_failed", session=session_id, error=str(_exc))
+                    else:
                         _apply_stage_log(event)
-                    yield _sse(event)
+                        await _emit(event)
 
-            design_done = {"type": "stage_done", "stage": "designing",
-                           "duration_s": round(time.time() - t_design, 2)}
-            _apply_stage_log(design_done)
-            yield _sse(design_done)
+            # ── 5. Two-branch pipeline ─────────────────────────────────────────
+            result_payload: dict = {}
+            synthesis_text: str  = ""
 
-        # ── 6. Finalise ────────────────────────────────────────────────────────
-        duration_ms    = int((time.time() - start_time) * 1000)
-        api_call_count = count_llm_calls(lifecycle_log)
-        final_usage    = token_usage.get() or {}
+            if video_enabled:
+                # Synthesise sources → text for the frame planner
+                if sources_full:
+                    synth_evt = {"type": "stage", "stage": "synthesising", "label": "Synthesising answer…"}
+                    _apply_stage_log(synth_evt)
+                    await _emit(synth_evt)
+                    t_synth = time.time()
 
-        _log({"event": "request_complete", "duration_ms": duration_ms, "session_id": session_id})
-        logger.info(
-            "generate_complete",
-            session=session_id,
-            render_path=result_payload.get("render_path"),
-            research=research_mode,
-            video=video_enabled,
-            duration_ms=duration_ms,
-            llm_calls=api_call_count,
-            tokens=final_usage.get("total_tokens", 0),
-        )
+                    from services.research.synthesiser import stream as synth_stream
+                    from services.llm_service import get_task_service
 
-        await asyncio.to_thread(_write_activity_log, output_dir, lifecycle_log, session_id)
+                    llm_svc = request_llm_service.get() or get_task_service("synthesiser")
+                    sr_list = [SearchResult(
+                        title=s.get("title", ""), url=s.get("url", ""),
+                        snippet=s.get("snippet", ""), content=s.get("content", ""),
+                        domain=s.get("domain", ""), score=float(s.get("score", 0.5)),
+                    ) for s in sources_full]
 
-        for s in stages_log:
-            if s.get("status") == "active":
-                s["status"] = "done"
+                    async for token in synth_stream(message, sr_list, llm_svc, conversation_context):
+                        await _emit({"type": "token", "text": token})
+                        synthesis_text += token
 
-        # Upsert ALL sources to ChromaDB (not just top-N) for richer follow-up retrieval
-        if sources_all:
-            await asyncio.to_thread(upsert_sources, conversation_id, sources_all)
+                    await _emit({"type": "synthesis_done"})
 
-        # frames_meta from the video pipeline (non-None for video mode).
-        # For interactive mode, interactive_service already wrote frames_meta to
-        # the DB — passing None here would overwrite and erase it.
-        _frames_meta = result_payload.pop("frames_meta", None)
-        _extra = {"frames_meta": _frames_meta} if _frames_meta is not None else {}
+                    synth_done = {"type": "stage_done", "stage": "synthesising",
+                                  "duration_s": round(time.time() - t_synth, 2)}
+                    _apply_stage_log(synth_done)
+                    await _emit(synth_done)
 
-        await update_session(
-            session_id,
-            status="done",
-            intent_type=result_payload.get("intent_type"),
-            render_path=result_payload.get("render_path"),
-            frame_count=result_payload.get("frame_count"),
-            output_dir=output_dir,
-            ui_output_file=result_payload.pop("ui_output_file", None),
-            # Beat pipeline assembles session_final.mp4 directly — save it so the
-            # video router can serve it without re-assembling with TTS.
-            video_path=result_payload.get("video_path") or None,
-            api_call_count=api_call_count,
-            prompt_tokens=final_usage.get("prompt_tokens", 0),
-            completion_tokens=final_usage.get("completion_tokens", 0),
-            total_tokens=final_usage.get("total_tokens", 0),
-            model_name=model_name,
-            research_mode=research_mode,
-            sources_json=sources or None,
-            stages_json=stages_log or None,
-            synthesis_text=synthesis_text or None,
-            **_extra,
-        )
+                async for event in run_video_pipeline_from_intent(
+                    intent=intent,
+                    synthesis_text=synthesis_text,
+                    session_id=session_id,
+                    output_dir=output_dir,
+                    conversation_context=conversation_context,
+                    notes_enabled=notes_enabled,
+                    forced_render_mode=render_mode,
+                ):
+                    _apply_stage_log(event)
+                    if event["type"] == "result":
+                        result_payload = event["payload"]
+                    else:
+                        await _emit(event)
 
-        done_event: dict = {
-            "type":               "done",
-            "session_id":         session_id,
-            "conversation_id":    conversation_id,
-            "turn_index":         turn_index,
-            "parent_session_id":  parent_session_id,
-            "parent_frame_index": parent_frame_index,
-            **result_payload,
-        }
-        if sources:
-            done_event["sources"] = sources
+            else:
+                # Interactive: scene planner gets raw sources + enriched_prompt
+                from services.interactive.interactive_service import run_interactive_pipeline
 
-        yield _sse(done_event)
+                design_evt = {"type": "stage", "stage": "designing", "label": "Designing the lesson…"}
+                _apply_stage_log(design_evt)
+                await _emit(design_evt)
+                t_design = time.time()
 
-    except asyncio.CancelledError:
-        logger.info("generate_cancelled", session=session_id)
-        # Fire-and-forget: don't await inside a CancelledError handler.
-        # Awaiting here races against the pool connections being torn down by
-        # the same request, causing acquire-timeout errors. create_task schedules
-        # the write after the current coroutine exits.
-        asyncio.create_task(update_session(session_id, status="error"))
-        raise
+                result_payload = {
+                    "session_id":          session_id,
+                    "render_path":         "interactive",
+                    "frame_count":         0,
+                    "intent_type":         "general",
+                    "suggested_followups": intent.get("suggested_followups", []),
+                }
 
-    except Exception as exc:
-        logger.error("generate_failed", session=session_id, error=str(exc), exc_info=True)
-        _log({"event": "error", "error": str(exc)})
-        await asyncio.to_thread(_write_activity_log, output_dir, lifecycle_log, session_id)
-        await update_session(session_id, status="error")
-        yield _sse({"type": "error", "message": "Generation failed. Please try again."})
+                async for event in run_interactive_pipeline(
+                    original_message=message,
+                    enriched_prompt=intent.get("enriched_prompt", ""),
+                    session_id=session_id,
+                    output_dir=output_dir,
+                    conversation_context=conversation_context,
+                    domain=intent.get("domain", "general"),
+                    sources=sources_full,  # full content for scene planner citations
+                ):
+                    if event["type"] == "meta":
+                        result_payload["suggested_followups"] = event.get("follow_ups", [])
+                        await _emit(event)
+                    elif event["type"] == "done":
+                        # Use the pipeline's authoritative follow_ups (from the fully
+                        # parsed SceneIR) rather than whatever the streaming meta prefix
+                        # captured — field ordering in LLM output is not guaranteed.
+                        if event.get("follow_ups"):
+                            result_payload["suggested_followups"] = event["follow_ups"]
+                    else:
+                        if event["type"] in ("stage", "stage_done"):
+                            _apply_stage_log(event)
+                        await _emit(event)
 
+                design_done = {"type": "stage_done", "stage": "designing",
+                               "duration_s": round(time.time() - t_design, 2)}
+                _apply_stage_log(design_done)
+                await _emit(design_done)
+
+            # ── 6. Finalise ────────────────────────────────────────────────────
+            duration_ms    = int((time.time() - start_time) * 1000)
+            api_call_count = count_llm_calls(lifecycle_log)
+            final_usage    = token_usage.get() or {}
+            # C4: compute the dollar cost of every LLM call in this session from
+            # the per-call model + usage recorded in the lifecycle log.
+            cost_usd       = compute_session_cost(lifecycle_log)
+
+            _log({"event": "request_complete", "duration_ms": duration_ms, "session_id": session_id})
+            logger.info(
+                "generate_complete",
+                session=session_id,
+                render_path=result_payload.get("render_path"),
+                research=research_mode,
+                video=video_enabled,
+                duration_ms=duration_ms,
+                llm_calls=api_call_count,
+                tokens=final_usage.get("total_tokens", 0),
+                cost_usd=cost_usd,
+            )
+
+            await asyncio.to_thread(_write_activity_log, output_dir, lifecycle_log, session_id)
+
+            for s in stages_log:
+                if s.get("status") == "active":
+                    s["status"] = "done"
+
+            # Upsert ALL sources to ChromaDB (not just top-N) for richer follow-up retrieval
+            if sources_all:
+                await asyncio.to_thread(upsert_sources, conversation_id, sources_all)
+
+            # frames_meta from the video pipeline (non-None for video mode).
+            # For interactive mode, interactive_service already wrote frames_meta to
+            # the DB — passing None here would overwrite and erase it.
+            _frames_meta = result_payload.pop("frames_meta", None)
+            _extra = {"frames_meta": _frames_meta} if _frames_meta is not None else {}
+
+            await update_session(
+                session_id,
+                status="done",
+                intent_type=result_payload.get("intent_type"),
+                render_path=result_payload.get("render_path"),
+                frame_count=result_payload.get("frame_count"),
+                output_dir=output_dir,
+                ui_output_file=result_payload.pop("ui_output_file", None),
+                # Beat pipeline assembles session_final.mp4 directly — save it so the
+                # video router can serve it without re-assembling with TTS.
+                video_path=result_payload.get("video_path") or None,
+                api_call_count=api_call_count,
+                prompt_tokens=final_usage.get("prompt_tokens", 0),
+                completion_tokens=final_usage.get("completion_tokens", 0),
+                total_tokens=final_usage.get("total_tokens", 0),
+                cost_usd=cost_usd,
+                model_name=model_name,
+                research_mode=research_mode,
+                sources_json=sources or None,
+                stages_json=stages_log or None,
+                synthesis_text=synthesis_text or None,
+                **_extra,
+            )
+
+            done_event: dict = {
+                "type":               "done",
+                "session_id":         session_id,
+                "conversation_id":    conversation_id,
+                "turn_index":         turn_index,
+                "parent_session_id":  parent_session_id,
+                "parent_frame_index": parent_frame_index,
+                "cost_usd":           cost_usd,
+                **result_payload,
+            }
+            if sources:
+                done_event["sources"] = sources
+
+            await _emit(done_event)
+
+        except asyncio.CancelledError:
+            logger.info("generate_cancelled", session=session_id)
+            # H1: schedule the error-write with a retained strong reference so it
+            # survives this task's teardown instead of being garbage-collected.
+            _spawn_bg(update_session(session_id, status="error"))
+            raise
+
+        except Exception as exc:
+            logger.error("generate_failed", session=session_id, error=str(exc), exc_info=True)
+            _log({"event": "error", "error": str(exc)})
+            await asyncio.to_thread(_write_activity_log, output_dir, lifecycle_log, session_id)
+            await update_session(session_id, status="error")
+            await _emit({"type": "error", "message": "Generation failed. Please try again."})
+
+        finally:
+            await out_q.put(_STREAM_DONE)
+
+    # ── Consumer loop ─────────────────────────────────────────────────────────
+    # The producer runs as its own task (inheriting this context, so it sees the
+    # same lifecycle_log / token_usage / request_llm_service). The heartbeat task
+    # feeds the same queue. We yield whatever arrives until the producer signals
+    # completion.
+    heartbeat_task = asyncio.create_task(_heartbeat())
+    producer_task  = asyncio.create_task(_produce())
+
+    try:
+        while True:
+            item = await out_q.get()
+            if item is _STREAM_DONE:
+                break
+            yield _sse(item)
     finally:
         heartbeat_task.cancel()
+        if not producer_task.done():
+            producer_task.cancel()
+        # Drain the producer so its cancellation handler (which marks the session
+        # 'error' on client disconnect) runs to completion.
+        try:
+            await producer_task
+        except (asyncio.CancelledError, Exception):
+            pass
         request_log.reset(log_token)
         token_usage.reset(usage_token)
         request_llm_service.reset(svc_token)
@@ -794,6 +848,9 @@ async def _search_phase(
             if isinstance(content, str) and content.strip():
                 result.snippet = content
                 logger.info("tavily_extract_applied", url=result.url[:80], chars=len(content))
+            else:
+                logger.info("tavily_extract_empty", url=result.url[:80],
+                            reason="exception" if isinstance(content, Exception) else "empty_response")
 
         yield {"type": "stage_done", "stage": "reading", "duration_s": round(time.time() - t_extract, 2)}
 
@@ -801,6 +858,12 @@ async def _search_phase(
 
     # Top-N fed to the LLM; all sources embedded in ChromaDB for follow-up retrieval
     final = all_final[:DEEP_SOURCES_IN_ANSWER]
+    logger.info(
+        "sources_for_llm",
+        conv=conversation_id[:8],
+        count=len(final),
+        sources=[{"domain": s.domain, "url": s.url[:80], "snippet_chars": len(s.snippet)} for s in final],
+    )
 
     yield {
         "type":            "_sources_ready",

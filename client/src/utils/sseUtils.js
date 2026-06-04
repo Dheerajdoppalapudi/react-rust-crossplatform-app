@@ -61,20 +61,6 @@ export function finalizeAllStages(stages) {
   return stages.map(s => s.status === 'active' ? { ...s, status: 'done' } : s)
 }
 
-// Appends a single query string to the queries list of the active searching stage.
-function _applySearchQuery(stages, query) {
-  // Find the last active searching stage (handles round-based IDs like searching_r2).
-  const activeSearch = [...stages].reverse().find(
-    s => s.status === 'active' && (s.id === 'searching' || s.baseId === 'searching')
-  )
-  if (!activeSearch) return stages
-  return stages.map(s =>
-    s.id === activeSearch.id
-      ? { ...s, queries: [...(s.queries ?? []), query] }
-      : s
-  )
-}
-
 // Pure reducers: (turnState, event) → newTurnState
 export const SSE_REDUCERS = {
   stage:      (s, e) => ({ ...s, stages: applyStage(s.stages ?? [], e) }),
@@ -99,9 +85,7 @@ export const SSE_REDUCERS = {
       ? s.completedBeats
       : [...(s.completedBeats ?? []), e.beat_index],
   }),
-  beat_status:       (s, e) => ({ ...s, beatStatuses: { ...(s.beatStatuses ?? {}), [e.beat_index]: e.action } }),
   block:             (s, e) => ({ ...s, blocks:           [...(s.blocks ?? []), e.block] }),
-  search_query:      (s, e) => ({ ...s, stages: _applySearchQuery(s.stages ?? [], e.query) }),
   entities_selected: (s, e) => ({ ...s, selectedEntities: e.entities ?? [] }),
-  blocks_planned:    (s, e) => ({ ...s, blockCount: e.count ?? 0, blockTypes: e.block_types ?? [] }),
+  blocks_planned:    (s, e) => ({ ...s, blockCount: e.count ?? 0 }),
 }

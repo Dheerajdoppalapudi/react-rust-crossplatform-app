@@ -36,7 +36,7 @@ function NavButton({ onClick, disabled, 'aria-label': ariaLabel, children }) {
   )
 }
 
-function FrameStrip({ sessionId, captions, images, activeFrame, onFrameChange, onExpandFrame }) {
+const FrameStrip = memo(function FrameStrip({ sessionId, captions, images, activeFrame, onFrameChange, onExpandFrame }) {
   const isDark      = useIsDark()
   const stripRef    = useRef(null)
   // Single token fetch shared across all thumbnails — prevents N intervals for N frames.
@@ -129,8 +129,7 @@ function FrameStrip({ sessionId, captions, images, activeFrame, onFrameChange, o
       )}
     </Box>
   )
-}
-FrameStrip = memo(FrameStrip)
+})
 
 function SlideDialog({ open, frameIndex, captions, images, sessionId, onClose, onFrameChange, onAsk }) {
   const isDark = useIsDark()

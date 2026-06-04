@@ -41,10 +41,11 @@ class SessionTurn(BaseModel):
     turn_index:         int
     parent_session_id:  Optional[str]  = None
     parent_frame_index: Optional[int]  = None
-    stages_json:        Optional[Any]  = None
-    sources_json:       Optional[Any]  = None
-    synthesis_text:     Optional[str]  = None
-    frames_meta:        Optional[dict] = None
+    stages_json:        Optional[Any]   = None
+    sources_json:       Optional[Any]   = None
+    synthesis_text:     Optional[str]   = None
+    frames_meta:        Optional[dict]  = None
+    cost_usd:           Optional[float] = None
 
     @field_serializer("created_at")
     def serialize_created_at(self, v: datetime) -> str:

@@ -553,7 +553,9 @@ class LLMService:
     """
 
     def __init__(self, provider: LLMProvider = None):
-        self.provider = provider or OpenAIProvider()
+        # Default to Claude Haiku — the cheapest capable model. Falling back to
+        # an expensive default (gpt-4.1) silently 10×'d cost on any miswiring.
+        self.provider = provider or ClaudeProvider()
 
     def make_completion_request(
         self,
@@ -650,11 +652,15 @@ class LLMService:
 # Default instance — import and use this directly across the application
 #
 # To switch providers:
-#   default_llm_service = LLMService(provider=ClaudeProvider())
 #   default_llm_service = LLMService(provider=OpenAIProvider(model="gpt-4.1"))
+#   default_llm_service = LLMService(provider=GeminiProvider())
 # ---------------------------------------------------------------------------
+#
+# Default = Claude Haiku (CLAUDE_MODEL). This is the fallback used by
+# get_task_service() whenever a task has no explicit TASK_MODELS entry, so the
+# default must be the cheap model, never the most expensive one.
 
-default_llm_service = LLMService(provider=OpenAIProvider(model="gpt-4.1"))
+default_llm_service = LLMService(provider=ClaudeProvider())
 
 # ---------------------------------------------------------------------------
 # Per-task model factory — returns a cached LLMService for a task name.

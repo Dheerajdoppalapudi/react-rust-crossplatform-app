@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { api } from '../services/api'
 import { normalizeFramesData, migrateOldSceneIR } from '../components/Studio/studioUtils'
 import { safeParse, RawConversationSchema } from '../services/schemas'
 import { getSessionMediaToken } from '../services/mediaToken'

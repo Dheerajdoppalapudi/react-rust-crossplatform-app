@@ -70,6 +70,9 @@ def narration_key(session_id: str) -> str:
 def activity_log_key(session_id: str) -> str:
     return meta_key(session_id, "activity_log.json")
 
+def sources_raw_key(session_id: str) -> str:
+    return meta_key(session_id, "sources_raw.json")
+
 def _sanitize_filename(filename: str) -> str:
     """Strip path components and remove all characters except alphanumerics, dash, underscore, dot."""
     name = Path(filename).name  # strip any directory traversal attempt
@@ -152,6 +155,11 @@ def upload_narration(text: str, session_id: str) -> str:
 def upload_activity_log(data: bytes, session_id: str) -> str:
     """Upload activity_log.json and return its CloudFront URL."""
     return upload_bytes(data, activity_log_key(session_id), "application/json")
+
+
+def upload_sources_raw(data: bytes, session_id: str) -> str:
+    """Upload sources_raw.json and return its CloudFront URL."""
+    return upload_bytes(data, sources_raw_key(session_id), "application/json")
 
 
 def upload_merged_video(local_path: str | Path, conversation_id: str) -> str:

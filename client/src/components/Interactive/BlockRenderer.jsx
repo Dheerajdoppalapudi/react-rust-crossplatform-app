@@ -80,32 +80,45 @@ function BlockRenderer({ turnId, title, learningObjective, blocks = [], isLoadin
       )}
 
       {blocks.map(block => {
-        if (block.type === 'text') {
-          return <MarkdownText key={block.id} content={block.content} />
-        }
-
-        const Component = resolveEntity(block.entity_type)
-        const meta      = getBlockMeta(block.entity_type)
-        const copyText  = meta.getCopyText ? meta.getCopyText(block.props ?? {}) : null
-        const noExpand  = meta.noExpand ?? false
-        const label     = (block.entity_type ?? '').replace(/_/g, ' ')
+        const inner = block.type === 'text' ? (
+          <MarkdownText content={block.content} />
+        ) : (() => {
+          const Component = resolveEntity(block.entity_type)
+          const meta      = getBlockMeta(block.entity_type)
+          const copyText  = meta.getCopyText ? meta.getCopyText(block.props ?? {}) : null
+          const noExpand  = meta.noExpand ?? false
+          const label     = (block.entity_type ?? '').replace(/_/g, ' ')
+          return (
+            <ErrorBoundary
+              level="component"
+              fallback={<FallbackCard entityType={block.entity_type} />}
+            >
+              <BlockWrapper copyText={copyText || null} label={label} noExpand={noExpand}>
+                <Suspense fallback={<Skeleton variant="rectangular" height={120} sx={{ borderRadius: 2 }} />}>
+                  <Component
+                    entityId={block.id}
+                    {...(block.props ?? {})}
+                    html={block.html ?? null}
+                  />
+                </Suspense>
+              </BlockWrapper>
+            </ErrorBoundary>
+          )
+        })()
 
         return (
-          <ErrorBoundary
+          <Box
             key={block.id}
-            level="component"
-            fallback={<FallbackCard entityType={block.entity_type} />}
+            sx={{
+              '@keyframes blockReveal': {
+                from: { opacity: 0, transform: 'translateY(10px)' },
+                to:   { opacity: 1, transform: 'translateY(0)' },
+              },
+              animation: 'blockReveal 0.35s ease-out both',
+            }}
           >
-            <BlockWrapper copyText={copyText || null} label={label} noExpand={noExpand}>
-              <Suspense fallback={<Skeleton variant="rectangular" height={120} sx={{ borderRadius: 2 }} />}>
-                <Component
-                  entityId={block.id}
-                  {...(block.props ?? {})}
-                  html={block.html ?? null}
-                />
-              </Suspense>
-            </BlockWrapper>
-          </ErrorBoundary>
+            {inner}
+          </Box>
         )
       })}
 

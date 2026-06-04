@@ -19,9 +19,11 @@ from core.logging_config import setup_logging
 
 setup_logging()
 
+import asyncio
 import structlog
 import uuid
 
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
@@ -32,7 +34,14 @@ from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
-from core.config import ANTHROPIC_API_KEY, COOKIE_SECURE, CORS_ORIGINS, OPENAI_API_KEY
+from core.config import (
+    ANTHROPIC_API_KEY,
+    COOKIE_SECURE,
+    CORS_ORIGINS,
+    OPENAI_API_KEY,
+    STALE_SWEEP_INTERVAL_SECS,
+    THREAD_POOL_MAX_WORKERS,
+)
 from core.db_async import init_pool, close_pool, get_async_db, init_db, mark_stale_pending_sessions
 from core.limiter import limiter
 from core.responses import success
@@ -41,22 +50,58 @@ from routers import auth, conversations, export, generate, sessions, upload, vid
 logger = structlog.get_logger(__name__)
 
 
+# ── Background maintenance ──────────────────────────────────────────────────────
+
+async def _periodic_stale_sweep(interval_secs: int) -> None:
+    """
+    H1: Continuously mark crash/disconnect-orphaned 'pending' sessions as 'error'.
+
+    Runs for the lifetime of the process (not just at startup) so sessions left
+    'pending' by a client disconnect are reaped within one interval instead of
+    lingering until the next restart.
+    """
+    while True:
+        await asyncio.sleep(interval_secs)
+        try:
+            swept = await mark_stale_pending_sessions(older_than_minutes=10)
+            if swept:
+                logger.warning("stale_sessions_swept", count=swept, source="periodic")
+        except Exception:
+            logger.error("stale_session_sweep_failed", source="periodic", exc_info=True)
+
+
 # ── Lifespan ──────────────────────────────────────────────────────────────────
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # H4: size the default thread pool explicitly. asyncio.to_thread() (S3
+    # uploads, file I/O, ffmpeg/manim, ChromaDB) all share this executor; the
+    # CPython default of min(32, cpu+4) saturates under concurrent generation.
+    loop = asyncio.get_running_loop()
+    loop.set_default_executor(
+        ThreadPoolExecutor(max_workers=THREAD_POOL_MAX_WORKERS, thread_name_prefix="zenith-worker")
+    )
+    logger.info("thread_pool_configured", max_workers=THREAD_POOL_MAX_WORKERS)
+
     await init_pool()
     await init_db()
     try:
         swept = await mark_stale_pending_sessions(older_than_minutes=10)
         if swept:
-            logger.warning("stale_sessions_swept", count=swept)
+            logger.warning("stale_sessions_swept", count=swept, source="startup")
     except Exception as exc:
         # Fails if migration 002 (TEXT→TIMESTAMPTZ) has not been applied yet.
         # Run `alembic upgrade head` before deploying this version.
-        logger.error("stale_session_sweep_failed", error=str(exc))
+        logger.error("stale_session_sweep_failed", source="startup", error=str(exc))
+
+    sweep_task = asyncio.create_task(_periodic_stale_sweep(STALE_SWEEP_INTERVAL_SECS))
     logger.info("zenith_api_started")
     yield
+    sweep_task.cancel()
+    try:
+        await sweep_task
+    except asyncio.CancelledError:
+        pass
     await close_pool()
     logger.info("zenith_api_stopped")
 

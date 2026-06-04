@@ -11,7 +11,7 @@ import ReactFlow, {
 import 'reactflow/dist/style.css'
 import dagre from 'dagre'
 import { useSceneStore } from '../useSceneStore'
-import { TYPOGRAPHY, RADIUS, PALETTE } from '../../../theme/tokens'
+import { TYPOGRAPHY, RADIUS, PALETTE, BRAND } from '../../../theme/tokens'
 import EntityCaption from './EntityCaption'
 
 const NODE_W = 140

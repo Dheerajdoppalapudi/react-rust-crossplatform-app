@@ -47,7 +47,7 @@ OPENAI_MODEL: str  = os.getenv("OPENAI_MODEL",  "gpt-4.1")
 CLAUDE_MODEL: str  = os.getenv("CLAUDE_MODEL",  "claude-haiku-4-5-20251001")
 GEMINI_MODEL: str  = os.getenv("GEMINI_MODEL",  "gemini-2.5-flash")
 # Fast model used only for intent classification + planning (~300 tokens, simple task).
-CLASSIFY_MODEL: str = os.getenv("CLASSIFY_MODEL", "gemini-2.5-flash")
+CLASSIFY_MODEL: str = os.getenv("CLASSIFY_MODEL", "claude-haiku-4-5-20251001")
 
 # Models the user may request — validated on every /api/generate call.
 # Add new models here when they become available; never trust raw user input.
@@ -78,9 +78,9 @@ ALLOWED_GEMINI_MODELS: frozenset[str] = frozenset({
 #   Claude Sonnet 4.6: $3/$15 per 1M tokens         — complex reasoning
 #   Haiku 4.5        : $0.80/$4 per 1M tokens       — synthesis streaming (native support)
 TASK_MODELS: dict = {
-    "entity_selector": os.getenv("MODEL_ENTITY_SELECTOR", "gemini-2.5-flash"),
-    "scene_planner":   os.getenv("MODEL_SCENE_PLANNER",   "gemini-2.5-flash"),
-    "vocab_plan":      os.getenv("MODEL_VOCAB_PLAN",       "gemini-2.5-flash"),
+    "entity_selector": os.getenv("MODEL_ENTITY_SELECTOR", "claude-haiku-4-5-20251001"),
+    "scene_planner":   os.getenv("MODEL_SCENE_PLANNER",   "claude-haiku-4-5-20251001"),
+    "vocab_plan":      os.getenv("MODEL_VOCAB_PLAN",       "claude-haiku-4-5-20251001"),
     "svg_frame":       os.getenv("MODEL_SVG_FRAME",        "gemini-2.5-flash"),
     "beat_planner":    os.getenv("MODEL_BEAT_PLANNER",     "claude-sonnet-4-6"),
     "beat_codegen":    os.getenv("MODEL_BEAT_CODEGEN",     "gemini-2.5-flash"),
@@ -96,6 +96,31 @@ MAX_REFRESH_TOKENS_PER_USER: int = int(os.getenv("MAX_REFRESH_TOKENS_PER_USER", 
 # Anthropic prompt caching — marks large static prompt templates with
 # cache_control so repeated calls reuse cached tokens at 10% of normal cost.
 PROMPT_CACHE_ENABLED: bool = os.getenv("PROMPT_CACHE_ENABLED", "true").lower() != "false"
+
+# ── Model pricing (USD per 1,000,000 tokens) ──────────────────────────────────
+# Used to compute per-session cost from the lifecycle log (see core/cost.py).
+# Keys are model IDs; `input`/`output` are the standard rates, `cache_write` /
+# `cache_read` are the Anthropic prompt-cache rates (1.25× / 0.1× of input).
+# For OpenAI/Gemini there is no cache split — those token counts are always 0.
+# Rates are estimates and intentionally overridable here without code changes.
+MODEL_PRICING: dict[str, dict[str, float]] = {
+    # Anthropic Claude
+    "claude-haiku-4-5-20251001": {"input": 0.80,  "output": 4.00,  "cache_write": 1.00,  "cache_read": 0.08},
+    "claude-sonnet-4-6":         {"input": 3.00,  "output": 15.00, "cache_write": 3.75,  "cache_read": 0.30},
+    "claude-opus-4-7":           {"input": 15.00, "output": 75.00, "cache_write": 18.75, "cache_read": 1.50},
+    # OpenAI
+    "gpt-4.1":      {"input": 2.00, "output": 8.00},
+    "gpt-4.1-mini": {"input": 0.40, "output": 1.60},
+    "gpt-4o":       {"input": 2.50, "output": 10.00},
+    "gpt-4o-mini":  {"input": 0.15, "output": 0.60},
+    # Google Gemini
+    "gemini-2.5-flash": {"input": 0.30,  "output": 2.50},
+    "gemini-2.0-flash": {"input": 0.10,  "output": 0.40},
+    "gemini-1.5-pro":   {"input": 1.25,  "output": 5.00},
+    "gemini-1.5-flash": {"input": 0.075, "output": 0.30},
+    # Embeddings (input only; output rate 0)
+    "text-embedding-3-small": {"input": 0.02, "output": 0.0},
+}
 
 # ── Embeddings ───────────────────────────────────────────────────────────────
 EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
@@ -169,6 +194,16 @@ INSTANT_MAX_QUERIES:    int  = int(os.getenv("INSTANT_MAX_QUERIES",    "3"))
 DEEP_MAX_QUERIES:       int  = int(os.getenv("DEEP_MAX_QUERIES",       "5"))
 FOLLOWUP_TOP_K_SOURCES: int  = int(os.getenv("FOLLOWUP_TOP_K_SOURCES", "8"))
 CHROMADB_PATH:          Path = BASE_DIR / os.getenv("CHROMADB_DIR", "chromadb")
+
+# ── Runtime tuning ────────────────────────────────────────────────────────────
+# Explicit thread-pool size for asyncio.to_thread() work (S3 uploads, file I/O,
+# ffmpeg/manim subprocesses, ChromaDB). The CPython default is min(32, cpu+4),
+# which saturates quickly under concurrent video generation. Set generously.
+THREAD_POOL_MAX_WORKERS: int = int(os.getenv("THREAD_POOL_MAX_WORKERS", "40"))
+# How often the background sweeper marks crash-orphaned 'pending' sessions as
+# 'error'. Runs continuously (not just at startup) so disconnect-orphaned
+# sessions never linger between deployments.
+STALE_SWEEP_INTERVAL_SECS: int = int(os.getenv("STALE_SWEEP_INTERVAL_SECS", "300"))
 
 # ── Generation constants ──────────────────────────────────────────────────────
 HEARTBEAT_INTERVAL_SECS:      int = int(os.getenv("HEARTBEAT_INTERVAL_SECS", "20"))

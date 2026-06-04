@@ -10,7 +10,7 @@ import VideoAssemblingView from './VideoAssemblingView'
 import NotesPanel from './NotesPanel'
 import TextSelectionPopup from './TextSelectionPopup'
 import { isTextTurn } from './studioUtils'
-import { BRAND, PALETTE } from '../../theme/tokens.js'
+import { PALETTE } from '../../theme/tokens.js'
 import BlockRenderer   from '../Interactive/BlockRenderer'
 import ResearchResult  from './ResearchResult'
 
@@ -35,32 +35,27 @@ export function UserBubble({ prompt }) {
   )
 }
 
-function RetryBanner({ turn, onRetry }) {
+// Shared inline "something failed — retry" banner. `busy` shows a spinner while
+// an async retry is in flight; pass `message` for the body copy.
+function InlineErrorBanner({ message, retryLabel = 'Retry', onRetry, busy = false, sx }) {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
-  const [isRetrying, setIsRetrying] = useState(false)
-
-  const handleRetryClick = async () => {
-    if (isRetrying) return
-    setIsRetrying(true)
-    try { await onRetry(turn) } finally { setIsRetrying(false) }
-  }
-
   return (
     <Box sx={{
       display: 'flex', alignItems: 'center', gap: 1.5,
       py: 2, px: 2.5, borderRadius: '12px',
       backgroundColor: isDark ? 'rgba(255,59,59,0.06)' : '#fff5f5',
       border: `1px solid ${isDark ? 'rgba(255,59,59,0.2)' : '#fecaca'}`,
+      ...sx,
     }}>
       <Typography sx={{ fontSize: 13.5, color: theme.palette.text.secondary, flex: 1, lineHeight: 1.5 }}>
-        Video generation didn't complete. This is usually a temporary issue.
+        {message}
       </Typography>
       <Button
         size="small"
-        disabled={isRetrying}
-        startIcon={isRetrying ? <CircularProgress size={12} color="inherit" /> : <RefreshIcon sx={{ fontSize: 14 }} />}
-        onClick={handleRetryClick}
+        disabled={busy}
+        startIcon={busy ? <CircularProgress size={12} color="inherit" /> : <RefreshIcon sx={{ fontSize: 14 }} />}
+        onClick={onRetry}
         sx={{
           textTransform: 'none', fontSize: 12.5, fontWeight: 600,
           borderRadius: '8px', flexShrink: 0,
@@ -69,15 +64,140 @@ function RetryBanner({ turn, onRetry }) {
           '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)', color: theme.palette.text.primary },
         }}
       >
-        {isRetrying ? 'Retrying…' : 'Retry'}
+        {busy ? 'Retrying…' : retryLabel}
       </Button>
     </Box>
   )
 }
 
-const TurnView = memo(function TurnView({ turn, onPauseAsk, onRetryTurn, onRetryGeneration, notesEnabled, registerTurnRef }) {
+// Video-retry banner with its own in-flight state (the retry is awaited).
+function RetryBanner({ turn, onRetry }) {
+  const [isRetrying, setIsRetrying] = useState(false)
+  const handleRetryClick = async () => {
+    if (isRetrying) return
+    setIsRetrying(true)
+    try { await onRetry(turn) } finally { setIsRetrying(false) }
+  }
+  return (
+    <InlineErrorBanner
+      message="Video generation didn't complete. This is usually a temporary issue."
+      onRetry={handleRetryClick}
+      busy={isRetrying}
+    />
+  )
+}
+
+// Shared LoadingView config for a turn that is still streaming its content.
+function TurnLoadingView({ turn }) {
+  return (
+    <LoadingView
+      stages={turn.stages}
+      sources={turn.sources ?? []}
+      compact
+      synthesisText={turn.synthesisText}
+      beatTitles={turn.beatTitles}
+      completedBeats={turn.completedBeats}
+      selectedEntities={turn.selectedEntities ?? []}
+      blockCount={turn.blockCount ?? 0}
+    />
+  )
+}
+
+// Decides what a turn renders below its prompt + stage timeline. One branch per
+// distinct state, top to bottom, so the control flow reads linearly.
+function TurnContent({ turn, onPauseAsk, onRetryTurn, onRetryGeneration, notesEnabled }) {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
+
+  // ── Interactive turns: research answer, lesson blocks, or still designing ──
+  if (turn.render_path === 'interactive') {
+    const blocks     = turn.blocks ?? []
+    const sources    = turn.sources ?? []
+    const hasContent = turn.title || blocks.length > 0 || turn.synthesisText || (!turn.isLoading && sources.length > 0)
+
+    if (!hasContent) return <TurnLoadingView turn={turn} />
+
+    if (turn.synthesisText || sources.length > 0) {
+      return (
+        <ResearchResult
+          turnId={turn.tempId}
+          prompt={turn.prompt ?? ''}
+          synthesisText={turn.synthesisText ?? ''}
+          synthesisComplete={turn.synthesisComplete ?? false}
+          sources={sources}
+          blocks={blocks}
+          title={turn.title ?? ''}
+          learningObjective={turn.learningObjective ?? null}
+          isLoading={turn.isLoading}
+        />
+      )
+    }
+
+    return (
+      <BlockRenderer
+        turnId={turn.tempId}
+        title={turn.title}
+        learningObjective={turn.learningObjective}
+        blocks={blocks}
+        isLoading={turn.isLoading}
+      />
+    )
+  }
+
+  // ── Video turns ───────────────────────────────────────────────────────────
+  if (turn.isLoading) return <TurnLoadingView turn={turn} />
+
+  // Failed before the server ever returned a session id — offer a full re-run.
+  if (turn.videoPhase === 'error' && !turn.id) {
+    return (
+      <Box sx={{
+        py: 2.5, px: 3, borderRadius: '12px',
+        backgroundColor: isDark ? PALETTE.darkSurface : PALETTE.parchment,
+        border: `1px solid ${theme.palette.error.main}22`,
+      }}>
+        <Typography sx={{ fontSize: 13.5, color: theme.palette.text.secondary, lineHeight: 1.5, mb: 1.5 }}>
+          We couldn't generate a response this time. Please try asking again.
+        </Typography>
+        <RetryBanner turn={turn} onRetry={onRetryGeneration} />
+      </Box>
+    )
+  }
+
+  if (turn.id && turn.videoPhase === 'generating') return <VideoAssemblingView turn={turn} />
+
+  // Frames exist but video assembly failed — show frames + a retry for the video.
+  if (turn.id && turn.videoPhase === 'error') {
+    return (
+      <>
+        {turn.framesData && (
+          <SessionView session={turn} videoPhase="error" framesData={turn.framesData} onPauseAsk={onPauseAsk} notesEnabled={notesEnabled} />
+        )}
+        <Box sx={{ mt: turn.framesData ? 1.5 : 0 }}>
+          <RetryBanner turn={turn} onRetry={onRetryTurn} />
+        </Box>
+      </>
+    )
+  }
+
+  if (turn.id && isTextTurn(turn)) return notesEnabled ? <NotesPanel notes={turn.framesData?.notes} /> : null
+
+  if (turn.id) {
+    return <SessionView session={turn} videoPhase={turn.videoPhase} framesData={turn.framesData} onPauseAsk={onPauseAsk} notesEnabled={notesEnabled} />
+  }
+
+  return null
+}
+
+const TurnView = memo(function TurnView({ turn, onPauseAsk, onRetryTurn, onRetryGeneration, notesEnabled, registerTurnRef }) {
+  // The collapsed stage timeline shows once a turn has content (or finished) and
+  // ran at least two stages — i.e. there's a meaningful history worth keeping.
+  const showStageTimeline =
+    ((turn.blocks?.length ?? 0) > 0 || !turn.isLoading) && (turn.stages?.length ?? 0) >= 2
+
+  // An interactive turn that errored before producing any content.
+  const interactiveFailed =
+    turn.generationFailed && turn.render_path === 'interactive' &&
+    !turn.title && !(turn.blocks ?? []).length && !turn.synthesisText
 
   return (
     <Box
@@ -88,102 +208,31 @@ const TurnView = memo(function TurnView({ turn, onPauseAsk, onRetryTurn, onRetry
       <Box sx={{ width: '100%', maxWidth: 760, mx: 'auto', px: { xs: 2, sm: 3 } }}>
         <UserBubble prompt={turn.prompt} />
 
-        {!turn.isLoading && (turn.stages?.length ?? 0) >= 2 && (
+        {showStageTimeline && (
           <LoadingView
             stages={turn.stages}
             sources={turn.sources ?? []}
             compact
-            defaultOpen={false}
+            defaultOpen={turn.isLoading}
+            selectedEntities={turn.selectedEntities ?? []}
           />
         )}
 
-        {/* Persistent inline error for interactive generation failures */}
-        {turn.generationFailed && turn.render_path === 'interactive' && !turn.title && !(turn.blocks ?? []).length && !turn.synthesisText && (
-          <Box sx={{
-            display: 'flex', alignItems: 'center', gap: 1.5,
-            py: 2, px: 2.5, borderRadius: '12px', mt: 0.5,
-            backgroundColor: isDark ? 'rgba(255,59,59,0.06)' : '#fff5f5',
-            border: `1px solid ${isDark ? 'rgba(255,59,59,0.18)' : '#fecaca'}`,
-          }}>
-            <Typography sx={{ fontSize: 13.5, color: theme.palette.text.secondary, flex: 1, lineHeight: 1.5 }}>
-              Generation failed — this is usually temporary.
-            </Typography>
-            <Button
-              size="small"
-              startIcon={<RefreshIcon sx={{ fontSize: 14 }} />}
-              onClick={() => onRetryGeneration(turn)}
-              sx={{
-                textTransform: 'none', fontSize: 12.5, fontWeight: 600,
-                borderRadius: '8px', flexShrink: 0,
-                color: theme.palette.text.secondary,
-                border: `1px solid ${isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.10)'}`,
-                '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)', color: theme.palette.text.primary },
-              }}
-            >
-              Retry
-            </Button>
-          </Box>
+        {interactiveFailed && (
+          <InlineErrorBanner
+            message="Generation failed — this is usually temporary."
+            onRetry={() => onRetryGeneration(turn)}
+            sx={{ mt: 0.5 }}
+          />
         )}
 
-        {turn.render_path === 'interactive' ? (
-          (turn.title || (turn.blocks ?? []).length > 0 || turn.synthesisText || (!turn.isLoading && turn.sources?.length > 0)) ? (
-            (turn.synthesisText || turn.sources?.length > 0) ? (
-              <ResearchResult
-                turnId={turn.tempId}
-                prompt={turn.prompt ?? ''}
-                synthesisText={turn.synthesisText ?? ''}
-                synthesisComplete={turn.synthesisComplete ?? false}
-                sources={turn.sources ?? []}
-                blocks={turn.blocks ?? []}
-                title={turn.title ?? ''}
-                learningObjective={turn.learningObjective ?? null}
-                isLoading={turn.isLoading}
-              />
-            ) : (
-              <BlockRenderer
-                turnId={turn.tempId}
-                title={turn.title}
-                learningObjective={turn.learningObjective}
-                blocks={turn.blocks ?? []}
-                isLoading={turn.isLoading}
-              />
-            )
-          ) : (
-            <LoadingView stages={turn.stages} sources={turn.sources ?? []} compact synthesisText={turn.synthesisText}
-              beatTitles={turn.beatTitles} completedBeats={turn.completedBeats}
-              selectedEntities={turn.selectedEntities ?? []} blockCount={turn.blockCount ?? 0} blockTypes={turn.blockTypes ?? []} />
-          )
-        ) : turn.isLoading ? (
-          <LoadingView stages={turn.stages} sources={turn.sources ?? []} compact synthesisText={turn.synthesisText}
-            beatTitles={turn.beatTitles} completedBeats={turn.completedBeats}
-            selectedEntities={turn.selectedEntities ?? []} blockCount={turn.blockCount ?? 0} blockTypes={turn.blockTypes ?? []} />
-        ) : turn.videoPhase === 'error' && !turn.id ? (
-          <Box sx={{
-            py: 2.5, px: 3, borderRadius: '12px',
-            backgroundColor: isDark ? PALETTE.darkSurface : PALETTE.parchment,
-            border: `1px solid ${theme.palette.error.main}22`,
-          }}>
-            <Typography sx={{ fontSize: 13.5, color: theme.palette.text.secondary, lineHeight: 1.5, mb: 1.5 }}>
-              We couldn't generate a response this time. Please try asking again.
-            </Typography>
-            <RetryBanner turn={turn} onRetry={onRetryGeneration} />
-          </Box>
-        ) : turn.id && turn.videoPhase === 'generating' ? (
-          <VideoAssemblingView turn={turn} />
-        ) : turn.id && turn.videoPhase === 'error' ? (
-          <>
-            {turn.framesData && (
-              <SessionView session={turn} videoPhase="error" framesData={turn.framesData} onPauseAsk={onPauseAsk} notesEnabled={notesEnabled} />
-            )}
-            <Box sx={{ mt: turn.framesData ? 1.5 : 0 }}>
-              <RetryBanner turn={turn} onRetry={onRetryTurn} />
-            </Box>
-          </>
-        ) : turn.id && isTextTurn(turn) ? (
-          notesEnabled ? <NotesPanel notes={turn.framesData?.notes} /> : null
-        ) : turn.id ? (
-          <SessionView session={turn} videoPhase={turn.videoPhase} framesData={turn.framesData} onPauseAsk={onPauseAsk} notesEnabled={notesEnabled} />
-        ) : null}
+        <TurnContent
+          turn={turn}
+          onPauseAsk={onPauseAsk}
+          onRetryTurn={onRetryTurn}
+          onRetryGeneration={onRetryGeneration}
+          notesEnabled={notesEnabled}
+        />
       </Box>
     </Box>
   )

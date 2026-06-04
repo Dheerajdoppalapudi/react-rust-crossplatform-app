@@ -333,6 +333,9 @@ export function useGeneration({
             ...t, isLoading: false, id: done.session_id,
             conversation_id: done.conversation_id, turn_index: done.turn_index,
             intent_type: done.intent_type, render_path: done.render_path,
+            // done.suggested_followups is authoritative (built from the full SceneIR);
+            // overrides whatever the streaming meta prefix captured.
+            ...(done.suggested_followups?.length ? { followUps: done.suggested_followups } : {}),
           } : t))
           setBootstrap(null)
         }
@@ -346,6 +349,7 @@ export function useGeneration({
           intent_type:     done.intent_type,
           render_path:     done.render_path,
           frame_count:     done.frame_count ?? t.frame_count,
+          ...(done.suggested_followups?.length ? { followUps: done.suggested_followups } : {}),
           ...(videoEnabled ? {
             framesData:  normalizeFramesData(done),
             videoPhase:  'generating',
@@ -474,6 +478,7 @@ export function useGeneration({
         intent_type:     done.intent_type,
         render_path:     done.render_path,
         frame_count:     done.frame_count ?? t.frame_count,
+        ...(done.suggested_followups?.length ? { followUps: done.suggested_followups } : {}),
         ...(effectiveVideoEnabled ? {
           framesData:  normalizeFramesData(done),
           videoPhase:  'generating',
@@ -566,6 +571,7 @@ export function useGeneration({
         intent_type:     done.intent_type,
         render_path:     done.render_path,
         frame_count:     done.frame_count ?? t.frame_count,
+        ...(done.suggested_followups?.length ? { followUps: done.suggested_followups } : {}),
         ...(videoEnabled ? {
           framesData: normalizeFramesData(done),
           videoPhase: 'generating',

@@ -217,6 +217,7 @@ def call_llm(
     _log({
         "event": "llm_call",
         "prompt_name": label,
+        "model": model,
         "prompt_preview": prompt[:600] + ("…" if len(prompt) > 600 else ""),
         "response_preview": result[:600] + ("…" if len(result) > 600 else ""),
         "full_prompt": prompt,
@@ -263,6 +264,7 @@ async def call_llm_async(
     _log({
         "event": "llm_call",
         "prompt_name": label,
+        "model": model,
         "prompt_preview": prompt[:600] + ("…" if len(prompt) > 600 else ""),
         "response_preview": result[:600] + ("…" if len(result) > 600 else ""),
         "full_prompt": prompt,
@@ -518,9 +520,10 @@ async def plan_and_classify(
     )
 
     raw = await call_llm_async(
-        prompt, 1500,
+        prompt, 2048,
         prompt_name="plan_and_classify",
         override_service=_classify_service,
+        json_mode=True,
     )
     data = _extract_json(raw)
 

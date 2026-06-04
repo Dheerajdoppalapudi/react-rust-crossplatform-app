@@ -118,7 +118,7 @@ _ALLOWED_SESSION_COLUMNS: frozenset[str] = frozenset({
     "ui_output_file", "api_call_count", "prompt_tokens", "completion_tokens",
     "total_tokens", "model_name", "video_path", "merged_video_path",
     "research_mode", "sources_json", "stages_json", "synthesis_text",
-    "frames_meta",
+    "frames_meta", "cost_usd",
 })
 
 
@@ -515,11 +515,13 @@ async def init_db() -> None:
                 sources_json       JSONB,
                 stages_json        JSONB,
                 synthesis_text     TEXT,
-                frames_meta        JSONB
+                frames_meta        JSONB,
+                cost_usd           DOUBLE PRECISION DEFAULT 0
             );
 
             -- Idempotent column additions for databases created before these columns existed.
             ALTER TABLE sessions ADD COLUMN IF NOT EXISTS frames_meta JSONB;
+            ALTER TABLE sessions ADD COLUMN IF NOT EXISTS cost_usd DOUBLE PRECISION DEFAULT 0;
             ALTER TABLE conversations ADD COLUMN IF NOT EXISTS turn_count INTEGER DEFAULT 0;
 
             CREATE TABLE IF NOT EXISTS conversation_notes (

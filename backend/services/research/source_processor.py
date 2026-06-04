@@ -81,7 +81,16 @@ def rank_and_deduplicate(
         key=lambda r: r.score + _domain_boost(r.domain, intent_domain),
         reverse=True,
     )
-    return scored[:max_sources]
+    top = scored[:max_sources]
+    logger.info(
+        "sources_ranked",
+        total_input=len(results),
+        after_dedup=len(unique),
+        dupes_dropped=len(results) - len(unique),
+        returned=len(top),
+        top_sources=[{"domain": r.domain, "score": round(r.score, 3), "url": r.url} for r in top],
+    )
+    return top
 
 
 def truncate_content(text: str, max_tokens: int = DEEP_MAX_TOKENS_SOURCE) -> str:
@@ -112,12 +121,18 @@ def source_summary(s: SearchResult) -> dict:
     }
 
 
-def source_full(s: SearchResult) -> dict:
-    """Full dict persisted to DB and fed to LLM/ChromaDB."""
+def source_full(s: SearchResult, full_content: bool = False) -> dict:
+    """Full dict persisted to DB and fed to LLM/ChromaDB.
+
+    full_content=True: sends the full page text (s.content) to the LLM — use for
+    top-ranked sources where complete data matters (financial tables, full articles).
+    full_content=False: sends the short snippet — sufficient for lower-ranked sources.
+    """
     return {
         "title":          s.title,
         "url":            s.url,
         "snippet":        s.snippet,
+        "content":        s.content if full_content else s.snippet,
         "domain":         s.domain,
         "score":          s.score,
         "published_date": s.published_date,

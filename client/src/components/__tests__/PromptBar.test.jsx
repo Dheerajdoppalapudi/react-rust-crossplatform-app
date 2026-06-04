@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { ThemeProvider, createTheme } from '@mui/material'
 import { createRef } from 'react'
 import PromptBar from '../Studio/PromptBar'
+import { ToastProvider } from '../../contexts/ToastContext'
 import { MODELS, RENDER_MODES } from '../Studio/constants'
 
 vi.mock('../../lib/sentry.js', () => ({
@@ -40,7 +41,9 @@ function makeProps(overrides = {}) {
 function wrap(props) {
   return render(
     <ThemeProvider theme={theme}>
-      <PromptBar {...props} />
+      <ToastProvider>
+        <PromptBar {...props} />
+      </ToastProvider>
     </ThemeProvider>
   )
 }

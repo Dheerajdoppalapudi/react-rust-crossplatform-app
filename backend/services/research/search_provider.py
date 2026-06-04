@@ -60,6 +60,7 @@ class TavilyProvider:
             "query": query,
             "max_results": max_results,
             "search_depth": "basic",
+            "include_raw_content": True,
         }
         if include_domains:
             search_kwargs["include_domains"] = include_domains
@@ -72,16 +73,21 @@ class TavilyProvider:
             results = []
             for r in response.get("results", []):
                 domain = urlparse(r.get("url", "")).netloc.lstrip("www.")
-                snippet = r.get("content", "")
+                snippet = r.get("content") or ""
+                raw     = r.get("raw_content") or ""
+                # Use full page text when it's richer than the snippet; fall back to snippet.
+                content = raw if len(raw) > len(snippet) else snippet
                 results.append(SearchResult(
                     title=r.get("title", ""),
                     url=r.get("url", ""),
-                    snippet=snippet,
-                    content=snippet,   # same as snippet — no raw scraping
+                    snippet=snippet,   # short AI-extracted excerpt — UI display + citations
+                    content=content,   # full page text when available — LLM injection
                     domain=domain,
                     score=r.get("score", 0.0),
                     published_date=r.get("published_date"),
                 ))
+            logger.info("tavily_search_done", query=query[:80], results=len(results),
+                        urls=[r.url for r in results])
             return results
         except asyncio.TimeoutError:
             logger.warning("tavily_search_timeout", timeout_s=timeout, query=query[:80])

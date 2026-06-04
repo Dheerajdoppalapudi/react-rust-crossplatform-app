@@ -187,7 +187,7 @@ async def get_conversation(conversation_id: str, current_user: User = Depends(ge
             return await c.fetch(
                 "SELECT id, prompt, created_at, status, intent_type, render_path, "
                 "frame_count, video_path, turn_index, parent_session_id, parent_frame_index, "
-                "stages_json, sources_json, synthesis_text, frames_meta "
+                "stages_json, sources_json, synthesis_text, frames_meta, cost_usd "
                 "FROM sessions WHERE conversation_id = $1 ORDER BY turn_index ASC",
                 conversation_id,
             )
