@@ -1,12 +1,14 @@
 import { useRef, useState, useEffect } from 'react'
 import { Box } from '@mui/material'
 import { motion } from 'framer-motion'
-import { useNavigate } from 'react-router-dom'
-import { ROUTES } from '../../constants/routes.js'
 import NeuralCanvas from './NeuralCanvas.jsx'
+import LandingPromptInput from './LandingPromptInput.jsx'
 import { useLandingTheme } from './tokens.js'
 
 const M = motion(Box)
+
+// A small curated set of the topics, shown as quick-fill chips under the input.
+const HERO_CHIPS = ['Backpropagation', 'General relativity', 'Black holes', 'CRISPR gene editing']
 
 const TOPICS = [
   'backpropagation',
@@ -27,7 +29,6 @@ const EASE = [0.16, 1, 0.3, 1]
 
 export default function LandingHero() {
   const P        = useLandingTheme()
-  const navigate = useNavigate()
   const [display, setDisplay] = useState(TOPICS[0])
   const timerRef = useRef(null)
 
@@ -125,25 +126,37 @@ export default function LandingHero() {
               fontWeight: 700,
               letterSpacing: '-0.035em',
               lineHeight: 1.03,
-              background: gradientH1,
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              backgroundClip: 'text',
             }}
           >
-            {display}
+            {/* Gradient is clipped to an inline-block span (hugs the text width)
+                so it never paints as a full-width bar if the browser drops the
+                background-clip during a theme repaint. The `key` forces a fresh
+                clip when the gradient changes on theme toggle. */}
+            <Box
+              key={P.isDark ? 'g-dark' : 'g-light'}
+              component="span"
+              sx={{
+                display: 'inline-block',
+                background: gradientH1,
+                WebkitBackgroundClip: 'text',
+                backgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                color: 'transparent',
+              }}
+            >
+              {display || '​'}
+            </Box>
             <Box
               component="span"
               sx={{
                 display: 'inline-block',
                 width: '3px',
-                height: '0.82em',
+                height: '0.74em',
                 bgcolor: P.green,
-                ml: '3px',
-                verticalAlign: 'text-bottom',
+                ml: '4px',
+                verticalAlign: 'baseline',
                 boxShadow: `0 0 10px ${P.green}`,
                 animation: 'blink 1.1s step-end infinite',
-                WebkitTextFillColor: P.green,
                 '@keyframes blink': {
                   '0%, 100%': { opacity: 1 },
                   '50%': { opacity: 0 },
@@ -171,53 +184,16 @@ export default function LandingHero() {
           AI-generated video, structured notes, and a canvas that maps how knowledge grows.
         </motion.p>
 
-        {/* CTAs */}
+        {/* Prompt box — the primary action */}
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.75, ease: EASE, delay: 0.68 }}
-          style={{ display: 'flex', gap: 14, justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap' }}
         >
-          <M
-            whileHover={{ y: -2 }}
-            whileTap={{ scale: 0.97 }}
-            onClick={() => navigate(ROUTES.STUDIO)}
-            sx={{
-              display: 'inline-flex', alignItems: 'center', gap: 1.25,
-              px: '26px', py: '15px', borderRadius: '100px',
-              bgcolor: P.pine, color: '#eafff7',
-              fontFamily: P.fontDisplay, fontSize: 16, fontWeight: 500,
-              cursor: 'pointer', userSelect: 'none', border: 'none',
-              animation: 'breathe 4.5s ease infinite',
-              '@keyframes breathe': {
-                '0%, 100%': { boxShadow: `0 0 26px -4px rgba(${P.greenRgb},0.45), inset 0 1px 0 rgba(255,255,255,0.12)` },
-                '50%':       { boxShadow: `0 0 46px 2px rgba(${P.greenRgb},0.65),  inset 0 1px 0 rgba(255,255,255,0.12)` },
-              },
-              '&:hover': { bgcolor: P.pineHover },
-            }}
-          >
-            Start Learning
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-              <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </M>
-
-          <M
-            whileHover={{ y: -2 }}
-            whileTap={{ scale: 0.97 }}
-            sx={{
-              display: 'inline-flex', alignItems: 'center',
-              px: '26px', py: '13px', borderRadius: '100px',
-              border: `1px solid rgba(${P.greenRgb},0.28)`,
-              color: P.text0, bgcolor: 'transparent',
-              fontFamily: P.fontDisplay, fontSize: 16, fontWeight: 500,
-              cursor: 'pointer', userSelect: 'none',
-              transition: 'border-color 0.3s',
-              '&:hover': { borderColor: `rgba(${P.greenRgb},0.55)` },
-            }}
-          >
-            See it think
-          </M>
+          <LandingPromptInput
+            placeholder="Ask anything — or paste a problem you're stuck on"
+            chips={HERO_CHIPS}
+          />
         </motion.div>
       </Box>
 

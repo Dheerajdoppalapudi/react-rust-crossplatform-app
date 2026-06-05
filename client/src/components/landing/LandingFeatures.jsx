@@ -43,89 +43,152 @@ const FEATURES = [
 ]
 
 // ─── Visual demos ─────────────────────────────────────────────────────────────
+const DEMO_H = 210
+
+function DemoFrame({ children, sx }) {
+  const P = useLandingTheme()
+  return (
+    <Box sx={{ position: 'relative', height: DEMO_H, borderRadius: '16px', overflow: 'hidden', border: `1px solid ${P.line}`, ...sx }}>
+      {children}
+    </Box>
+  )
+}
+
 function VideoDemo() {
   const P = useLandingTheme()
-  const bg = P.isDark ? '#040c10' : '#e8f2ee'
   return (
-    <Box sx={{ position: 'relative', height: 200, bgcolor: bg, borderRadius: '14px', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <Box sx={{ position: 'absolute', inset: 0, background: `radial-gradient(circle at 50% 50%, rgba(${P.greenRgb},0.13) 0%, transparent 68%)` }} />
-      <Box sx={{ width: 54, height: 54, borderRadius: '50%', border: `1.5px solid rgba(${P.greenRgb},0.55)`, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1 }}>
-        <Box sx={{ width: 0, height: 0, borderTop: '9px solid transparent', borderBottom: '9px solid transparent', borderLeft: `16px solid rgba(${P.greenRgb},0.75)`, ml: '3px' }} />
+    <DemoFrame sx={{ background: 'linear-gradient(140deg, #07161c 0%, #0a2a23 58%, #07161c 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      {/* Center glow */}
+      <Box sx={{ position: 'absolute', inset: 0, background: `radial-gradient(circle at 50% 42%, rgba(${P.greenRgb},0.20) 0%, transparent 58%)` }} />
+
+      {/* Source chip */}
+      <Box sx={{ position: 'absolute', top: 16, left: 16, display: 'inline-flex', alignItems: 'center', gap: '7px', px: '11px', py: '6px', borderRadius: '100px', bgcolor: 'rgba(255,255,255,0.06)', border: `1px solid rgba(${P.greenRgb},0.3)` }}>
+        <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: P.green, boxShadow: `0 0 8px ${P.green}` }} />
+        <Box sx={{ fontFamily: P.fontMono, fontSize: 9.5, letterSpacing: '0.14em', color: '#cfeee3' }}>AI-GENERATED</Box>
       </Box>
-      <Box sx={{ position: 'absolute', bottom: 20, left: 24, right: 24, height: 3, bgcolor: `rgba(${P.greenRgb},0.12)`, borderRadius: 2 }}>
-        <Box sx={{ width: '38%', height: '100%', bgcolor: P.green, borderRadius: 2, boxShadow: `0 0 6px ${P.green}` }} />
-        <Box sx={{ position: 'absolute', right: '62%', top: '50%', transform: 'translateY(-50%)', width: 9, height: 9, borderRadius: '50%', bgcolor: P.green, boxShadow: `0 0 8px ${P.green}` }} />
+
+      {/* Play button */}
+      <Box sx={{ position: 'relative', zIndex: 1, width: 64, height: 64, borderRadius: '50%', bgcolor: 'rgba(255,255,255,0.08)', border: `1.5px solid rgba(${P.greenRgb},0.6)`, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(4px)', boxShadow: `0 0 34px rgba(${P.greenRgb},0.3)` }}>
+        <Box sx={{ width: 0, height: 0, borderTop: '9px solid transparent', borderBottom: '9px solid transparent', borderLeft: `15px solid ${P.green}`, ml: '4px' }} />
       </Box>
-    </Box>
+
+      {/* Controls */}
+      <Box sx={{ position: 'absolute', left: 22, right: 22, bottom: 20 }}>
+        <Box sx={{ position: 'relative', height: 4, borderRadius: 2, bgcolor: 'rgba(255,255,255,0.12)' }}>
+          <Box sx={{ width: '42%', height: '100%', borderRadius: 2, bgcolor: P.green, boxShadow: `0 0 8px ${P.green}` }} />
+          <Box sx={{ position: 'absolute', left: '42%', top: '50%', transform: 'translate(-50%,-50%)', width: 11, height: 11, borderRadius: '50%', bgcolor: '#eafff7', boxShadow: `0 0 10px ${P.green}` }} />
+        </Box>
+        <Box sx={{ mt: '9px', display: 'flex', justifyContent: 'space-between', fontFamily: P.fontMono, fontSize: 10, color: 'rgba(207,238,227,0.7)' }}>
+          <span>1:24</span><span>3:40</span>
+        </Box>
+      </Box>
+    </DemoFrame>
   )
 }
 
 function NotesDemo() {
-  const P = useLandingTheme()
+  const P    = useLandingTheme()
+  const body = P.isDark ? 'rgba(255,255,255,0.11)' : 'rgba(10,60,38,0.11)'
   return (
-    <Box sx={{ height: 200, bgcolor: P.surface, borderRadius: '14px', p: '24px', overflow: 'hidden' }}>
-      <Box sx={{ height: 10, width: '58%', bgcolor: `rgba(${P.greenRgb},0.55)`, borderRadius: 2, mb: '20px' }} />
-      {[[100, 0], [90, 0], [72, 20], [90, 20], [55, 20]].map(([w, indent], i) => (
-        <Box key={i} sx={{ height: 6, width: `${w}%`, ml: `${indent}px`, bgcolor: `rgba(${P.greenRgb},0.14)`, borderRadius: 2, mb: '10px' }} />
-      ))}
-      <Box sx={{ display: 'inline-flex', mt: 1, px: 1.5, py: '5px', borderRadius: '100px', bgcolor: `rgba(${P.greenRgb},0.09)`, border: `1px solid rgba(${P.greenRgb},0.28)`, gap: 1 }}>
-        <Box sx={{ height: 6, width: 44, bgcolor: `rgba(${P.greenRgb},0.45)`, borderRadius: 2, alignSelf: 'center' }} />
+    <DemoFrame sx={{ bgcolor: P.surface, display: 'flex' }}>
+      {/* Accent rail */}
+      <Box sx={{ width: 3, bgcolor: `rgba(${P.greenRgb},0.5)` }} />
+      <Box sx={{ flex: 1, p: '24px 26px' }}>
+        {/* Heading */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: '11px', mb: '20px' }}>
+          <Box sx={{ width: 24, height: 24, borderRadius: '7px', bgcolor: `rgba(${P.greenRgb},0.14)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Box sx={{ width: 9, height: 9, borderRadius: '2px', bgcolor: P.green }} />
+          </Box>
+          <Box sx={{ height: 9, width: '46%', borderRadius: 2, bgcolor: `rgba(${P.greenRgb},0.5)` }} />
+        </Box>
+        {/* Paragraph */}
+        {[100, 90].map((w, i) => (
+          <Box key={i} sx={{ height: 6, width: `${w}%`, borderRadius: 2, bgcolor: body, mb: '10px' }} />
+        ))}
+        {/* Sub-heading */}
+        <Box sx={{ height: 7, width: '30%', borderRadius: 2, bgcolor: `rgba(${P.greenRgb},0.32)`, mt: '16px', mb: '13px' }} />
+        {/* Bullets */}
+        {[78, 62].map((w, i) => (
+          <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: '9px', mb: '10px' }}>
+            <Box sx={{ width: 5, height: 5, borderRadius: '50%', bgcolor: `rgba(${P.greenRgb},0.55)`, flexShrink: 0 }} />
+            <Box sx={{ height: 6, width: `${w}%`, borderRadius: 2, bgcolor: body }} />
+          </Box>
+        ))}
+        {/* Tag */}
+        <Box sx={{ display: 'inline-flex', mt: '15px', px: '13px', py: '6px', borderRadius: '100px', bgcolor: `rgba(${P.greenRgb},0.09)`, border: `1px solid rgba(${P.greenRgb},0.28)`, alignItems: 'center', gap: '7px' }}>
+          <Box sx={{ width: 5, height: 5, borderRadius: '50%', bgcolor: P.green }} />
+          <Box sx={{ height: 5, width: 42, borderRadius: 2, bgcolor: `rgba(${P.greenRgb},0.45)` }} />
+        </Box>
       </Box>
-    </Box>
+    </DemoFrame>
   )
 }
 
 function ResearchDemo() {
-  const P = useLandingTheme()
-  const bg = P.isDark ? '#040e12' : '#e4f0ea'
-  const lines = [
-    { x1: 50, y1: 50, x2: 18, y2: 22 }, { x1: 50, y1: 50, x2: 82, y2: 26 },
-    { x1: 50, y1: 50, x2: 20, y2: 78 }, { x1: 50, y1: 50, x2: 80, y2: 74 },
-  ]
-  const satellites = [
-    { left: '14%', top: '16%' }, { right: '13%', top: '20%' },
-    { left: '16%', bottom: '16%' }, { right: '14%', bottom: '16%' },
-  ]
+  const P  = useLandingTheme()
+  const bg = P.isDark ? 'linear-gradient(160deg, #04141a 0%, #06222a 100%)' : P.surface
+  const cardFill = P.isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.75)'
+  // Source cards arranged across the top; one central synthesis node below.
+  const cards = [{ x: 30, y: 26 }, { x: 138, y: 16 }, { x: 240, y: 16 }, { x: 318, y: 30 }]
+  const cx = 198, cy = 150
   return (
-    <Box sx={{ position: 'relative', height: 200, bgcolor: bg, borderRadius: '14px', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <Box sx={{ position: 'absolute', inset: 0, background: `radial-gradient(circle at 50% 50%, rgba(${P.cyanRgb},0.10) 0%, transparent 68%)` }} />
-      <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} viewBox="0 0 100 100" preserveAspectRatio="none">
-        {lines.map((l, i) => (
-          <line key={i} x1={`${l.x1}%`} y1={`${l.y1}%`} x2={`${l.x2}%`} y2={`${l.y2}%`} stroke={`rgba(${P.cyanRgb},0.3)`} strokeWidth="0.8" />
+    <DemoFrame sx={{ background: bg }}>
+      <Box component="svg" viewBox="0 0 396 210" preserveAspectRatio="xMidYMid meet" sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
+        {/* Edges: each source card → synthesis node */}
+        {cards.map((c, i) => {
+          const sx2 = c.x + 24, sy2 = c.y + 36, midY = (sy2 + cy) / 2
+          return <path key={i} d={`M ${sx2} ${sy2} C ${sx2} ${midY}, ${cx} ${midY}, ${cx} ${cy - 18}`} fill="none" stroke={`rgba(${P.cyanRgb},0.35)`} strokeWidth="1.4" />
+        })}
+        {/* Synthesis glow */}
+        <circle cx={cx} cy={cy} r="32" fill={`rgba(${P.cyanRgb},0.14)`} />
+        {/* Source cards */}
+        {cards.map((c, i) => (
+          <g key={i}>
+            <rect x={c.x} y={c.y} width="48" height="36" rx="7" fill={cardFill} stroke={`rgba(${P.cyanRgb},0.4)`} strokeWidth="1" />
+            <rect x={c.x + 8} y={c.y + 10} width="22" height="3.4" rx="1.7" fill={`rgba(${P.cyanRgb},0.65)`} />
+            <rect x={c.x + 8} y={c.y + 19} width="32" height="3" rx="1.5" fill={`rgba(${P.cyanRgb},0.3)`} />
+            <rect x={c.x + 8} y={c.y + 26} width="26" height="3" rx="1.5" fill={`rgba(${P.cyanRgb},0.3)`} />
+          </g>
         ))}
-      </svg>
-      <Box sx={{ width: 30, height: 30, borderRadius: '50%', bgcolor: P.cyan, boxShadow: `0 0 24px rgba(${P.cyanRgb},0.5)`, zIndex: 1 }} />
-      {satellites.map((pos, i) => (
-        <Box key={i} sx={{ position: 'absolute', width: 11, height: 11, borderRadius: '50%', border: `1.5px solid rgba(${P.cyanRgb},0.45)`, bgcolor: `rgba(${P.cyanRgb},0.1)`, ...pos }} />
-      ))}
-    </Box>
+        {/* Synthesis node with check */}
+        <circle cx={cx} cy={cy} r="18" fill={P.cyan} />
+        <circle cx={cx} cy={cy} r="18" fill="none" stroke={P.isDark ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.65)'} strokeWidth="1.5" />
+        <path d={`M ${cx - 6.5} ${cy + 0.5} l 4 4 l 8.5 -9`} fill="none" stroke="#ffffff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+      </Box>
+    </DemoFrame>
   )
 }
 
 function CanvasDemo() {
-  const P = useLandingTheme()
-  const bg = P.isDark ? '#040a0c' : '#e6f0ea'
-  const edges = [
-    [200, 90, 80, 42], [200, 90, 326, 48], [200, 90, 96, 148], [200, 90, 308, 140], [326, 48, 308, 140],
-  ]
+  const P  = useLandingTheme()
+  const bg = P.isDark ? 'linear-gradient(160deg, #04100c 0%, #061c15 100%)' : P.surface
+  const ring = P.isDark ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.55)'
+  // A tidy left-to-right knowledge tree — edges and nodes share one coordinate space.
   const nodes = [
-    { x: '49%', y: '49%', color: P.green },
-    { x: '19%', y: '22%', color: P.green },
-    { x: '80%', y: '25%', color: P.cyan },
-    { x: '23%', y: '78%', color: P.green },
-    { x: '75%', y: '74%', color: P.violet },
+    { x: 56,  y: 105, r: 13, c: P.green  },
+    { x: 176, y: 56,  r: 10, c: P.green  },
+    { x: 176, y: 154, r: 10, c: P.cyan   },
+    { x: 304, y: 34,  r: 8,  c: P.cyan   },
+    { x: 304, y: 94,  r: 8,  c: P.green  },
+    { x: 304, y: 174, r: 8,  c: P.violet },
   ]
+  const edges = [[0, 1], [0, 2], [1, 3], [1, 4], [2, 5]]
+  const curve = (a, b) => { const mx = (a.x + b.x) / 2; return `M ${a.x} ${a.y} C ${mx} ${a.y}, ${mx} ${b.y}, ${b.x} ${b.y}` }
   return (
-    <Box sx={{ position: 'relative', height: 200, bgcolor: bg, borderRadius: '14px', overflow: 'hidden' }}>
-      <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} viewBox="0 0 400 180" preserveAspectRatio="none">
-        <g stroke={`rgba(${P.greenRgb},0.32)`} strokeWidth="1.2">
-          {edges.map(([x1, y1, x2, y2], i) => <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} />)}
-        </g>
-      </svg>
-      {nodes.map(({ x, y, color }, i) => (
-        <Box key={i} sx={{ position: 'absolute', left: x, top: y, transform: 'translate(-50%,-50%)', width: 12, height: 12, borderRadius: '50%', bgcolor: color, boxShadow: `0 0 12px ${color}` }} />
-      ))}
-    </Box>
+    <DemoFrame sx={{ background: bg }}>
+      <Box component="svg" viewBox="0 0 360 210" preserveAspectRatio="xMidYMid meet" sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
+        {edges.map(([a, b], i) => (
+          <path key={i} d={curve(nodes[a], nodes[b])} fill="none" stroke={`rgba(${P.greenRgb},0.30)`} strokeWidth="1.5" />
+        ))}
+        {nodes.map((n, i) => (
+          <g key={i}>
+            <circle cx={n.x} cy={n.y} r={n.r + 6} fill={n.c} opacity="0.13" />
+            <circle cx={n.x} cy={n.y} r={n.r} fill={n.c} />
+            <circle cx={n.x} cy={n.y} r={n.r} fill="none" stroke={ring} strokeWidth="1.2" />
+          </g>
+        ))}
+      </Box>
+    </DemoFrame>
   )
 }
 
@@ -212,7 +275,10 @@ export default function LandingFeatures() {
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '220px 1fr' }, gap: { xs: 0, md: 8 }, alignItems: 'start' }}>
 
           {/* Sticky nav */}
-          <Box sx={{ display: { xs: 'none', md: 'block' }, position: 'sticky', top: 40, alignSelf: 'flex-start' }}>
+          {/* A full-height sticky column that centers the list in the viewport —
+              tracks the active feature without floating up over the heading
+              (which a translateY(-50%) trick would do as the section enters). */}
+          <Box sx={{ display: { xs: 'none', md: 'flex' }, flexDirection: 'column', justifyContent: 'center', position: 'sticky', top: 0, height: '100vh', alignSelf: 'start' }}>
             {FEATURES.map(f => (
               <Box
                 key={f.id}

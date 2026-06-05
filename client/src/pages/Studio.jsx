@@ -208,6 +208,20 @@ export default function Studio({
     }
   }, [isBootstrapping, turns.length])
 
+  // Pull in a prompt the visitor typed on the public landing page. We pre-fill
+  // the prompt bar but deliberately do NOT submit — the user reviews and sends.
+  useEffect(() => {
+    const pending = sessionStorage.getItem(STORAGE_KEYS.PENDING_PROMPT)
+    if (!pending) return
+    // Consume immediately so a StrictMode re-run (or remount) is a no-op.
+    sessionStorage.removeItem(STORAGE_KEYS.PENDING_PROMPT)
+    const t = setTimeout(() => {
+      setPrompt(pending)
+      inputRef.current?.focus()
+    }, TIMINGS.EMPTY_STATE_FOCUS_DELAY_MS)
+    return () => clearTimeout(t)
+  }, [])
+
   // Conversation switch: cancel in-flight work, then load the new conversation.
   useEffect(() => {
     setPauseContext(null)

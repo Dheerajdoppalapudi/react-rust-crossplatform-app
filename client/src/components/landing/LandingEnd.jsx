@@ -1,9 +1,8 @@
 import { useRef } from 'react'
 import { Box } from '@mui/material'
 import { motion, useInView } from 'framer-motion'
-import { useNavigate } from 'react-router-dom'
-import { ROUTES } from '../../constants/routes.js'
 import StarsCanvas from './StarsCanvas.jsx'
+import LandingPromptInput from './LandingPromptInput.jsx'
 import { useLandingTheme } from './tokens.js'
 import ParalyteLogo from '../common/ParalyteLogo.jsx'
 
@@ -11,8 +10,6 @@ const M    = motion(Box)
 const EASE = [0.16, 1, 0.3, 1]
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
-const LOGOS = ['MIT', 'Stanford', 'ETH Zürich', 'UCL', 'NTU', 'IIT Delhi']
-
 const VISION_WORDS = [
   'Knowledge', 'should', 'expand', 'to', 'fit', 'the', 'mind',
   'asking', 'for', 'it.', 'Not', 'the', 'other', 'way', 'around.',
@@ -24,16 +21,17 @@ const FOOTER_NAV = [
   { heading: 'Legal',   links: ['Privacy', 'Terms', 'Security'] },
 ]
 
-// ─── Stats ────────────────────────────────────────────────────────────────────
-function Stats() {
+// ─── Principles ───────────────────────────────────────────────────────────────
+// Honest, verifiable positioning — not fabricated metrics or logos.
+function Principles() {
   const P      = useLandingTheme()
   const ref    = useRef(null)
   const inView = useInView(ref, { once: true, amount: 0.3 })
 
-  const STATS = [
-    { value: '3.2×', label: 'faster concept retention vs. passive reading', color: P.green  },
-    { value: '142k', label: 'explanations generated across all topics',     color: P.cyan   },
-    { value: '94%',  label: 'of users understood on the first attempt',     color: P.violet },
+  const ITEMS = [
+    { title: 'Built per question',  body: 'Every explanation is generated for your exact prompt — never a stored article retrieved from a shelf.', color: P.green  },
+    { title: 'Cited, not guessed',  body: 'Research mode reads across sources and traces each claim back to where it actually came from.',        color: P.cyan   },
+    { title: 'Connected by design', body: 'Topics become a living graph — branch into prerequisites, spin off tangents, and revisit anytime.',       color: P.violet },
   ]
 
   return (
@@ -41,48 +39,31 @@ function Stats() {
       <Box sx={{ maxWidth: 1100, mx: 'auto', px: { xs: '5%', md: '6%' } }} ref={ref}>
 
         <M initial={{ opacity: 0, y: 24 }} animate={inView ? { opacity: 1, y: 0 } : {}} transition={{ duration: 0.8, ease: EASE }}>
-          <Box sx={{ mb: { xs: 8, md: 12 }, maxWidth: 720, mx: 'auto', textAlign: 'center' }}>
-            <Box component="blockquote" sx={{ m: 0, p: 0, fontFamily: P.fontDisplay, fontSize: 'clamp(20px, 3.2vw, 38px)', fontWeight: 700, letterSpacing: '-0.025em', lineHeight: 1.2, color: P.text0 }}>
-              <Box component="span" sx={{ color: P.green }}>&ldquo;</Box>
-              The clearest explanation I&apos;ve ever encountered — and it was built for my exact question in under a minute.
-              <Box component="span" sx={{ color: P.green }}>&rdquo;</Box>
+          <Box sx={{ mb: { xs: 6, md: 9 }, maxWidth: 720, mx: 'auto', textAlign: 'center' }}>
+            <Box component="h2" sx={{ m: 0, fontFamily: P.fontDisplay, fontSize: 'clamp(24px, 3.6vw, 44px)', fontWeight: 700, letterSpacing: '-0.028em', lineHeight: 1.15, color: P.text0 }}>
+              Not another search box.
             </Box>
-            <Box sx={{ mt: '20px', fontFamily: P.fontBody, fontSize: 14, color: P.text2, letterSpacing: '0.04em' }}>
-              — Graduate researcher, computational neuroscience
+            <Box sx={{ mt: '18px', fontFamily: P.fontBody, fontSize: 'clamp(15px, 1.7vw, 18px)', color: P.text1, lineHeight: 1.7 }}>
+              Paralyte reasons about your topic and assembles the explanation — generated, cited, and connected to everything around it.
             </Box>
           </Box>
         </M>
 
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, 1fr)' }, gap: { xs: 4, md: 2 }, mb: { xs: 8, md: 12 } }}>
-          {STATS.map((s, i) => (
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, 1fr)' }, gap: { xs: 3, md: 2.5 } }}>
+          {ITEMS.map((s, i) => (
             <M key={i} initial={{ opacity: 0, y: 20 }} animate={inView ? { opacity: 1, y: 0 } : {}} transition={{ duration: 0.7, ease: EASE, delay: i * 0.1 }}>
-              <Box sx={{ textAlign: 'center', p: '32px 24px', borderRadius: '16px', border: `1px solid ${P.line}`, bgcolor: P.surface, position: 'relative', overflow: 'hidden' }}>
-                <Box sx={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)', width: '60%', height: '1px', bgcolor: s.color, opacity: 0.5, borderRadius: '0 0 4px 4px', boxShadow: `0 0 12px ${s.color}` }} />
-                <Box sx={{ fontFamily: P.fontDisplay, fontSize: 'clamp(38px, 5vw, 56px)', fontWeight: 700, letterSpacing: '-0.04em', lineHeight: 1, color: s.color, mb: 1.5 }}>
-                  {s.value}
+              <Box sx={{ height: '100%', p: '30px 26px', borderRadius: '16px', border: `1px solid ${P.line}`, bgcolor: P.surface, position: 'relative', overflow: 'hidden' }}>
+                <Box sx={{ position: 'absolute', top: 0, left: '26px', width: '40px', height: '2px', bgcolor: s.color, boxShadow: `0 0 12px ${s.color}` }} />
+                <Box sx={{ fontFamily: P.fontDisplay, fontSize: 19, fontWeight: 600, letterSpacing: '-0.01em', color: P.text0, mb: 1.25 }}>
+                  {s.title}
                 </Box>
-                <Box sx={{ fontFamily: P.fontBody, fontSize: 14.5, color: P.text1, lineHeight: 1.55 }}>
-                  {s.label}
+                <Box sx={{ fontFamily: P.fontBody, fontSize: 15, color: P.text1, lineHeight: 1.6 }}>
+                  {s.body}
                 </Box>
               </Box>
             </M>
           ))}
         </Box>
-
-        <M initial={{ opacity: 0 }} animate={inView ? { opacity: 1 } : {}} transition={{ duration: 0.8, ease: EASE, delay: 0.35 }}>
-          <Box sx={{ textAlign: 'center' }}>
-            <Box sx={{ fontFamily: P.fontMono, fontSize: 11, letterSpacing: '0.22em', textTransform: 'uppercase', color: P.text2, mb: '20px' }}>
-              Used by learners from
-            </Box>
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: { xs: '16px 24px', md: '10px 32px' } }}>
-              {LOGOS.map((name, i) => (
-                <Box key={i} sx={{ fontFamily: P.fontDisplay, fontSize: 13.5, fontWeight: 600, letterSpacing: '0.04em', color: P.text2, px: '14px', py: '7px', borderRadius: '8px', border: `1px solid ${P.line}`, opacity: 0.75 }}>
-                  {name}
-                </Box>
-              ))}
-            </Box>
-          </Box>
-        </M>
       </Box>
     </Box>
   )
@@ -95,7 +76,7 @@ function Vision() {
   const inView = useInView(ref, { once: true, amount: 0.25 })
 
   return (
-    <Box component="section" sx={{ position: 'relative', bgcolor: '#020608', borderTop: `1px solid rgba(${P.greenRgb},0.10)`, py: { xs: '100px', md: '160px' }, overflow: 'hidden' }}>
+    <Box component="section" id="vision" sx={{ position: 'relative', scrollMarginTop: '76px', bgcolor: '#020608', borderTop: `1px solid rgba(${P.greenRgb},0.10)`, py: { xs: '100px', md: '160px' }, overflow: 'hidden' }}>
       <StarsCanvas />
       <Box sx={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: `radial-gradient(ellipse 55% 55% at 50% 50%, rgba(${P.greenRgb},0.05) 0%, transparent 70%)` }} />
 
@@ -138,7 +119,6 @@ function CTA() {
   const P        = useLandingTheme()
   const ref      = useRef(null)
   const inView   = useInView(ref, { once: true, amount: 0.35 })
-  const navigate = useNavigate()
 
   return (
     <Box component="section" sx={{ bgcolor: P.bg1, borderTop: `1px solid ${P.line}`, py: { xs: '100px', md: '160px' }, position: 'relative', overflow: 'hidden' }}>
@@ -167,41 +147,17 @@ function CTA() {
           initial={{ opacity: 0, y: 14 }}
           animate={inView ? { opacity: 1, y: 0 } : {}}
           transition={{ duration: 0.7, ease: EASE, delay: 0.16 }}
-          style={{ display: 'flex', gap: 14, justifyContent: 'center', flexWrap: 'wrap' }}
         >
-          <Box
-            component={motion.div}
-            whileHover={{ y: -2 }}
-            whileTap={{ scale: 0.97 }}
-            onClick={() => navigate(ROUTES.STUDIO)}
-            sx={{
-              display: 'inline-flex', alignItems: 'center', gap: 1.25,
-              px: '28px', py: '16px', borderRadius: '100px',
-              bgcolor: P.pine, color: '#eafff7',
-              fontFamily: P.fontDisplay, fontSize: 16.5, fontWeight: 500,
-              cursor: 'pointer', userSelect: 'none',
-              animation: 'breathe 4.5s ease infinite',
-              '@keyframes breathe': {
-                '0%,100%': { boxShadow: `0 0 30px -4px rgba(${P.greenRgb},0.45), inset 0 1px 0 rgba(255,255,255,0.12)` },
-                '50%':     { boxShadow: `0 0 50px 4px rgba(${P.greenRgb},0.65), inset 0 1px 0 rgba(255,255,255,0.12)` },
-              },
-              '&:hover': { bgcolor: P.pineHover },
-            }}
-          >
-            Start Learning — It&apos;s Free
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-              <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </Box>
+          <LandingPromptInput placeholder="Ask anything — or paste a problem you're stuck on" />
         </motion.div>
 
         <motion.p
           initial={{ opacity: 0 }}
           animate={inView ? { opacity: 1 } : {}}
           transition={{ duration: 0.6, delay: 0.4 }}
-          style={{ fontFamily: P.fontMono, fontSize: 11.5, color: P.text2, marginTop: 16 }}
+          style={{ fontFamily: P.fontMono, fontSize: 11.5, color: P.text2, marginTop: 18 }}
         >
-          No credit card · No sign-up required to try
+          Free to start · No credit card required
         </motion.p>
       </Box>
     </Box>
@@ -281,7 +237,7 @@ function Footer() {
 export default function LandingEnd() {
   return (
     <>
-      <Stats />
+      <Principles />
       <Vision />
       <CTA />
       <Footer />

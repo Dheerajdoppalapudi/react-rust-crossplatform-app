@@ -74,6 +74,9 @@ function AppInner() {
   const isFullHeight = location.pathname.startsWith(ROUTES.STUDIO)
   const isNoPadding  = NO_PADDING_PAGES.includes(location.pathname)
   const isLoginPage  = location.pathname === ROUTES.LOGIN || location.pathname === ROUTES.REGISTER
+  const isLandingPage = location.pathname === ROUTES.HOME
+  // The landing page and auth pages render full-bleed — no sidebar / mobile header.
+  const hideChrome   = isLoginPage || isLandingPage
 
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
   const [mobileHeaderSlot, setMobileHeaderSlot] = useState(null)
@@ -203,8 +206,8 @@ function AppInner() {
     <MobileHeaderSlotContext.Provider value={slotCtx}>
       <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden', bgcolor: 'background.default' }}>
 
-        {/* Sidebar is hidden on the login page */}
-        {!isLoginPage && (
+        {/* Sidebar is hidden on the landing and auth pages (full-bleed) */}
+        {!hideChrome && (
           <Sidebar
             conversations={conversations}
             activeConvId={activeConvId}
@@ -225,8 +228,8 @@ function AppInner() {
         )}
 
         <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
-          {/* Mobile top bar — shown only on small screens, not on login/register */}
-          {!isLoginPage && isMobile && (
+          {/* Mobile top bar — shown only on small screens, not on landing/auth */}
+          {!hideChrome && isMobile && (
             <MobileHeader
               onOpenSidebar={() => setMobileDrawerOpen(true)}
               onNewConversation={handleNewConversation}
@@ -242,7 +245,7 @@ function AppInner() {
               display: 'flex',
               flexDirection: 'column',
               minHeight: 0,
-              overflow: (isFullHeight || isLoginPage) ? 'hidden' : 'auto',
+              overflow: (isFullHeight || isLoginPage || isLandingPage) ? 'hidden' : 'auto',
               '& > *': { flex: 1, minHeight: 0 },
             }}
           >
