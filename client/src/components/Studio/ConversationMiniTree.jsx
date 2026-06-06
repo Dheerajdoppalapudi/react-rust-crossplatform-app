@@ -1,6 +1,8 @@
 import { useMemo } from 'react'
-import { Box, useTheme } from '@mui/material'
+import { Box } from '@mui/material'
 import dagre from 'dagre'
+import { neutralBorderDefault } from '../../theme/styleUtils.js'
+import { useIsDark } from '../../hooks/useIsDark.js'
 
 const DOT_R   = 3.5
 const NODE_SZ = 10
@@ -32,8 +34,7 @@ function buildLayout(turns) {
 }
 
 export default function ConversationMiniTree({ turns, onNavigate }) {
-  const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
+  const isDark = useIsDark()
 
   const hasBranches = turns.filter((t) => t.id).length > 1 && turns.some((t) => t.parentSessionId)
   const { nodes, edges, width, height } = useMemo(() => buildLayout(turns), [turns])
@@ -43,7 +44,7 @@ export default function ConversationMiniTree({ turns, onNavigate }) {
   const svgW       = width  + PAD * 2
   const svgH       = height + PAD * 2
   const lineColor  = isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.14)'
-  const ringColor  = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.10)'
+  const ringColor  = neutralBorderDefault(isDark)
 
   return (
     <Box sx={{

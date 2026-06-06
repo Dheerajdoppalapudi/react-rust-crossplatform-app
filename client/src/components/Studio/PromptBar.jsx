@@ -21,6 +21,8 @@ import { BRAND, PALETTE, RADIUS } from '../../theme/tokens.js'
 import { brandColor, brandHover, neutralGhost, neutralSubtle, neutralSurface, neutralActive, neutralToggle, neutralBorderFaint, neutralBorderDefault, neutralBorderStrong, neutralBorderHover, cardShadow, menuShadow } from '../../theme/styleUtils.js'
 import { api } from '../../services/api.js'
 import { useToast } from '../../contexts/ToastContext'
+import { logger } from '../../lib/logger.js'
+import { useIsDark } from '../../hooks/useIsDark.js'
 
 const autoModel    = MODELS.find((m) => m.id === 'auto')
 const claudeModels = MODELS.filter((m) => m.provider === 'claude')
@@ -148,7 +150,7 @@ function PromptBar({
   embedded        = false,
 }) {
   const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
+  const isDark = useIsDark()
   const toast  = useToast()
 
   const plusMenu   = useMenuState()
@@ -197,7 +199,7 @@ function PromptBar({
       }))
       if (staged.length) onAddFiles?.(staged)
     } catch (err) {
-      console.error('[PromptBar] upload failed:', err)
+      logger.error('file_upload_failed', err)
       toast.error(err?.message ?? 'File upload failed')
     } finally {
       setUploading(false)

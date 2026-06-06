@@ -1,5 +1,5 @@
 import { useMemo, useState, useRef, useCallback } from 'react'
-import { Box, Typography, Tooltip, IconButton, useTheme } from '@mui/material'
+import { Box, Typography, Tooltip, IconButton } from '@mui/material'
 import { motion, AnimatePresence } from 'framer-motion'
 import ZoomInIcon    from '@mui/icons-material/ZoomIn'
 import ZoomOutIcon   from '@mui/icons-material/ZoomOut'
@@ -10,6 +10,7 @@ import { useSceneStore } from '../useSceneStore'
 import { useExpanded } from '../BlockWrapper'
 import { TYPOGRAPHY, RADIUS, PALETTE, BRAND } from '../../../theme/tokens'
 import EntityCaption from './EntityCaption'
+import { useIsDark } from '../../../hooks/useIsDark.js'
 
 const MIN_ZOOM  = 0.5
 const MAX_ZOOM  = 2.5
@@ -18,8 +19,7 @@ const ZOOM_STEP = 0.25
 // ── EventCard ─────────────────────────────────────────────────────────────────
 
 function EventCard({ event, side, orientation, index, compact, zoom = 1 }) {
-  const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
+  const isDark = useIsDark()
   const color  = event.color ?? BRAND.primary
 
   const variants = orientation === 'vertical'

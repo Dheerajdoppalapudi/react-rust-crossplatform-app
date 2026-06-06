@@ -3,6 +3,7 @@ import { Box, Typography, LinearProgress, useTheme } from '@mui/material'
 import { TYPOGRAPHY, RADIUS, PALETTE, SEMANTIC } from '../../../theme/tokens'
 import EntityCaption from './EntityCaption'
 import { useExpanded } from '../BlockWrapper'
+import { neutralBorderHover, neutralGhost, neutralSubtle } from '../../../theme/styleUtils.js'
 
 function QuizQuestion({ q, index, total, onAnswer, isDark }) {
   const [selected,    setSelected]    = useState(null)
@@ -31,10 +32,10 @@ function QuizQuestion({ q, index, total, onAnswer, isDark }) {
     if (!revealed) return {
       ...base,
       borderColor: isDark ? PALETTE.borderDark : PALETTE.border,
-      backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
+      backgroundColor: neutralGhost(isDark),
       '&:hover': {
-        borderColor: isDark ? 'rgba(255,255,255,0.30)' : 'rgba(0,0,0,0.22)',
-        backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
+        borderColor: neutralBorderHover(isDark),
+        backgroundColor: neutralSubtle(isDark),
       },
     }
     if (i === q.correctIndex) return {
@@ -195,7 +196,7 @@ function ScoreSummary({ answers, questions, onRetry, isDark }) {
           color: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)',
           fontFamily: 'inherit', background: 'none',
           transition: 'all 0.15s ease',
-          '&:hover': { borderColor: isDark ? 'rgba(255,255,255,0.30)' : 'rgba(0,0,0,0.22)', color: isDark ? 'rgba(255,255,255,0.90)' : 'rgba(0,0,0,0.80)' },
+          '&:hover': { borderColor: neutralBorderHover(isDark), color: isDark ? 'rgba(255,255,255,0.90)' : 'rgba(0,0,0,0.80)' },
         }}
       >
         Try again

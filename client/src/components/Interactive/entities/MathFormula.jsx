@@ -1,5 +1,5 @@
 import { useMemo, useState, useCallback } from 'react'
-import { Box, Typography, IconButton, Tooltip, Chip, useTheme } from '@mui/material'
+import { Box, Typography, IconButton, Tooltip, Chip } from '@mui/material'
 import ChevronLeftIcon  from '@mui/icons-material/ChevronLeft'
 import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import UnfoldMoreIcon   from '@mui/icons-material/UnfoldMore'
@@ -8,6 +8,8 @@ import katex from 'katex'
 import 'katex/dist/katex.min.css'
 import { TYPOGRAPHY, RADIUS, PALETTE, BRAND } from '../../../theme/tokens'
 import EntityCaption from './EntityCaption'
+import { neutralGhost, neutralSubtle } from '../../../theme/styleUtils.js'
+import { useIsDark } from '../../../hooks/useIsDark.js'
 
 function renderLatex(latex, displayMode) {
   try {
@@ -117,8 +119,7 @@ export default function MathFormula({
   caption,
   fontSize,
 }) {
-  const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
+  const isDark = useIsDark()
 
   const hasSteps = Array.isArray(steps) && steps.length > 0
 
@@ -159,7 +160,7 @@ export default function MathFormula({
         <Box sx={{
           border: `1px solid ${borderColor}`,
           borderRadius: `${RADIUS.lg}px`,
-          backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
+          backgroundColor: neutralGhost(isDark),
           px: 3, py: 2, overflowX: 'auto',
         }}>
           <FormulaDisplay latex={latex} displayMode={displayMode} fontSize={fontSize} highlights={highlights} isDark={isDark} />
@@ -196,7 +197,7 @@ export default function MathFormula({
                     width: 30, height: 30,
                     border: `1px solid ${atStart ? 'transparent' : borderColor}`,
                     borderRadius: '8px',
-                    '&:hover': { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' },
+                    '&:hover': { backgroundColor: neutralSubtle(isDark) },
                     transition: 'all 0.15s',
                   }}
                 >

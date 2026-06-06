@@ -7,6 +7,7 @@ import ResponseToolbar from './ResponseToolbar'
 import { safeHref }    from '../../utils/safeHref'
 import { SEMANTIC }    from '../../theme/tokens.js'
 import { cursorBlink } from '../../theme/animations.js'
+import { neutralActive, neutralBorder, neutralBorderFaint, neutralSurface } from '../../theme/styleUtils.js'
 
 // ── Citation chip ─────────────────────────────────────────────────────────────
 
@@ -19,12 +20,12 @@ function CitationChip({ num, source }) {
       display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
       minWidth: 16, height: 16, px: 0.4,
       borderRadius: '4px', fontSize: 10, fontWeight: 600, lineHeight: 1,
-      backgroundColor: isDark ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.06)',
+      backgroundColor: neutralSurface(isDark),
       color: 'text.secondary',
-      border: `1px solid ${isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.14)'}`,
+      border: `1px solid ${neutralBorder(isDark)}`,
       cursor: source?.url ? 'pointer' : 'default',
       mx: 0.3, verticalAlign: 'super',
-      '&:hover': source?.url ? { backgroundColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.10)' } : {},
+      '&:hover': source?.url ? { backgroundColor: neutralActive(isDark) } : {},
       transition: 'background-color 0.15s',
     }}>
       {num}
@@ -220,7 +221,7 @@ function SourcesPanel({ sources, open }) {
                   width: 14, height: 14, borderRadius: '4px', flexShrink: 0,
                   display: faviconUrl ? 'none' : 'flex',
                   alignItems: 'center', justifyContent: 'center',
-                  backgroundColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)',
+                  backgroundColor: neutralBorderFaint(isDark),
                 }}>
                   <Typography sx={{ fontSize: 8, fontWeight: 700, lineHeight: 1, color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.4)' }}>
                     {(domain[0] || '?').toUpperCase()}

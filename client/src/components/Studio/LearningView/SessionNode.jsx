@@ -37,6 +37,7 @@ import { isTextTurn, getFrameCount, formatIntentType } from '../studioUtils'
 import { getActiveStageLabel }     from './utils'
 import { pulse, shimmer, fadeIn }  from '../../../theme/animations'
 import { relativeTime }            from '../../../utils/formatTime'
+import { neutralBorderDefault } from '../../../theme/styleUtils.js'
 
 // ─── Thumbnail height inside video cards ──────────────────────────────────────
 const THUMB_H = 138
@@ -200,7 +201,7 @@ function NodeHeader({ indexLabel, typeConfig, timestamp, isDark, theme, loading 
       {/* Vertical pipe separator */}
       <Box sx={{
         width: '1px', height: 10, flexShrink: 0,
-        bgcolor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.10)',
+        bgcolor: neutralBorderDefault(isDark),
       }} />
 
       {/* Content-type badge */}

@@ -6,6 +6,7 @@ import PlayArrowIcon from '@mui/icons-material/PlayArrow'
 import { getSessionMediaToken } from '../../../services/mediaToken'
 import { blink } from '../../../theme/animations'
 import { API_BASE } from '../../../constants/api.js'
+import { useIsDark } from '../../../hooks/useIsDark.js'
 
 function fmtTime(s) {
   if (!s || isNaN(s)) return '0:00'
@@ -16,7 +17,7 @@ function fmtTime(s) {
 
 export default function MergedVideoModal({ open, onClose, mergedVideoUrl, sessions }) {
   const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
+  const isDark = useIsDark()
 
   const videoRef      = useRef(null)
   const listRef       = useRef(null)

@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useSceneStore } from '../useSceneStore'
 import { TYPOGRAPHY, RADIUS, PALETTE, SEMANTIC } from '../../../theme/tokens'
 import EntityCaption from './EntityCaption'
+import { neutralBorderDefault } from '../../../theme/styleUtils.js'
 
 const MotionDiv = motion.div
 
@@ -132,7 +133,7 @@ export default function FlashcardDeck({
               >
                 <Box sx={{
                   minHeight: 180, borderRadius: `${RADIUS.md}px`, background: frontBg,
-                  border: `1px solid ${isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.10)'}`,
+                  border: `1px solid ${neutralBorderDefault(isDark)}`,
                   display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
                   p: 3, position: 'relative',
                 }}>

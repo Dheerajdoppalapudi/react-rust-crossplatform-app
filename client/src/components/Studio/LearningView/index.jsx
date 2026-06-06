@@ -13,10 +13,12 @@ import { DEFAULT_MODEL, DEFAULT_RENDER_MODE, DEFAULT_MODE } from '../constants'
 import { api } from '../../../services/api'
 import { getConversationMediaToken } from '../../../services/mediaToken'
 import { API_BASE } from '../../../constants/api.js'
+import { neutralBorderStrong, neutralHover } from '../../../theme/styleUtils.js'
+import { useIsDark } from '../../../hooks/useIsDark.js'
 
 export default function LearningView({ turns, conversationId, onExit, onAskFromLearn, onGenerateFromCanvas, defaultModel, defaultVideoEnabled, notesEnabled, userNotesOpen, onToggleUserNotes }) {
   const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
+  const isDark = useIsDark()
 
   const [selectedNode,    setSelectedNode]    = useState(null)
   const [nodePanelWidth,  setNodePanelWidth]  = useState(() => Math.round(window.innerWidth * 0.45))
@@ -193,10 +195,10 @@ export default function LearningView({ turns, conversationId, onExit, onAskFromL
                 aria-pressed={userNotesOpen}
                 sx={{
                   bgcolor: userNotesOpen
-                    ? (isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)')
+                    ? (neutralHover(isDark))
                     : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.92)'),
                   border: `1px solid ${userNotesOpen
-                    ? (isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.18)')
+                    ? (neutralBorderStrong(isDark))
                     : (isDark ? 'rgba(255,255,255,0.14)' : '#e2e8f0')}`,
                   color: userNotesOpen ? (isDark ? 'rgba(255,255,255,0.90)' : 'rgba(0,0,0,0.80)') : theme.palette.text.secondary,
                   backdropFilter: 'blur(10px)',

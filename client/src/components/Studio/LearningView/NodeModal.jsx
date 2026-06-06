@@ -13,6 +13,8 @@ import BlockRenderer      from '../../Interactive/BlockRenderer'
 import { api }            from '../../../services/api'
 import { formatIntentType } from '../studioUtils'
 import { pulse } from '../../../theme/animations'
+import { neutralBorderDefault } from '../../../theme/styleUtils.js'
+import { useIsDark } from '../../../hooks/useIsDark.js'
 
 function FrameStrip({ sessionId, captions, activeFrame, onSelect, isDark, theme }) {
   const { getFrameUrl } = useMediaUrl(sessionId)
@@ -158,7 +160,7 @@ function VideoGeneratingPlaceholder({ isDark, theme }) {
 // Renders as an inline side panel — no Dialog wrapper.
 export default function NodeModal({ node, onClose, onAsk }) {
   const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
+  const isDark = useIsDark()
 
   const [framesData,  setFramesData]  = useState(null)
   const [loadingMeta, setLoadingMeta] = useState(false)
@@ -341,7 +343,7 @@ export default function NodeModal({ node, onClose, onAsk }) {
               mb: 1.25, fontSize: 10.5, height: 24, cursor: 'default',
               bgcolor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.04)',
               color: theme.palette.text.secondary,
-              border: `1px solid ${isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.10)'}`,
+              border: `1px solid ${neutralBorderDefault(isDark)}`,
               '& .MuiChip-label': { px: 1 },
             }}
           />

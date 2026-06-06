@@ -1,10 +1,11 @@
 import { useState, useMemo, useCallback } from 'react'
-import { Box, Typography, Chip, IconButton, Tooltip, useTheme } from '@mui/material'
+import { Box, Typography, Chip, IconButton, Tooltip } from '@mui/material'
 import { motion, AnimatePresence } from 'framer-motion'
 import EditIcon  from '@mui/icons-material/Edit'
 import CloseIcon from '@mui/icons-material/Close'
 import { TYPOGRAPHY, RADIUS, PALETTE, BRAND } from '../../../theme/tokens'
 import EntityCaption from './EntityCaption'
+import { useIsDark } from '../../../hooks/useIsDark.js'
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ── Utilities ────────────────────────────────────────────────────────────
@@ -417,8 +418,7 @@ function HashTableView({ entries, numBuckets, highlighted, isDark }) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 function OpsBtn({ label, onClick, primary = false, disabled = false }) {
-  const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
+  const isDark = useIsDark()
   return (
     <Box component="button" onClick={onClick} disabled={disabled} sx={{
       px: 1.5, py: 0.55, fontSize: 11, fontWeight: 600, letterSpacing: '0.02em',
@@ -438,8 +438,7 @@ function OpsBtn({ label, onClick, primary = false, disabled = false }) {
 }
 
 function OpsInput({ value, onChange, placeholder, width = 88, onEnter }) {
-  const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
+  const isDark = useIsDark()
   return (
     <Box component="input" value={value} onChange={e => onChange(e.target.value)}
       onKeyDown={e => { if (e.key === 'Enter' && onEnter) onEnter() }}
@@ -479,8 +478,7 @@ export default function DSViewer({
   editable = true,
   caption,
 }) {
-  const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
+  const isDark = useIsDark()
 
   const [data,        setData]        = useState(() => initData(type, nodes))
   const [highlighted, setHighlighted] = useState(null)   // Set<id>

@@ -7,7 +7,7 @@ import ChevronRightIcon          from '@mui/icons-material/ChevronRight'
 import { fadeIn, softPulse }     from '../../theme/animations'
 import { STAGE_REGISTRY, FALLBACK_STAGE_ICON } from '../../constants/stageRegistry'
 import { safeHref }              from '../../utils/safeHref'
-import { metaText, shimmerTextSx } from '../../theme/styleUtils'
+import { metaText, neutralBorderFaint, neutralToggle, shimmerTextSx } from '../../theme/styleUtils'
 import {
   FrameSkeletonCards, SlideSkeletonCard, P5SkeletonCard,
   VideoSkeletonCard, BlockSkeletonPreview,
@@ -130,7 +130,7 @@ export function EntityChipsBar({ entities, isDark }) {
           fontSize: 10.5, fontWeight: 600, letterSpacing: '0.025em',
           color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.42)',
           backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.04)',
-          border: `1px solid ${isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.07)'}`,
+          border: `1px solid ${neutralToggle(isDark)}`,
           animation: `${fadeIn} 0.4s ease both`,
           animationDelay: `${i * 0.07}s`,
           userSelect: 'none',
@@ -287,7 +287,7 @@ export function StageRow({ stage, sources, isLast, compact, isDark, beatTitles, 
 
   const iconColor = isActive  ? (isDark ? 'rgba(255,255,255,0.72)' : 'rgba(0,0,0,0.62)')
                   : isDone    ? metaText(isDark)
-                              : (isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)')
+                              : (neutralBorderFaint(isDark))
 
   const lineColor = isDone
     ? (isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.11)')

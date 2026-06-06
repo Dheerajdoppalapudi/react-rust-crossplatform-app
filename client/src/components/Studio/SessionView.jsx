@@ -15,6 +15,7 @@ import { getFrameType }            from './constants'
 import { useMediaUrl }             from '../../hooks/useMediaUrl'
 import { PALETTE }                 from '../../theme/tokens.js'
 import { slideShimmer }            from '../../theme/animations.js'
+import { neutralBorderDefault } from '../../theme/styleUtils.js'
 
 function NavButton({ onClick, disabled, 'aria-label': ariaLabel, children }) {
   return (
@@ -292,7 +293,7 @@ function SlideDialog({ open, frameIndex, captions, images, sessionId, onClose, o
 
 function SessionView({ session, videoPhase, framesData, onPauseAsk, notesEnabled }) {
   const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
+  const isDark = useIsDark()
 
   const [activeFrame,   setActiveFrame]   = useState(0)
   const [expandedFrame, setExpandedFrame] = useState(null)
@@ -366,7 +367,7 @@ function SessionView({ session, videoPhase, framesData, onPauseAsk, notesEnabled
                   fontSize: 11.5, fontWeight: 600, height: 26,
                   bgcolor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)',
                   color: theme.palette.text.secondary,
-                  border: `1px solid ${isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.10)'}`,
+                  border: `1px solid ${neutralBorderDefault(isDark)}`,
                   '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.09)', color: theme.palette.text.primary },
                   '& .MuiChip-icon': { color: 'inherit' },
                   transition: 'all 0.15s',

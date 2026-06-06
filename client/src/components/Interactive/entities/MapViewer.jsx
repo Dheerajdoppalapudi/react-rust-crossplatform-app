@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
-import { Box, Typography, useTheme } from '@mui/material'
+import { Box, Typography } from '@mui/material'
 import { MapContainer, TileLayer, Marker, Popup, Polyline, Polygon, Circle, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { TYPOGRAPHY, RADIUS, PALETTE } from '../../../theme/tokens'
 import EntityCaption from './EntityCaption'
+import { neutralGhost } from '../../../theme/styleUtils.js'
+import { useIsDark } from '../../../hooks/useIsDark.js'
 
 delete L.Icon.Default.prototype._getIconUrl
 L.Icon.Default.mergeOptions({
@@ -70,8 +72,7 @@ export default function MapViewer({
   interactive = true,
   caption,
 }) {
-  const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
+  const isDark = useIsDark()
 
   const [selectedMarker, setSelectedMarker] = useState(null)
 
@@ -157,7 +158,7 @@ export default function MapViewer({
           mt: 1, px: 2, py: 1.25,
           borderRadius: `${RADIUS.md}px`,
           border: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.border}`,
-          backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
+          backgroundColor: neutralGhost(isDark),
           borderLeft: `3px solid ${activeMarker.color ?? '#4B72FF'}`,
         }}>
           {activeMarker.label && (

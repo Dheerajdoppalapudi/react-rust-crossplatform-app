@@ -3,10 +3,11 @@ import PromptBar      from './PromptBar'
 import SuggestionBoxes from './SuggestionBoxes'
 import ParalyteLogo from '../common/ParalyteLogo'
 import { PALETTE } from '../../theme/tokens.js'
+import { useIsDark } from '../../hooks/useIsDark.js'
 
 export default function EmptyView({ onSuggestionClick, ...promptBarProps }) {
   const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
+  const isDark = useIsDark()
 
   return (
     <Box sx={{

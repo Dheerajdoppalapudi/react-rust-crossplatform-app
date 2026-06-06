@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { Box, Typography, Paper, Tooltip, IconButton, Chip, useTheme } from '@mui/material'
+import { Box, Typography, Paper, Tooltip, IconButton, Chip } from '@mui/material'
 import ContentCopyIcon  from '@mui/icons-material/ContentCopy'
 import CheckIcon        from '@mui/icons-material/Check'
 import { Light as SyntaxHighlighter } from 'react-syntax-highlighter'
@@ -19,6 +19,8 @@ import go         from 'react-syntax-highlighter/dist/esm/languages/hljs/go'
 import sql        from 'react-syntax-highlighter/dist/esm/languages/hljs/sql'
 import bash       from 'react-syntax-highlighter/dist/esm/languages/hljs/bash'
 import xml        from 'react-syntax-highlighter/dist/esm/languages/hljs/xml'  // covers html + xml
+import { neutralBorderHover } from '../../../theme/styleUtils.js'
+import { useIsDark } from '../../../hooks/useIsDark.js'
 
 SyntaxHighlighter.registerLanguage('python',     python)
 SyntaxHighlighter.registerLanguage('javascript', javascript)
@@ -39,8 +41,7 @@ export default function CodeWalkthrough({
   code     = '',
   steps    = [],
 }) {
-  const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
+  const isDark = useIsDark()
 
   const [step,          setStep]          = useState(0)
   const [isPlaying,     setIsPlaying]     = useState(false)
@@ -93,7 +94,7 @@ export default function CodeWalkthrough({
         style: {
           display: 'block',
           backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)',
-          borderLeft: `3px solid ${isDark ? 'rgba(255,255,255,0.30)' : 'rgba(0,0,0,0.22)'}`,
+          borderLeft: `3px solid ${neutralBorderHover(isDark)}`,
           paddingLeft: '8px',
           marginLeft: '-8px',
         },

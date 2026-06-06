@@ -40,6 +40,14 @@ export const glassPanelShadow = (d) => d ? '0 2px 12px rgba(0,0,0,0.5)' : '0 2px
 // Meets WCAG AA 3:1 minimum for non-body text at these opacities.
 export const metaText = (d) => d ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.40)'
 
+// ─── Thin custom scrollbar ─────────────────────────────────────────────────────
+// Spread into an sx prop on any scroll container: { ...scrollbarSx(theme) }
+export const scrollbarSx = (theme, width = 4) => ({
+  '&::-webkit-scrollbar':       { width },
+  '&::-webkit-scrollbar-track': { background: 'transparent' },
+  '&::-webkit-scrollbar-thumb': { backgroundColor: theme.palette.divider, borderRadius: 2 },
+})
+
 // ─── Text shimmer (active stage / beat animation) ─────────────────────────────
 // Apply as spread in sx: { ...shimmerTextSx(isDark) }
 export const shimmerTextSx = (d) => ({

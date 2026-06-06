@@ -13,11 +13,13 @@ import { isTextTurn } from './studioUtils'
 import { PALETTE } from '../../theme/tokens.js'
 import BlockRenderer   from '../Interactive/BlockRenderer'
 import ResearchResult  from './ResearchResult'
+import { neutralBorderDefault } from '../../theme/styleUtils.js'
+import { useIsDark } from '../../hooks/useIsDark.js'
 
 // Exported so Studio.jsx can reuse it for the bootstrap prompt display.
 export function UserBubble({ prompt }) {
   const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
+  const isDark = useIsDark()
 
   return (
     <Box sx={{ display: 'flex', justifyContent: 'flex-end', pt: 2.5, pb: 2 }}>
@@ -39,7 +41,7 @@ export function UserBubble({ prompt }) {
 // an async retry is in flight; pass `message` for the body copy.
 function InlineErrorBanner({ message, retryLabel = 'Retry', onRetry, busy = false, sx }) {
   const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
+  const isDark = useIsDark()
   return (
     <Box sx={{
       display: 'flex', alignItems: 'center', gap: 1.5,
@@ -60,7 +62,7 @@ function InlineErrorBanner({ message, retryLabel = 'Retry', onRetry, busy = fals
           textTransform: 'none', fontSize: 12.5, fontWeight: 600,
           borderRadius: '8px', flexShrink: 0,
           color: theme.palette.text.secondary,
-          border: `1px solid ${isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.10)'}`,
+          border: `1px solid ${neutralBorderDefault(isDark)}`,
           '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)', color: theme.palette.text.primary },
         }}
       >
@@ -108,7 +110,7 @@ function TurnLoadingView({ turn }) {
 // distinct state, top to bottom, so the control flow reads linearly.
 function TurnContent({ turn, onPauseAsk, onRetryTurn, onRetryGeneration, notesEnabled }) {
   const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
+  const isDark = useIsDark()
 
   // ── Interactive turns: research answer, lesson blocks, or still designing ──
   if (turn.render_path === 'interactive') {

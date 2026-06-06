@@ -1,18 +1,18 @@
 import { useState, useCallback } from 'react'
-import { Box, Tooltip, IconButton, Skeleton, useTheme, Dialog, DialogContent } from '@mui/material'
+import { Box, Tooltip, IconButton, Skeleton, Dialog, DialogContent } from '@mui/material'
 import RefreshIcon      from '@mui/icons-material/Refresh'
 import OpenInFullIcon   from '@mui/icons-material/OpenInFull'
 import CloseIcon        from '@mui/icons-material/Close'
 import { TYPOGRAPHY, RADIUS, PALETTE } from '../../../theme/tokens'
 import EntityCaption from './EntityCaption'
+import { useIsDark } from '../../../hooks/useIsDark.js'
 
 export default function P5Sketch({
   html,
   height  = 420,
   caption,
 }) {
-  const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
+  const isDark = useIsDark()
 
   const [reloadKey,  setReloadKey]  = useState(0)
   const [expanded,   setExpanded]   = useState(false)

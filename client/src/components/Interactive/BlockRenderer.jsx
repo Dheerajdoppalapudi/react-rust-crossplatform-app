@@ -8,7 +8,7 @@ import ErrorBoundary from '../error/ErrorBoundary'
 import BlockWrapper from './BlockWrapper'
 import { TYPOGRAPHY, RADIUS } from '../../theme/tokens.js'
 import { useIsDark } from '../../hooks/useIsDark'
-import { neutralGhost, neutralSurface, neutralBorderFaint, neutralBorder } from '../../theme/styleUtils.js'
+import { neutralGhost, neutralBorderFaint, neutralBorder } from '../../theme/styleUtils.js'
 
 function FallbackCard({ entityType }) {
   const isDark = useIsDark()

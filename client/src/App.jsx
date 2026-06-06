@@ -17,6 +17,7 @@ const Studio   = lazy(() => import('./pages/Studio'))
 const Login    = lazy(() => import('./pages/Login'))
 const Register = lazy(() => import('./pages/Register'))
 import ProtectedRoute from './components/common/ProtectedRoute'
+import RouteFallback from './components/common/RouteFallback'
 import ErrorBoundary from './components/error/ErrorBoundary'
 import { ToastProvider, useToast } from './contexts/ToastContext'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
@@ -252,7 +253,7 @@ function AppInner() {
             {/* Route-level boundary: page crashes don't take down the sidebar.
                 Key stays constant within /studio/* so Studio never remounts on conv switch. */}
             <ErrorBoundary level="page" key={location.pathname.startsWith(ROUTES.STUDIO) ? ROUTES.STUDIO : location.pathname}>
-              <Suspense fallback={null}><Routes>
+              <Suspense fallback={<RouteFallback />}><Routes>
                 {/* Always public */}
                 <Route path={ROUTES.HOME}     element={<AboutUs />} />
                 <Route path={ROUTES.LOGIN}    element={

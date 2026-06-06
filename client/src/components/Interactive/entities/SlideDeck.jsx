@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef } from 'react'
 import {
   Box, Typography, IconButton, Tooltip, Dialog, Skeleton,
-  CircularProgress, useTheme, Button, Menu, MenuItem,
+  CircularProgress, Button, Menu, MenuItem,
 } from '@mui/material'
 import FullscreenIcon        from '@mui/icons-material/Fullscreen'
 import FullscreenExitIcon    from '@mui/icons-material/FullscreenExit'
@@ -15,6 +15,9 @@ import RestartAltIcon        from '@mui/icons-material/RestartAlt'
 import { TYPOGRAPHY, RADIUS, PALETTE } from '../../../theme/tokens'
 import EntityCaption from './EntityCaption'
 import { API_BASE } from '../../../constants/api'
+import { neutralActive, neutralSubtle } from '../../../theme/styleUtils.js'
+import { logger } from '../../../lib/logger.js'
+import { useIsDark } from '../../../hooks/useIsDark.js'
 
 function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob)
@@ -62,7 +65,7 @@ function TabGroup({ tab, onChange, isDark }) {
                 ? (isDark ? '#fff' : PALETTE.nearBlackText)
                 : (isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.45)'),
               backgroundColor: active
-                ? (isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.10)')
+                ? (neutralActive(isDark))
                 : 'transparent',
               transition: 'all 0.15s',
               userSelect: 'none',
@@ -74,8 +77,8 @@ function TabGroup({ tab, onChange, isDark }) {
                   ? (isDark ? '#fff' : PALETTE.nearBlackText)
                   : (isDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.65)'),
                 backgroundColor: active
-                  ? (isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.10)')
-                  : (isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)'),
+                  ? (neutralActive(isDark))
+                  : (neutralSubtle(isDark)),
               },
               '&:focus-visible': {
                 outline: `2px solid ${isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.4)'}`,
@@ -131,7 +134,7 @@ function DownloadDropdown({ onHtml, onPptx, pptxLoading, iconOnly = false, isDar
         minWidth: 0,
         '&:hover': {
           borderColor: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)',
-          backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
+          backgroundColor: neutralSubtle(isDark),
           color: isDark ? '#fff' : PALETTE.nearBlackText,
         },
       }}
@@ -360,8 +363,7 @@ function CodePane({ value, editable, onChange, onReset, originalHtml, isDark }) 
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function SlideDeck({ entityId, html, title, spec, caption }) {
-  const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
+  const isDark = useIsDark()
 
   const [tab,         setTab]         = useState('view')
   const [editedHtml,  setEditedHtml]  = useState(html || '')
@@ -398,7 +400,7 @@ export default function SlideDeck({ entityId, html, title, spec, caption }) {
       const blob = await res.blob()
       downloadBlob(blob, `${presentationTitle.replace(/[^a-z0-9]/gi, '_').slice(0, 50) || 'presentation'}.pptx`)
     } catch (err) {
-      if (err.name !== 'AbortError') console.error('[SlideDeck] PPTX export failed', err)
+      if (err.name !== 'AbortError') logger.error('pptx_export_failed', err)
     } finally {
       setPptxLoading(false)
       pptxAbortRef.current = null

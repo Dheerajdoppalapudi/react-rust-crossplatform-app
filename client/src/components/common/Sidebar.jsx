@@ -25,8 +25,9 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { relativeTime } from '../../utils/formatTime'
 import { useAuth } from '../../contexts/AuthContext'
 import { PALETTE, RADIUS, SEMANTIC } from '../../theme/tokens.js'
-import { metaText } from '../../theme/styleUtils.js'
+import { metaText, neutralHover, neutralSurface, scrollbarSx } from '../../theme/styleUtils.js'
 import { TIMINGS } from '../../constants/timings.js'
+import { useIsDark } from '../../hooks/useIsDark.js'
 
 const DRAWER_OPEN   = 260
 const DRAWER_CLOSED = 56
@@ -60,7 +61,7 @@ function groupConversations(conversations) {
 // ─── Logo / collapse toggle (owns its own hover state so Sidebar never re-renders on hover) ──
 const LogoButton = ({ onToggle }) => {
   const theme   = useTheme()
-  const isDark  = theme.palette.mode === 'dark'
+  const isDark = useIsDark()
   const [hovered, setHovered] = useState(false)
 
   return (
@@ -90,8 +91,8 @@ const LogoButton = ({ onToggle }) => {
 // ─── Single nav item — icon always visible, text fades via CSS ───────────────
 const NavItem = memo(({ item, open, isActive, onClick }) => {
   const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
-  const activeBg = isDark ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.06)'
+  const isDark = useIsDark()
+  const activeBg = neutralSurface(isDark)
   const hoverBg  = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)'
 
   return (
@@ -139,7 +140,7 @@ const NavItem = memo(({ item, open, isActive, onClick }) => {
 // ─── Single conversation row ───────────────────────────────────────────────────
 const ConvItem = memo(({ conv, isActive, onSelect, onRename, onStar, onDelete }) => {
   const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
+  const isDark = useIsDark()
   const [menuAnchor, setMenuAnchor] = useState(null)
 
   const openMenu  = (e) => { e.stopPropagation(); setMenuAnchor(e.currentTarget) }
@@ -169,11 +170,11 @@ const ConvItem = memo(({ conv, isActive, onSelect, onRename, onStar, onDelete })
           px: 1.25, py: 0.75, mx: 0.75, mb: 0.1,
           borderRadius: `${RADIUS.lg}px`, cursor: 'pointer',
           bgcolor: isActive
-            ? (isDark ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.06)')
+            ? (neutralSurface(isDark))
             : 'transparent',
           '&:hover': {
             bgcolor: isActive
-              ? (isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)')
+              ? (neutralHover(isDark))
               : (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)'),
           },
           // On hover: hide time, show actions
@@ -309,8 +310,7 @@ function ConvSkeletons({ count = 5 }) {
 
 // ─── Rename dialog ────────────────────────────────────────────────────────────
 function RenameDialog({ conv, onClose, onConfirm }) {
-  const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
+  const isDark = useIsDark()
   const [value, setValue] = useState(conv?.title ?? '')
 
   useEffect(() => { setValue(conv?.title ?? '') }, [conv])
@@ -377,8 +377,7 @@ function RenameDialog({ conv, onClose, onConfirm }) {
 
 // ─── Section label ────────────────────────────────────────────────────────────
 function SectionLabel({ children }) {
-  const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
+  const isDark = useIsDark()
   return (
     <Typography sx={{
       fontSize: 10, fontWeight: 600, letterSpacing: '0.07em',
@@ -737,8 +736,7 @@ const Sidebar = ({
             ref={listScrollRef}
             sx={{
               flex: 1, overflowY: 'auto', overflowX: 'hidden', pb: 1,
-              '&::-webkit-scrollbar': { width: 3 },
-              '&::-webkit-scrollbar-thumb': { backgroundColor: theme.palette.divider, borderRadius: 2 },
+              ...scrollbarSx(theme, 3),
             }}
           >
             {/* Non-virtualised fallback states */}

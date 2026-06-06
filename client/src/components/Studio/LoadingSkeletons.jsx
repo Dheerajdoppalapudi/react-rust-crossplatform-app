@@ -1,6 +1,7 @@
 import { Box, Typography } from '@mui/material'
 import MovieCreationOutlinedIcon from '@mui/icons-material/MovieCreationOutlined'
 import { fadeIn, shimmer, softPulse } from '../../theme/animations'
+import { neutralBorder } from '../../theme/styleUtils.js'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -97,7 +98,7 @@ export function P5SkeletonCard({ isDark }) {
         {bars.map((h, i) => (
           <Box key={i} sx={{
             flex: 1, borderRadius: '2px 2px 0 0',
-            backgroundColor: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.14)',
+            backgroundColor: neutralBorder(isDark),
             height: `${h * 60}%`,
             animation: `${softPulse} ${1.4 + i * 0.09}s ease-in-out infinite`,
             animationDelay: `${i * 0.06}s`,

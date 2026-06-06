@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { api } from '../services/api'
 import { createTempTurn, normalizeFramesData } from '../components/Studio/studioUtils'
 import { withSpan } from '../lib/sentry.js'
+import { logger } from '../lib/logger.js'
 import { SSE_REDUCERS, finalizeAllStages } from '../utils/sseUtils'
 
 // ── Shared SSE handler for follow-up / retry / learn turns ───────────────────
@@ -381,7 +382,7 @@ export function useGeneration({
         }
         return
       }
-      console.error('[Studio] handleGenerate:', err)
+      logger.error('generation_failed', err)
       toast.error('Generation failed. Please try again.')
       if (isFirstTurn) {
         setBootstrap(null)
@@ -494,7 +495,7 @@ export function useGeneration({
         setTurns(prev => prev.filter(t => t.tempId !== tempId))
         return
       }
-      console.error('[Studio] handleLearnGenerate:', err)
+      logger.error('learn_generation_failed', err)
       toast.error('Generation failed. Please try again.')
       setTurns(prev => prev.map(t =>
         t.tempId === tempId ? { ...t, isLoading: false, videoPhase: 'error' } : t
@@ -590,7 +591,7 @@ export function useGeneration({
         ))
         return
       }
-      console.error('[Studio] handleRetryGeneration:', err)
+      logger.error('retry_generation_failed', err)
       toast.error('Generation failed. Please try again.')
       setTurns(prev => prev.map(t =>
         t.tempId === turn.tempId ? { ...t, isLoading: false, videoPhase: 'error' } : t

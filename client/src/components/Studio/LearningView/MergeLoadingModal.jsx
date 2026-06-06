@@ -4,6 +4,7 @@ import MergeTypeIcon from '@mui/icons-material/MergeType'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked'
 import { pulse } from '../../../theme/animations'
+import { useIsDark } from '../../../hooks/useIsDark.js'
 
 const STEPS = [
   { key: 'tree',    label: 'Reading session tree',       duration: 800  },
@@ -17,7 +18,7 @@ const VISIBLE_STEPS = STEPS.filter((s) => s.key !== 'done')
 
 export default function MergeLoadingModal({ open, sessionCount = 0 }) {
   const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
+  const isDark = useIsDark()
 
   const [stepIndex, setStepIndex] = useState(0)
   const [progress,  setProgress]  = useState(0)

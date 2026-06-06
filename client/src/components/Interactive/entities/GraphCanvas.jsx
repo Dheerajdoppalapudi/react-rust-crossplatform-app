@@ -1,5 +1,5 @@
 import { useMemo, useState, useCallback } from 'react'
-import { Box, Typography, Tooltip, IconButton, useTheme, Dialog, DialogContent } from '@mui/material'
+import { Box, Typography, Tooltip, IconButton, Dialog, DialogContent } from '@mui/material'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import OpenInFullIcon from '@mui/icons-material/OpenInFull'
 import CloseIcon from '@mui/icons-material/Close'
@@ -13,6 +13,7 @@ import dagre from 'dagre'
 import { useSceneStore } from '../useSceneStore'
 import { TYPOGRAPHY, RADIUS, PALETTE, BRAND } from '../../../theme/tokens'
 import EntityCaption from './EntityCaption'
+import { useIsDark } from '../../../hooks/useIsDark.js'
 
 const NODE_W = 140
 const NODE_H = 40
@@ -89,8 +90,7 @@ function buildEdges(rawEdges, highlightedEdgeIds, directed, isDark) {
 }
 
 function GraphInner({ rawNodes, rawEdges, layout, directed, height, showMinimap, showControls, stepHighlights, nodeColors, caption, entityId, resetKey }) {
-  const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
+  const isDark = useIsDark()
 
   const stepIndex = useSceneStore(s => s.getStep(entityId))
 
@@ -207,8 +207,7 @@ export default function GraphCanvas({
   nodeColors,
   caption,
 }) {
-  const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
+  const isDark = useIsDark()
 
   const [resetKey,  setResetKey]  = useState(0)
   const [expanded,  setExpanded]  = useState(false)

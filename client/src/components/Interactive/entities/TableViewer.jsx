@@ -3,6 +3,7 @@ import { Box, Typography, useTheme } from '@mui/material'
 import { TYPOGRAPHY, RADIUS, PALETTE } from '../../../theme/tokens'
 import EntityCaption from './EntityCaption'
 import { useExpanded } from '../BlockWrapper'
+import { neutralBorderHover, neutralSurface } from '../../../theme/styleUtils.js'
 
 function SortIcon({ dir }) {
   return (
@@ -190,11 +191,11 @@ export default function TableViewer({
                       gridTemplateColumns: gridCols,
                       borderBottom: i < sortedRows.length - 1 ? `1px solid ${borderColor}` : 'none',
                       backgroundColor: isHighlighted
-                        ? (isDark ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.06)')
+                        ? (neutralSurface(isDark))
                         : isStriped
                           ? (isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)')
                           : 'transparent',
-                      borderLeft: isHighlighted ? `3px solid ${isDark ? 'rgba(255,255,255,0.30)' : 'rgba(0,0,0,0.22)'}` : '3px solid transparent',
+                      borderLeft: isHighlighted ? `3px solid ${neutralBorderHover(isDark)}` : '3px solid transparent',
                     }}
                   >
                     {columns.map(col => (

@@ -1,9 +1,12 @@
 import { useMemo, useState, useCallback } from 'react'
-import { Box, useTheme } from '@mui/material'
+import { Box } from '@mui/material'
 import createPlotlyComponent from 'react-plotly.js/factory'
 import Plotly from 'plotly.js-dist-min'
 import { TYPOGRAPHY, RADIUS, PALETTE } from '../../../theme/tokens'
 import EntityCaption from './EntityCaption'
+import { neutralGhost } from '../../../theme/styleUtils.js'
+import { logger } from '../../../lib/logger.js'
+import { useIsDark } from '../../../hooks/useIsDark.js'
 
 // Use the pre-built dist so Rollup/Vite never tries to treeshake the full source.
 const Plot = createPlotlyComponent(Plotly)
@@ -12,7 +15,7 @@ const FONT_FAMILY = '"Inter", "Roboto", system-ui, sans-serif'
 
 function buildLayout(userLayout, isDark, width) {
   const bg        = 'rgba(0,0,0,0)'
-  const plotBg    = isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)'
+  const plotBg    = neutralGhost(isDark)
   const gridColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'
   const lineColor = isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'
   const textColor = isDark ? PALETTE.warmSilver : PALETTE.nearBlackText
@@ -93,8 +96,7 @@ const BASE_CONFIG = {
 }
 
 export default function PlotlyViewer({ entityId, data, layout: userLayout, config: userConfig, caption }) {
-  const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
+  const isDark = useIsDark()
 
   const [error, setError] = useState(null)
 
@@ -109,7 +111,7 @@ export default function PlotlyViewer({ entityId, data, layout: userLayout, confi
   )
 
   const handleError = useCallback((err) => {
-    console.error('[PlotlyViewer] render error', err)
+    logger.error('plotly_render_failed', err)
     setError(String(err?.message ?? err))
   }, [])
 

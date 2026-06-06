@@ -12,6 +12,7 @@ import LearningView         from '../components/Studio/LearningView/index'
 import UserNotesPanel       from '../components/Studio/UserNotesPanel/index'
 import ConversationMiniTree from '../components/Studio/ConversationMiniTree'
 
+import { scrollbarSx }      from '../theme/styleUtils.js'
 import { useToast }         from '../contexts/ToastContext'
 import { DEFAULT_MODEL, DEFAULT_RENDER_MODE, DEFAULT_MODE, FOLLOWUP_SUGGESTIONS, MODES } from '../components/Studio/constants'
 import { STORAGE_KEYS } from '../constants/storage.js'
@@ -313,6 +314,10 @@ export default function Studio({
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleGenerate() }
   }, [handleGenerate])
 
+  const handleStop          = useCallback(() => generationAbortRef.current?.abort(), [generationAbortRef])
+  const clearPauseContext   = useCallback(() => setPauseContext(null), [setPauseContext])
+  const clearSelectedText   = useCallback(() => setSelectedTextContext(null), [])
+
   const handleNewConversation = useCallback(() => {
     loadedConvIdRef.current = null
     onActiveConvIdChange(null)
@@ -353,6 +358,37 @@ export default function Studio({
     setSelectedTextContext(text)
     setTimeout(() => inputRef.current?.focus(), TIMINGS.TEXT_SELECT_FOCUS_DELAY_MS)
   }, [])
+
+  // The prompt composer — identical props for the empty-state and docked bars.
+  // Bundled here so a new control is wired in exactly one place.
+  const composerProps = {
+    prompt,
+    onPromptChange:      setPrompt,
+    onSubmit:            handleGenerate,
+    onStop:              handleStop,
+    onKeyDown:           handleKeyDown,
+    inputRef,
+    isGenerating:        isAnyGenerating,
+    activeConversation:  activeConversationMeta,
+    onNewConversation:   handleNewConversation,
+    pauseContext,
+    onClearPauseContext: clearPauseContext,
+    selectedTextContext,
+    onClearSelectedText: clearSelectedText,
+    selectedModel,
+    onModelChange:       setSelectedModel,
+    selectedRenderMode,
+    onRenderModeChange:  setSelectedRenderMode,
+    selectedMode,
+    onModeChange:        setSelectedMode,
+    stagedFiles,
+    onAddFiles:          handleAddFiles,
+    onRemoveFile:        handleRemoveFile,
+    notesEnabled,
+    onToggleNotes:       toggleNotes,
+    videoEnabled,
+    onToggleVideo:       toggleVideo,
+  }
 
   // ── Learning canvas (full-screen takeover) ──────────────────────────────────
 
@@ -418,8 +454,7 @@ export default function Studio({
             sx={{
               flex: 1, overflowY: 'auto',
               display: 'flex', flexDirection: 'column',
-              '&::-webkit-scrollbar': { width: 4 },
-              '&::-webkit-scrollbar-thumb': { backgroundColor: theme.palette.divider, borderRadius: 2 },
+              ...scrollbarSx(theme),
             }}
           >
             {showLoader && (
@@ -446,35 +481,7 @@ export default function Studio({
             )}
 
             {showEmpty && (
-              <EmptyView
-                onSuggestionClick={handleSuggestionClick}
-                prompt={prompt}
-                onPromptChange={setPrompt}
-                onSubmit={handleGenerate}
-                onStop={() => generationAbortRef.current?.abort()}
-                onKeyDown={handleKeyDown}
-                inputRef={inputRef}
-                isGenerating={isAnyGenerating}
-                activeConversation={activeConversationMeta}
-                onNewConversation={handleNewConversation}
-                pauseContext={pauseContext}
-                onClearPauseContext={() => setPauseContext(null)}
-                selectedTextContext={selectedTextContext}
-                onClearSelectedText={() => setSelectedTextContext(null)}
-                selectedModel={selectedModel}
-                onModelChange={setSelectedModel}
-                selectedRenderMode={selectedRenderMode}
-                onRenderModeChange={setSelectedRenderMode}
-                selectedMode={selectedMode}
-                onModeChange={setSelectedMode}
-                stagedFiles={stagedFiles}
-                onAddFiles={handleAddFiles}
-                onRemoveFile={handleRemoveFile}
-                notesEnabled={notesEnabled}
-                onToggleNotes={toggleNotes}
-                videoEnabled={videoEnabled}
-                onToggleVideo={toggleVideo}
-              />
+              <EmptyView onSuggestionClick={handleSuggestionClick} {...composerProps} />
             )}
 
             {showThread && (
@@ -533,36 +540,7 @@ export default function Studio({
             )}
           </Box>
 
-          {!showEmpty && (
-            <PromptBar
-              prompt={prompt}
-              onPromptChange={setPrompt}
-              onSubmit={handleGenerate}
-              onStop={() => generationAbortRef.current?.abort()}
-              onKeyDown={handleKeyDown}
-              inputRef={inputRef}
-              isGenerating={isAnyGenerating}
-              activeConversation={activeConversationMeta}
-              onNewConversation={handleNewConversation}
-              pauseContext={pauseContext}
-              onClearPauseContext={() => setPauseContext(null)}
-              selectedTextContext={selectedTextContext}
-              onClearSelectedText={() => setSelectedTextContext(null)}
-              selectedModel={selectedModel}
-              onModelChange={setSelectedModel}
-              selectedRenderMode={selectedRenderMode}
-              onRenderModeChange={setSelectedRenderMode}
-              selectedMode={selectedMode}
-              onModeChange={setSelectedMode}
-              stagedFiles={stagedFiles}
-              onAddFiles={handleAddFiles}
-              onRemoveFile={handleRemoveFile}
-              notesEnabled={notesEnabled}
-              onToggleNotes={toggleNotes}
-              videoEnabled={videoEnabled}
-              onToggleVideo={toggleVideo}
-            />
-          )}
+          {!showEmpty && <PromptBar {...composerProps} />}
         </Box>
 
         {showThread && (

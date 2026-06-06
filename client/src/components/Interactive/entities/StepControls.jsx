@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useTheme } from '@mui/material'
 import { useSceneStore, useTurnId } from '../useSceneStore'
 import PlaybackBar from './PlaybackBar'
+import { neutralGhost } from '../../../theme/styleUtils.js'
+import { useIsDark } from '../../../hooks/useIsDark.js'
 
 export default function StepControls({
   entityId,
@@ -12,8 +13,7 @@ export default function StepControls({
   loop           = false,
   showPlayButton = true,
 }) {
-  const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
+  const isDark = useIsDark()
 
   const turnId         = useTurnId()
   const resolvedTarget = targetEntityId || entityId
@@ -80,7 +80,7 @@ export default function StepControls({
       sx={{
         border: '1px solid', borderColor: 'divider', borderRadius: 2,
         p: 1.5,
-        backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
+        backgroundColor: neutralGhost(isDark),
       }}
     />
   )

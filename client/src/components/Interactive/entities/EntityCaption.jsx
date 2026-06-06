@@ -1,9 +1,9 @@
-import { Typography, useTheme } from '@mui/material'
+import { Typography } from '@mui/material'
 import { TYPOGRAPHY } from '../../../theme/tokens'
+import { useIsDark } from '../../../hooks/useIsDark.js'
 
 export default function EntityCaption({ caption }) {
-  const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
+  const isDark = useIsDark()
   if (!caption) return null
   return (
     <Typography sx={{

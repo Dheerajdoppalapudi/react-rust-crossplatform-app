@@ -7,6 +7,8 @@ import StrikethroughSIcon     from '@mui/icons-material/StrikethroughS'
 import CodeIcon               from '@mui/icons-material/Code'
 import LinkIcon               from '@mui/icons-material/Link'
 import LinkOffIcon            from '@mui/icons-material/LinkOff'
+import { neutralHover } from '../../../theme/styleUtils.js'
+import { useIsDark } from '../../../hooks/useIsDark.js'
 
 /**
  * Notion-style floating toolbar — appears only when text is selected.
@@ -15,7 +17,7 @@ import LinkOffIcon            from '@mui/icons-material/LinkOff'
  */
 export default function BubbleToolbar({ editor }) {
   const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
+  const isDark = useIsDark()
 
   if (!editor) return null
 
@@ -42,7 +44,7 @@ export default function BubbleToolbar({ editor }) {
     p: 0.5,
     borderRadius: '5px',
     color: active ? theme.palette.text.primary : theme.palette.text.secondary,
-    bgcolor: active ? (isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)') : 'transparent',
+    bgcolor: active ? (neutralHover(isDark)) : 'transparent',
     '&:hover': {
       bgcolor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
     },

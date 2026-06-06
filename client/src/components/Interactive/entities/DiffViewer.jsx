@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useCallback } from 'react'
-import { Box, Typography, useTheme } from '@mui/material'
+import { Box, Typography } from '@mui/material'
 import OpenInFullIcon from '@mui/icons-material/OpenInFull'
 import CloseIcon      from '@mui/icons-material/Close'
 import EditIcon       from '@mui/icons-material/Edit'
@@ -14,6 +14,8 @@ import go         from 'react-syntax-highlighter/dist/esm/languages/hljs/go'
 import bash       from 'react-syntax-highlighter/dist/esm/languages/hljs/bash'
 import { TYPOGRAPHY, RADIUS, PALETTE, SEMANTIC } from '../../../theme/tokens'
 import EntityCaption from './EntityCaption'
+import { neutralBorderHover, neutralGhost } from '../../../theme/styleUtils.js'
+import { useIsDark } from '../../../hooks/useIsDark.js'
 
 SyntaxHighlighter.registerLanguage('python',     python)
 SyntaxHighlighter.registerLanguage('javascript', javascript)
@@ -62,7 +64,7 @@ function SplitPanel({ lines, language, hlStyle, isDark, side, editMode, editValu
 
   return (
     <Box sx={{ flex: 1, minWidth: 0, borderRight: side === 'before' ? `1px solid ${borderColor}` : 'none' }}>
-      <Box sx={{ px: 2, py: 0.75, borderBottom: `1px solid ${borderColor}`, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)' }}>
+      <Box sx={{ px: 2, py: 0.75, borderBottom: `1px solid ${borderColor}`, backgroundColor: neutralGhost(isDark) }}>
         <Typography sx={{ fontSize: TYPOGRAPHY.sizes.caption, fontWeight: TYPOGRAPHY.weights.semibold, color: labelColor }}>
           {label}
         </Typography>
@@ -128,7 +130,7 @@ function UnifiedView({ diff, language, hlStyle, isDark }) {
   let beforeNum = 0, afterNum = 0
   return (
     <Box sx={{ overflowX: 'auto' }}>
-      <Box sx={{ px: 2, py: 0.75, borderBottom: `1px solid ${borderColor}`, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)' }}>
+      <Box sx={{ px: 2, py: 0.75, borderBottom: `1px solid ${borderColor}`, backgroundColor: neutralGhost(isDark) }}>
         <Typography sx={{ fontSize: TYPOGRAPHY.sizes.caption, fontWeight: TYPOGRAPHY.weights.semibold, color: isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.45)' }}>
           Unified diff
         </Typography>
@@ -164,8 +166,7 @@ function UnifiedView({ diff, language, hlStyle, isDark }) {
 }
 
 function ToolbarBtn({ active, onClick, title, children }) {
-  const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
+  const isDark = useIsDark()
   return (
     <Box
       component="button"
@@ -177,13 +178,13 @@ function ToolbarBtn({ active, onClick, title, children }) {
         fontSize: TYPOGRAPHY.sizes.caption,
         fontFamily: 'inherit',
         border: '1px solid',
-        borderColor: active ? (isDark ? 'rgba(255,255,255,0.30)' : 'rgba(0,0,0,0.22)') : (isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'),
+        borderColor: active ? (neutralBorderHover(isDark)) : (isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'),
         borderRadius: '4px',
         backgroundColor: active ? (isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.07)') : 'transparent',
         color: active ? (isDark ? 'rgba(255,255,255,0.90)' : 'rgba(0,0,0,0.80)') : (isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)'),
         cursor: 'pointer',
         lineHeight: 1.4,
-        '&:hover': { borderColor: isDark ? 'rgba(255,255,255,0.30)' : 'rgba(0,0,0,0.22)', color: isDark ? 'rgba(255,255,255,0.90)' : 'rgba(0,0,0,0.80)' },
+        '&:hover': { borderColor: neutralBorderHover(isDark), color: isDark ? 'rgba(255,255,255,0.90)' : 'rgba(0,0,0,0.80)' },
       }}
     >
       {children}
@@ -198,7 +199,7 @@ function DiffToolbar({ activeMode, setActiveMode, editMode, setEditMode, additio
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       px: 1.5, py: 0.75,
       borderBottom: `1px solid ${borderColor}`,
-      backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
+      backgroundColor: neutralGhost(isDark),
       gap: 1, flexWrap: 'wrap', flexShrink: 0,
     }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>

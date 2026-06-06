@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
 import { Box, Typography, IconButton, Tooltip, useTheme } from '@mui/material'
 import ShuffleRoundedIcon from '@mui/icons-material/ShuffleRounded'
+import { useIsDark } from '../../hooks/useIsDark.js'
 
 const ALL_SUGGESTIONS = [
   // Science & Technology
@@ -90,7 +91,7 @@ function SuggestionCard({ label, onClick, isDark }) {
 
 export default function SuggestionBoxes({ onSuggestionClick }) {
   const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
+  const isDark = useIsDark()
 
   const [cards, setCards] = useState(() => pickRandom())
 

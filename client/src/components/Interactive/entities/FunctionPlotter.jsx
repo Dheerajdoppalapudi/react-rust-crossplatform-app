@@ -1,10 +1,12 @@
 import { useMemo } from 'react'
-import { Box, useTheme } from '@mui/material'
+import { Box } from '@mui/material'
 import createPlotlyComponent from 'react-plotly.js/factory'
 import Plotly from 'plotly.js-dist-min'
 import * as math from 'mathjs'
 import { TYPOGRAPHY, RADIUS, PALETTE } from '../../../theme/tokens'
 import EntityCaption from './EntityCaption'
+import { neutralGhost } from '../../../theme/styleUtils.js'
+import { useIsDark } from '../../../hooks/useIsDark.js'
 
 // Pre-built dist — avoids Rollup treeshaking the full mathjs/plotly source
 const Plot = createPlotlyComponent(Plotly)
@@ -64,7 +66,7 @@ function buildLayout(isDark, title, yRange) {
     height:         360,
     margin:         { l: 52, r: 24, t: title ? 46 : 20, b: 46, pad: 0 },
     paper_bgcolor:  'rgba(0,0,0,0)',
-    plot_bgcolor:   isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
+    plot_bgcolor:   neutralGhost(isDark),
     template:       isDark ? 'plotly_dark' : 'plotly_white',
     font:           { family: FONT, color: text },
     hovermode:      'x unified',
@@ -107,8 +109,7 @@ export default function FunctionPlotter({
   title,
   caption,
 }) {
-  const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
+  const isDark = useIsDark()
 
   // Accept either `expr` (single string) or `functions` (array)
   const fnList = useMemo(() => {

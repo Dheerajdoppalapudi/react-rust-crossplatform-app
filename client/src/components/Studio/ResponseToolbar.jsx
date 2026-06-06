@@ -2,7 +2,7 @@ import { useState, useRef } from 'react'
 import PropTypes from 'prop-types'
 import {
   Box, IconButton, Tooltip, Typography, Menu, MenuItem,
-  ListItemIcon, ListItemText, Divider, useTheme,
+  ListItemIcon, ListItemText, Divider,
 } from '@mui/material'
 import ContentCopyIcon  from '@mui/icons-material/ContentCopy'
 import FileDownloadIcon from '@mui/icons-material/FileDownload'
@@ -12,11 +12,12 @@ import CheckIcon        from '@mui/icons-material/Check'
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline'
 import LanguageIcon     from '@mui/icons-material/Language'
 import { downloadVisualPDF, downloadMarkdown } from '../../utils/pdfExport'
+import { logger } from '../../lib/logger.js'
+import { useIsDark } from '../../hooks/useIsDark.js'
 
 // ── Stacked favicon circles ───────────────────────────────────────────────────
 function FaviconStack({ sources }) {
-  const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
+  const isDark = useIsDark()
   const top    = sources.slice(0, 3)
   return (
     <Box sx={{ display: 'flex', alignItems: 'center' }}>
@@ -60,7 +61,7 @@ export default function ResponseToolbar({
   disabled,
 }) {
   const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
+  const isDark = useIsDark()
 
   // Copy state
   const [copyState, setCopyState] = useState('idle')   // 'idle' | 'done' | 'error'
@@ -97,7 +98,7 @@ export default function ResponseToolbar({
       await downloadVisualPDF({ element: contentRef.current, prompt, sources })
       setDlState('idle')
     } catch (err) {
-      console.error('[PDF]', err)
+      logger.error('pdf_export_failed', err)
       setDlState('error')
       setTimeout(() => setDlState('idle'), 3000)
     }
@@ -109,7 +110,7 @@ export default function ResponseToolbar({
     try {
       downloadMarkdown({ prompt, synthesisText, sources })
     } catch (err) {
-      console.error('[MD]', err)
+      logger.error('markdown_export_failed', err)
     }
   }
 

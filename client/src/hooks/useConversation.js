@@ -4,6 +4,7 @@ import { api } from '../services/api'
 import { normalizeFramesData, migrateOldSceneIR } from '../components/Studio/studioUtils'
 import { safeParse, RawConversationSchema } from '../services/schemas'
 import { getSessionMediaToken } from '../services/mediaToken'
+import { logger } from '../lib/logger.js'
 
 
 const CONV_STALE_MS = 30_000 // serve from cache if fetched within last 30 s
@@ -75,7 +76,7 @@ export function useConversation({
 
       const { data, error } = safeParse(RawConversationSchema, raw)
       if (error) {
-        console.warn('[useConversation] schema mismatch, proceeding with raw data', error.issues)
+        logger.warn('conversation_schema_mismatch', { issues: error.issues })
       }
       const turns = (data ?? raw).turns ?? []
 

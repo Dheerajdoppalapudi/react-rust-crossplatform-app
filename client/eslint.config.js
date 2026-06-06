@@ -30,6 +30,25 @@ export default defineConfig([
       'jsx-a11y/media-has-caption': 'off',
       // autoFocus on the first focusable element inside a dialog is correct WCAG practice.
       'jsx-a11y/no-autofocus': 'warn',
+      // Neutral fills/borders must use the helpers in theme/styleUtils.js so every
+      // surface stays in sync. Catches new inline neutral rgba() before it spreads.
+      'no-restricted-syntax': ['warn', {
+        selector: "Literal[value=/rgba\\((255, ?255, ?255|0, ?0, ?0)/]",
+        message: 'Use the neutral*/border helpers from theme/styleUtils.js instead of inline neutral rgba().',
+      }],
     },
+  },
+  {
+    // Allowed literal rgba(): the helper definitions, the marketing pages (their
+    // own token system), and the auth screens (a fixed always-dark branded panel
+    // whose white-alpha values are intentional, not theme-neutral fills).
+    files: [
+      'src/theme/**',
+      'src/components/landing/**',
+      'src/components/common/AuthShell.jsx',
+      'src/pages/Login.jsx',
+      'src/pages/Register.jsx',
+    ],
+    rules: { 'no-restricted-syntax': 'off' },
   },
 ])
