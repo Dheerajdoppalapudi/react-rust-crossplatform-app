@@ -41,16 +41,16 @@ export const SEMANTIC = {
 // so they were left unchanged in the migration.
 export const PALETTE = {
   // Dark backgrounds
-  nearBlack:       '#0f1110',  // primary dark page background
-  darkSurface:     '#1a1c1b',  // card / paper on dark
-  darkSubsurface:  '#232624',  // elevated surfaces on dark
-  sidebarDark:     '#0f0f0f',  // sidebar / nav on dark
+  nearBlack:       '#0f100f',  // primary dark page background — faint warm-neutral, reduced green
+  darkSurface:     '#1a1b1a',  // card / paper on dark
+  darkSubsurface:  '#232524',  // elevated surfaces on dark
+  sidebarDark:     '#0c0d0c',  // sidebar / nav on dark — same hue as nearBlack, slightly recessed
 
   // Light backgrounds
   parchment:       '#f7f9f8',  // primary light page background
   ivory:           '#fafcfb',  // card / paper on light
   warmSand:        '#eff3f1',  // button backgrounds, interactive surfaces, sidebar
-  sidebarLight:    '#f1f5f9',  // (== warmSand; kept as a distinct role name)
+  sidebarLight:    '#eff3f1',  // warm, one shade darker than parchment canvas (recessed) — same hue family
 
   // Text
   nearBlackText:   '#071510',  // primary text on light

@@ -77,7 +77,14 @@ export default function LandingHero() {
       component="section"
       sx={{
         position: 'relative', minHeight: '100vh',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        display: 'flex', justifyContent: 'center',
+        // `safe center` keeps the content vertically centred, but when it's
+        // taller than the viewport (long topic / short window) it pins to the
+        // top instead of overflowing upward behind the sticky header.
+        alignItems: 'safe center',
+        // Reserve room for the fixed header (76px) plus breathing space.
+        pt: { xs: '104px', md: '120px' },
+        pb: { xs: '72px', md: '88px' },
         overflow: 'hidden', bgcolor: P.bg0,
       }}
     >

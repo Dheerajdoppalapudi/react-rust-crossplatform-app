@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef, useCallback, memo } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import {
-  Drawer, List, ListItem, ListItemButton, ListItemIcon, ListItemText,
+  Drawer, List, ListItem, ListItemButton,
   Tooltip, Typography, Box, Divider, useTheme, useMediaQuery, InputBase, IconButton,
   Skeleton, Avatar, Menu, MenuItem, Dialog, DialogTitle, DialogContent,
   DialogActions, Button, TextField,
@@ -66,7 +66,8 @@ const LogoButton = ({ onToggle }) => {
   return (
     <Tooltip title="Expand" placement="right" arrow>
       <Box
-        onClick={(e) => { e.stopPropagation(); onToggle() }}
+        role="button"
+        onClick={onToggle}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         sx={{
@@ -97,7 +98,7 @@ const NavItem = memo(({ item, open, isActive, onClick }) => {
     <Tooltip title={open ? '' : item.label} placement="right" arrow>
       <ListItem disablePadding sx={{ mb: 0.25 }}>
         <ListItemButton
-          onClick={(e) => { e.stopPropagation(); onClick?.() }}
+          onClick={onClick}
           sx={{
             borderRadius: `${RADIUS.ui}px`, minHeight: 34, px: 0, mx: 0.75,
             overflow: 'hidden',
@@ -262,7 +263,7 @@ const ConvItem = memo(({ conv, isActive, onSelect, onRename, onStar, onDelete })
         }}
       >
         <MenuItem onClick={handleStar} sx={menuItemSx(isDark, false)}>
-          {!!conv.starred
+          {conv.starred
             ? <><StarIcon sx={{ fontSize: 15, color: PALETTE.starGold }} /> Unstar</>
             : <><StarOutlineIcon sx={{ fontSize: 15, color: 'inherit' }} /> Star</>
           }
@@ -433,9 +434,25 @@ const Sidebar = ({
 
   const toggleOpen = useCallback(() => setOpen(p => !p), [])
 
+  // Collapsed rail: clicking blank space expands the sidebar (ChatGPT/Claude
+  // style). Clicks that land on a real control are ignored here, so buttons
+  // only perform their own action instead of also expanding.
+  const handleRailClick = useCallback((e) => {
+    if (open || isMobile) return
+    if (e.target.closest('.MuiButtonBase-root, [role="button"], a, input, textarea')) return
+    setOpen(true)
+  }, [open, isMobile])
+
   // On mobile the drawer is controlled by parent; on desktop it's self-managed.
   const drawerOpen   = isMobile ? mobileOpen : open
   const closeMobile  = useCallback(() => onMobileClose?.(), [onMobileClose])
+
+  // `expanded` = the sidebar shows full-width content (always true on mobile).
+  const expanded     = isMobile || open
+  const openAndFocusSearch = useCallback(() => {
+    setOpen(true)
+    setTimeout(() => searchRef.current?.focus(), TIMINGS.SEARCH_OPEN_FOCUS_DELAY_MS)
+  }, [])
 
   const isMac           = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/i.test(navigator.userAgent)
   const newChatShortcut = isMac ? '⇧⌘O' : 'Ctrl+Shift+O'
@@ -453,13 +470,12 @@ const Sidebar = ({
       }
       if (mod && !e.shiftKey && e.key.toLowerCase() === 'k') {
         e.preventDefault()
-        setOpen(true)
-        setTimeout(() => searchRef.current?.focus(), TIMINGS.SEARCH_OPEN_FOCUS_DELAY_MS)
+        openAndFocusSearch()
       }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [isMac, onNewConversation])
+  }, [isMac, onNewConversation, openAndFocusSearch])
 
   const filtered = useMemo(() => {
     if (!debouncedSearch.trim()) return conversations
@@ -479,8 +495,7 @@ const Sidebar = ({
   // Flatten the grouped conversation tree into a single indexed array so the
   // virtualizer can address every item (headers, rows, divider, load-more) by index.
   const flatItems = useMemo(() => {
-    const visible = isMobile || open
-    if (!visible || isLoading || conversations.length === 0) return []
+    if (!expanded || isLoading || conversations.length === 0) return []
     if (isSearching && resultCount === 0) return []
     const items = []
     if (starred.length > 0) {
@@ -494,7 +509,7 @@ const Sidebar = ({
     })
     if (!isSearching && hasMore) items.push({ type: 'load-more' })
     return items
-  }, [starred, unstarred, grouped, isSearching, resultCount, hasMore, isLoading, conversations.length, isMobile, open])
+  }, [starred, unstarred, grouped, isSearching, resultCount, hasMore, isLoading, conversations.length, expanded])
 
   const virtualizer = useVirtualizer({
     count:           flatItems.length,
@@ -520,17 +535,17 @@ const Sidebar = ({
   })
 
   return (
-    <Box sx={{ position: 'relative', flexShrink: isMobile ? 0 : 0, width: isMobile ? 0 : undefined }}>
+    <Box sx={{ position: 'relative', flexShrink: 0, width: isMobile ? 0 : undefined }}>
       <Drawer
         component="nav"
         aria-label="Main navigation"
         variant={isMobile ? 'temporary' : 'permanent'}
         open={drawerOpen}
         onClose={isMobile ? closeMobile : undefined}
-        onClick={(!isMobile && !open) ? () => setOpen(true) : undefined}
+        onClick={!expanded ? handleRailClick : undefined}
         ModalProps={isMobile ? { keepMounted: true } : undefined}
         sx={{
-          cursor: (!isMobile && !open) ? 'pointer' : 'default',
+          cursor: !expanded ? 'pointer' : 'default',
           width: isMobile ? 0 : (open ? DRAWER_OPEN : DRAWER_CLOSED),
           flexShrink: 0,
           transition: 'width 0.36s cubic-bezier(0.16, 1, 0.3, 1)',
@@ -552,26 +567,26 @@ const Sidebar = ({
         {/* ── Header ──────────────────────────────────────────────────────── */}
         <Box sx={{
           flexShrink: 0, display: 'flex', alignItems: 'center',
-          justifyContent: (isMobile || open) ? 'space-between' : 'center',
-          px: (isMobile || open) ? 1 : 0,
+          justifyContent: expanded ? 'space-between' : 'center',
+          px: expanded ? 1 : 0,
           py: 1.5,
           borderBottom: `1px solid ${theme.palette.divider}`,
           mx: '6px',
         }}>
           {/* Collapsed desktop — big icon, click to expand */}
-          {!isMobile && !open && <LogoButton onToggle={toggleOpen} />}
+          {!expanded && <LogoButton onToggle={toggleOpen} />}
 
           {/* Open / mobile — logo on left */}
-          {(isMobile || open) && (
+          {expanded && (
             <ParalyteLogo sx={{ fontSize: 34, color: theme.palette.text.primary }} />
           )}
 
           {/* Close / collapse button on right */}
-          {(isMobile || open) && (
+          {expanded && (
             <IconButton
               size="small"
               aria-label="Close sidebar"
-              onClick={(e) => { e.stopPropagation(); isMobile ? closeMobile() : toggleOpen() }}
+              onClick={isMobile ? closeMobile : toggleOpen}
               sx={{
                 width: 28, height: 28, borderRadius: `${RADIUS.ui}px`, flexShrink: 0,
                 color: theme.palette.text.disabled,
@@ -589,7 +604,7 @@ const Sidebar = ({
 
         {/* ── Top nav ─────────────────────────────────────────────────────── */}
         <Box sx={{ flexShrink: 0, pt: 1 }}>
-          {(isMobile || open) && (
+          {expanded && (
             <Typography sx={{
               fontSize: 10, fontWeight: 600, color: theme.palette.text.secondary,
               textTransform: 'uppercase', letterSpacing: '0.8px',
@@ -601,7 +616,7 @@ const Sidebar = ({
           <List disablePadding>
             {mainItems.map((item) => (
               <NavItem
-                key={item.path} item={item} open={isMobile || open}
+                key={item.path} item={item} open={expanded}
                 isActive={location.pathname === item.path}
                 onClick={() => { navigate(item.path); if (isMobile) closeMobile() }}
               />
@@ -612,7 +627,7 @@ const Sidebar = ({
         <Divider sx={{ mx: 1, mt: 1, mb: 0, borderColor: theme.palette.divider }} />
 
         {/* ── New Chat — icon always visible, text fades ────────────────── */}
-        <Tooltip title={open || isMobile ? '' : 'New chat'} placement="right" arrow>
+        <Tooltip title={expanded ? '' : 'New chat'} placement="right" arrow>
           <ListItem disablePadding sx={{ py: 0.35 }}>
             <ListItemButton
               onClick={() => { onNewConversation(); if (isMobile) closeMobile() }}
@@ -629,7 +644,7 @@ const Sidebar = ({
               <Box sx={{
                 flex: 1, display: 'flex', alignItems: 'center', gap: 1,
                 overflow: 'hidden', whiteSpace: 'nowrap',
-                opacity: (open || isMobile) ? 1 : 0,
+                opacity: expanded ? 1 : 0,
                 transition: 'opacity 0.18s ease',
               }}>
                 <Typography sx={{ fontSize: 12.5, fontWeight: 400, color: theme.palette.text.primary }}>
@@ -650,7 +665,7 @@ const Sidebar = ({
         {/* ── Conversations section ────────────────────────────────────────── */}
         <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
 
-          {(isMobile || open) && (
+          {expanded && (
             <Box sx={{ flexShrink: 0, mb: 0.5 }}>
               <Box sx={{ px: 1.75, mb: 0.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Typography sx={{
@@ -699,10 +714,11 @@ const Sidebar = ({
             </Box>
           )}
 
-          {!isMobile && !open && (
+          {!expanded && (
             <Tooltip title="Search chats" placement="right" arrow>
               <ListItem disablePadding sx={{ mb: 0.25 }}>
                 <ListItemButton
+                  onClick={openAndFocusSearch}
                   sx={{
                     borderRadius: `${RADIUS.ui}px`, minHeight: 34, px: 0, mx: 0.75,
                     justifyContent: 'center',
@@ -726,15 +742,15 @@ const Sidebar = ({
             }}
           >
             {/* Non-virtualised fallback states */}
-            {(isMobile || open) && isLoading && <ConvSkeletons />}
+            {expanded && isLoading && <ConvSkeletons />}
 
-            {(isMobile || open) && !isLoading && conversations.length === 0 && (
+            {expanded && !isLoading && conversations.length === 0 && (
               <Typography sx={{ fontSize: 12, color: theme.palette.text.secondary, textAlign: 'center', pt: 3, opacity: 0.45 }}>
                 No chats yet — start one above!
               </Typography>
             )}
 
-            {(isMobile || open) && !isLoading && isSearching && resultCount === 0 && (
+            {expanded && !isLoading && isSearching && resultCount === 0 && (
               <Typography sx={{ fontSize: 12, color: theme.palette.text.secondary, textAlign: 'center', pt: 2, opacity: 0.45, px: 2 }}>
                 No chats match "{search}"
               </Typography>
@@ -789,14 +805,15 @@ const Sidebar = ({
 
           {user && (
             <Box sx={{ display: 'flex', alignItems: 'center', px: 1.5, py: 0.75, mb: 0.25, overflow: 'hidden' }}>
-              <Tooltip title={(!isMobile && !open) ? `${user.name} — Sign out` : ''} placement="right" arrow>
+              <Tooltip title={!expanded ? `${user.name} — Sign out` : ''} placement="right" arrow>
                 <Box
-                  onClick={(!isMobile && !open) ? logout : undefined}
+                  role={!expanded ? 'button' : undefined}
+                  onClick={!expanded ? logout : undefined}
                   sx={{
                     flexShrink: 0,
-                    cursor: (!isMobile && !open) ? 'pointer' : 'default',
+                    cursor: !expanded ? 'pointer' : 'default',
                     borderRadius: '50%',
-                    '&:hover': { opacity: (!isMobile && !open) ? 0.75 : 1 },
+                    '&:hover': { opacity: !expanded ? 0.75 : 1 },
                     transition: 'opacity 0.15s',
                   }}
                 >
@@ -807,7 +824,7 @@ const Sidebar = ({
                 flex: 1, minWidth: 0, ml: 1,
                 display: 'flex', alignItems: 'center', gap: 0.5,
                 overflow: 'hidden', whiteSpace: 'nowrap',
-                opacity: (open || isMobile) ? 1 : 0,
+                opacity: expanded ? 1 : 0,
                 transition: 'opacity 0.18s ease',
               }}>
                 <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -836,7 +853,7 @@ const Sidebar = ({
           )}
 
           {/* Theme toggle — icon always visible, text fades */}
-          <Tooltip title={(open || isMobile) ? '' : (themeMode === 'dark' ? 'Light mode' : 'Dark mode')} placement="right" arrow>
+          <Tooltip title={expanded ? '' : (themeMode === 'dark' ? 'Light mode' : 'Dark mode')} placement="right" arrow>
             <ListItem disablePadding sx={{ mb: 0.25 }}>
               <ListItemButton
                 onClick={onThemeToggle}
@@ -855,7 +872,7 @@ const Sidebar = ({
                 </Box>
                 <Box sx={{
                   flex: 1, overflow: 'hidden', whiteSpace: 'nowrap',
-                  opacity: (open || isMobile) ? 1 : 0,
+                  opacity: expanded ? 1 : 0,
                   transition: 'opacity 0.18s ease',
                 }}>
                   <Typography sx={{ fontSize: 12.5, fontWeight: 400, color: theme.palette.text.primary }}>
@@ -869,7 +886,7 @@ const Sidebar = ({
           <List disablePadding sx={{ pb: 1 }}>
             {bottomItems.map((item) => (
               <NavItem
-                key={item.path} item={item} open={isMobile || open}
+                key={item.path} item={item} open={expanded}
                 isActive={location.pathname === item.path}
                 onClick={() => { navigate(item.path); if (isMobile) closeMobile() }}
               />
