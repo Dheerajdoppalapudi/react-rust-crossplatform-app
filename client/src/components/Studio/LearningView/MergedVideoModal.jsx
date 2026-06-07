@@ -125,7 +125,7 @@ export default function MergedVideoModal({ open, onClose, mergedVideoUrl, sessio
         <Typography sx={{ fontSize: 12, color: theme.palette.text.secondary }}>
           {sessions?.length} sessions
         </Typography>
-        <IconButton size="small" onClick={onClose}>
+        <IconButton aria-label="Close" size="small" onClick={onClose}>
           <CloseIcon sx={{ fontSize: 16 }} />
         </IconButton>
       </Box>

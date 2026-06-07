@@ -21,6 +21,7 @@ import { TIMINGS }      from '../constants/timings.js'
 import { useVideoStream }   from '../hooks/useVideoStream'
 import { usePauseContext }  from '../hooks/usePauseContext'
 import { useConversation }  from '../hooks/useConversation'
+import { useConversationSwitch } from '../hooks/useConversationSwitch'
 import { useGeneration }    from '../hooks/useGeneration'
 
 export default function Studio({
@@ -103,6 +104,16 @@ export default function Studio({
   } = useConversation({ setTurns, runVideoGenerationForTurn, abortAllVideoStreams, scrollToTop, toast })
 
   const isBootstrapping = bootstrap !== null
+
+  // Reset the workspace to the empty state — shared by "new conversation" and the
+  // switch-to-fresh-/studio path so both stay in lockstep.
+  const resetWorkspace = useCallback(() => {
+    loadedConvIdRef.current = null
+    setTurns([])
+    setPrompt('')
+    setBootstrap(null)
+    scrollToTop()
+  }, [scrollToTop, setBootstrap, loadedConvIdRef])
 
   // Memoized derived scalars — O(n) scans run only when turns change, not on
   // every render triggered by unrelated state (prompt, viewMode, etc.).
@@ -223,38 +234,20 @@ export default function Studio({
     return () => clearTimeout(t)
   }, [])
 
-  // Conversation switch: cancel in-flight work, then load the new conversation.
-  useEffect(() => {
-    setPauseContext(null)
-    setSelectedTextContext(null)
-    generationAbortRef.current?.abort()
-    loadAbortRef.current?.abort()
-
-    if (activeConvId && activeConvId !== loadedConvIdRef.current) {
-      abortAllVideoStreams()
-      loadedConvIdRef.current = activeConvId
-      userScrolledUpRef.current = false
-      loadConversationById(activeConvId)
-    } else if (!activeConvId && loadedConvIdRef.current !== null) {
-      abortAllVideoStreams()
-      loadedConvIdRef.current = null
-      setTurns([])
-      setPrompt('')
-      setBootstrap(null)
-      setIsLoadingConversation(false)
-      scrollToTop()
-    }
-  }, [
+  // Conversation switch: cancel in-flight work, then load or reset (see hook).
+  useConversationSwitch({
     activeConvId,
-    loadConversationById,
-    abortAllVideoStreams,
-    scrollToTop,
-    setPauseContext,
-    setBootstrap,
-    generationAbortRef,
-    loadAbortRef,
     loadedConvIdRef,
-  ])
+    loadConversationById,
+    loadAbortRef,
+    generationAbortRef,
+    abortAllVideoStreams,
+    resetWorkspace,
+    setIsLoadingConversation,
+    setPauseContext,
+    setSelectedTextContext,
+    userScrolledUpRef,
+  })
 
   // Cancel all in-flight requests on unmount.
   useEffect(() => {
@@ -319,14 +312,10 @@ export default function Studio({
   const clearSelectedText   = useCallback(() => setSelectedTextContext(null), [])
 
   const handleNewConversation = useCallback(() => {
-    loadedConvIdRef.current = null
     onActiveConvIdChange(null)
-    setTurns([])
-    setPrompt('')
-    setBootstrap(null)
-    scrollToTop()
+    resetWorkspace()
     inputRef.current?.focus()
-  }, [onActiveConvIdChange, scrollToTop, setBootstrap, loadedConvIdRef])
+  }, [onActiveConvIdChange, resetWorkspace])
 
   const handleSuggestionClick = useCallback((s) => {
     setPrompt(s)

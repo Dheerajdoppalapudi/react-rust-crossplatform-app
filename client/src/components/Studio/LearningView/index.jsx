@@ -148,7 +148,7 @@ export default function LearningView({ turns, conversationId, onExit, onAskFromL
             display: 'flex', alignItems: 'center', gap: 1,
           }}>
             <Tooltip title="Back to chat" placement="right">
-              <IconButton
+              <IconButton aria-label="Back"
                 onClick={onExit}
                 size="small"
                 sx={{
@@ -189,7 +189,7 @@ export default function LearningView({ turns, conversationId, onExit, onAskFromL
             )}
 
             <Tooltip title="My Notes" placement="bottom">
-              <IconButton
+              <IconButton aria-label="Toggle notes"
                 size="small"
                 onClick={onToggleUserNotes}
                 aria-pressed={userNotesOpen}

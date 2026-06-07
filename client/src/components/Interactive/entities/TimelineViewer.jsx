@@ -242,7 +242,7 @@ export default function TimelineViewer({
         }}>
           <Tooltip title="Zoom out (or Ctrl+scroll)">
             <span>
-              <IconButton size="small" onClick={() => setZoom(z => +Math.max(MIN_ZOOM, z - ZOOM_STEP).toFixed(2))}
+              <IconButton aria-label="Zoom out" size="small" onClick={() => setZoom(z => +Math.max(MIN_ZOOM, z - ZOOM_STEP).toFixed(2))}
                 disabled={atMin} sx={{ color: 'text.secondary', width: 26, height: 26 }}>
                 <ZoomOutIcon sx={{ fontSize: 15 }} />
               </IconButton>
@@ -253,7 +253,7 @@ export default function TimelineViewer({
           </Typography>
           <Tooltip title="Zoom in (or Ctrl+scroll)">
             <span>
-              <IconButton size="small" onClick={() => setZoom(z => +Math.min(MAX_ZOOM, z + ZOOM_STEP).toFixed(2))}
+              <IconButton aria-label="Zoom in" size="small" onClick={() => setZoom(z => +Math.min(MAX_ZOOM, z + ZOOM_STEP).toFixed(2))}
                 disabled={atMax} sx={{ color: 'text.secondary', width: 26, height: 26 }}>
                 <ZoomInIcon sx={{ fontSize: 15 }} />
               </IconButton>
@@ -261,7 +261,7 @@ export default function TimelineViewer({
           </Tooltip>
           <Tooltip title="Reset zoom">
             <span>
-              <IconButton size="small" onClick={() => setZoom(1)} disabled={zoom === 1}
+              <IconButton aria-label="Fit to screen" size="small" onClick={() => setZoom(1)} disabled={zoom === 1}
                 sx={{ color: 'text.secondary', width: 26, height: 26 }}>
                 <FitScreenIcon sx={{ fontSize: 15 }} />
               </IconButton>

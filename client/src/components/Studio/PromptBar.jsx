@@ -75,7 +75,7 @@ const FileChip = memo(function FileChip({ file, onRemove, isDark }) {
       }}>
         {file.name}
       </Typography>
-      <IconButton size="small" onClick={() => onRemove(file.id)} sx={{
+      <IconButton aria-label="Remove file" size="small" onClick={() => onRemove(file.id)} sx={{
         p: 0.1, color: 'text.disabled', opacity: 0.7,
         '&:hover': { opacity: 1 }, flexShrink: 0,
       }}>

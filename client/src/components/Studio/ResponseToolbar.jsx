@@ -139,7 +139,7 @@ export default function ResponseToolbar({
       {/* ── Copy ── */}
       <Tooltip title={copyState === 'done' ? 'Copied!' : copyState === 'error' ? 'Copy failed' : 'Copy response'} placement="top" arrow>
         <span>
-          <IconButton size="small" onClick={handleCopy} disabled={disabled} sx={iconBtn}>
+          <IconButton aria-label="Copy" size="small" onClick={handleCopy} disabled={disabled} sx={iconBtn}>
             {copyIcon}
           </IconButton>
         </span>
@@ -148,7 +148,7 @@ export default function ResponseToolbar({
       {/* ── Download split button ── */}
       <Tooltip title={dlTooltip} placement="top" arrow>
         <span>
-          <IconButton
+          <IconButton aria-label="Download options"
             ref={dlAnchorRef}
             size="small"
             onClick={() => setDlMenuOpen(true)}

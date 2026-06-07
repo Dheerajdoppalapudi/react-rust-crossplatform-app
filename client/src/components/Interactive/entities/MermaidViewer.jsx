@@ -168,7 +168,7 @@ export default function MermaidViewer({ entityId, diagram, caption }) {
         backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)',
       }}>
         <Tooltip title="Zoom out">
-          <span><IconButton size="small" onClick={zoomOut} disabled={scale <= MIN_SCALE}
+          <span><IconButton aria-label="Zoom out" size="small" onClick={zoomOut} disabled={scale <= MIN_SCALE}
             sx={{ color: 'text.secondary', width: 26, height: 26 }}>
             <ZoomOutIcon sx={{ fontSize: 15 }} />
           </IconButton></span>
@@ -177,26 +177,26 @@ export default function MermaidViewer({ entityId, diagram, caption }) {
           {Math.round(scale * 100)}%
         </Typography>
         <Tooltip title="Zoom in">
-          <span><IconButton size="small" onClick={zoomIn} disabled={scale >= MAX_SCALE}
+          <span><IconButton aria-label="Zoom in" size="small" onClick={zoomIn} disabled={scale >= MAX_SCALE}
             sx={{ color: 'text.secondary', width: 26, height: 26 }}>
             <ZoomInIcon sx={{ fontSize: 15 }} />
           </IconButton></span>
         </Tooltip>
         <Tooltip title="Fit to screen">
-          <span><IconButton size="small" onClick={fitScreen} disabled={scale === 1}
+          <span><IconButton aria-label="Fit to screen" size="small" onClick={fitScreen} disabled={scale === 1}
             sx={{ color: 'text.secondary', width: 26, height: 26 }}>
             <FitScreenIcon sx={{ fontSize: 15 }} />
           </IconButton></span>
         </Tooltip>
         <Box sx={{ width: 1, height: 16, backgroundColor: 'divider', mx: 0.25 }} />
         <Tooltip title="Download PNG">
-          <IconButton size="small" onClick={handleDownloadPNG}
+          <IconButton aria-label="Download diagram" size="small" onClick={handleDownloadPNG}
             sx={{ color: 'text.secondary', width: 26, height: 26 }}>
             <DownloadIcon sx={{ fontSize: 14 }} />
           </IconButton>
         </Tooltip>
         <Tooltip title={copied ? 'Copied!' : 'Copy diagram source'}>
-          <IconButton size="small" onClick={handleCopy}
+          <IconButton aria-label="Copy diagram" size="small" onClick={handleCopy}
             sx={{ color: 'text.secondary', width: 26, height: 26 }}>
             {copied ? <CheckIcon sx={{ fontSize: 14 }} /> : <ContentCopyIcon sx={{ fontSize: 14 }} />}
           </IconButton>

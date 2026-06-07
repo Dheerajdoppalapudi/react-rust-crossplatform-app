@@ -95,13 +95,13 @@ export default function P5Sketch({
           gap: 0.5,
         }}>
           <Tooltip title="Reload">
-            <IconButton size="small" onClick={() => setExpandKey(k => k + 1)}
+            <IconButton aria-label="Restart sketch" size="small" onClick={() => setExpandKey(k => k + 1)}
               sx={{ color: 'text.secondary', width: 28, height: 28 }}>
               <RefreshIcon sx={{ fontSize: 15 }} />
             </IconButton>
           </Tooltip>
           <Tooltip title="Close">
-            <IconButton size="small" onClick={handleCollapse}
+            <IconButton aria-label="Close" size="small" onClick={handleCollapse}
               sx={{ color: 'text.secondary', width: 28, height: 28 }}>
               <CloseIcon sx={{ fontSize: 16 }} />
             </IconButton>

@@ -653,7 +653,7 @@ export default function DSViewer({
           <Box sx={{ flex: 1 }} />
           {editable && (
             <Tooltip title={showOps ? 'Close operations' : 'Edit / Operations'}>
-              <IconButton size="small" onClick={() => setShowOps(s => !s)}
+              <IconButton aria-label="Close" size="small" onClick={() => setShowOps(s => !s)}
                 sx={{ color: showOps ? BRAND.primary : 'text.disabled', width: 24, height: 24 }}>
                 {showOps ? <CloseIcon sx={{ fontSize: 14 }} /> : <EditIcon sx={{ fontSize: 14 }} />}
               </IconButton>

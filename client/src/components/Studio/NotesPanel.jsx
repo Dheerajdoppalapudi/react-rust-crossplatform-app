@@ -65,7 +65,7 @@ export default function NotesPanel({ notes }) {
 
         {open && (
           <Tooltip title={copied ? 'Copied!' : 'Copy notes'} placement="left">
-            <IconButton size="small" onClick={handleCopy} sx={{ p: 0.5, color: mutedText, '&:hover': { color: bodyText, backgroundColor: 'transparent' }, transition: 'color 0.15s' }}>
+            <IconButton aria-label="Copy notes" size="small" onClick={handleCopy} sx={{ p: 0.5, color: mutedText, '&:hover': { color: bodyText, backgroundColor: 'transparent' }, transition: 'color 0.15s' }}>
               {copied ? <CheckIcon sx={{ fontSize: 13, color: 'success.main' }} /> : <ContentCopyIcon sx={{ fontSize: 13 }} />}
             </IconButton>
           </Tooltip>

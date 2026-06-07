@@ -121,7 +121,7 @@ export default function TextSelectionPopup({ containerRef, onAskFollowUp }) {
     >
       {/* Copy button */}
       <Tooltip title={copied ? 'Copied!' : 'Copy'} placement="top">
-        <IconButton
+        <IconButton aria-label="Copy"
           size="small"
           onClick={handleCopy}
           sx={{

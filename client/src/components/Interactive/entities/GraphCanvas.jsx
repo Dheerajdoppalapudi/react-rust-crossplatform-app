@@ -275,7 +275,7 @@ export default function GraphCanvas({
           borderBottom: `1px solid ${isDark ? PALETTE.borderDark : PALETTE.border}`,
         }}>
           <Tooltip title="Close">
-            <IconButton size="small" onClick={handleCollapse}
+            <IconButton aria-label="Close" size="small" onClick={handleCollapse}
               sx={{ color: 'text.secondary', width: 28, height: 28 }}>
               <CloseIcon sx={{ fontSize: 16 }} />
             </IconButton>

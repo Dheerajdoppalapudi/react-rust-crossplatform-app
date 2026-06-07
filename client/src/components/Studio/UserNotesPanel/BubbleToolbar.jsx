@@ -68,31 +68,31 @@ export default function BubbleToolbar({ editor }) {
         backdropFilter: 'blur(20px)',
       }}>
         <Tooltip title="Bold (⌘B)" placement="top">
-          <IconButton size="small" onClick={() => editor.chain().focus().toggleBold().run()} sx={btnSx(editor.isActive('bold'))}>
+          <IconButton aria-label="Bold" size="small" onClick={() => editor.chain().focus().toggleBold().run()} sx={btnSx(editor.isActive('bold'))}>
             <FormatBoldIcon sx={{ fontSize: 16 }} />
           </IconButton>
         </Tooltip>
 
         <Tooltip title="Italic (⌘I)" placement="top">
-          <IconButton size="small" onClick={() => editor.chain().focus().toggleItalic().run()} sx={btnSx(editor.isActive('italic'))}>
+          <IconButton aria-label="Italic" size="small" onClick={() => editor.chain().focus().toggleItalic().run()} sx={btnSx(editor.isActive('italic'))}>
             <FormatItalicIcon sx={{ fontSize: 16 }} />
           </IconButton>
         </Tooltip>
 
         <Tooltip title="Underline (⌘U)" placement="top">
-          <IconButton size="small" onClick={() => editor.chain().focus().toggleUnderline().run()} sx={btnSx(editor.isActive('underline'))}>
+          <IconButton aria-label="Underline" size="small" onClick={() => editor.chain().focus().toggleUnderline().run()} sx={btnSx(editor.isActive('underline'))}>
             <FormatUnderlinedIcon sx={{ fontSize: 16 }} />
           </IconButton>
         </Tooltip>
 
         <Tooltip title="Strikethrough" placement="top">
-          <IconButton size="small" onClick={() => editor.chain().focus().toggleStrike().run()} sx={btnSx(editor.isActive('strike'))}>
+          <IconButton aria-label="Strikethrough" size="small" onClick={() => editor.chain().focus().toggleStrike().run()} sx={btnSx(editor.isActive('strike'))}>
             <StrikethroughSIcon sx={{ fontSize: 16 }} />
           </IconButton>
         </Tooltip>
 
         <Tooltip title="Inline code" placement="top">
-          <IconButton size="small" onClick={() => editor.chain().focus().toggleCode().run()} sx={btnSx(editor.isActive('code'))}>
+          <IconButton aria-label="Code" size="small" onClick={() => editor.chain().focus().toggleCode().run()} sx={btnSx(editor.isActive('code'))}>
             <CodeIcon sx={{ fontSize: 15 }} />
           </IconButton>
         </Tooltip>
@@ -100,7 +100,7 @@ export default function BubbleToolbar({ editor }) {
         <Divider orientation="vertical" flexItem sx={{ mx: 0.4, opacity: 0.4 }} />
 
         <Tooltip title={editor.isActive('link') ? 'Remove link' : 'Add link'} placement="top">
-          <IconButton
+          <IconButton aria-label="Remove link"
             size="small"
             onClick={editor.isActive('link') ? () => editor.chain().focus().unsetLink().run() : handleSetLink}
             sx={btnSx(editor.isActive('link'))}

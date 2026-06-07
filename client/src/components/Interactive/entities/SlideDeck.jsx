@@ -102,7 +102,7 @@ function DownloadDropdown({ onHtml, onPptx, pptxLoading, iconOnly = false, isDar
 
   const trigger = iconOnly ? (
     <Tooltip title="Download">
-      <IconButton
+      <IconButton aria-label="Slide options"
         size="small"
         onClick={e => setAnchor(e.currentTarget)}
         sx={{
@@ -220,7 +220,7 @@ function InlineToolbar({ onToggleFullscreen, onHtml, onPptx, pptxLoading, title,
       {/* Right: expand + download */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexShrink: 0 }}>
         <Tooltip title="Fullscreen">
-          <IconButton
+          <IconButton aria-label="Toggle fullscreen"
             size="small"
             onClick={onToggleFullscreen}
             sx={{
@@ -255,7 +255,7 @@ function FullscreenToolbar({ tab, onTabChange, onToggleFullscreen, onHtml, onPpt
     }}>
       {/* Exit fullscreen - left */}
       <Tooltip title="Exit fullscreen">
-        <IconButton
+        <IconButton aria-label="Toggle fullscreen"
           size="small"
           onClick={onToggleFullscreen}
           sx={{
@@ -331,7 +331,7 @@ function CodePane({ value, editable, onChange, onReset, originalHtml, isDark }) 
           </Typography>
           {isDirty && (
             <Tooltip title="Reset to original">
-              <IconButton size="small" onClick={onReset}
+              <IconButton aria-label="Restart" size="small" onClick={onReset}
                 sx={{ width: 24, height: 24, color: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.4)', '&:hover': { color: isDark ? '#fff' : PALETTE.nearBlackText } }}>
                 <RestartAltIcon sx={{ fontSize: 13 }} />
               </IconButton>

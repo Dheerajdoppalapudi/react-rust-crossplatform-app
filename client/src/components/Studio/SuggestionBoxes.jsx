@@ -111,7 +111,7 @@ export default function SuggestionBoxes({ onSuggestionClick }) {
           Not sure where to start?
         </Typography>
         <Tooltip title="Shuffle">
-          <IconButton
+          <IconButton aria-label="Shuffle suggestions"
             size="small"
             onClick={handleShuffle}
             sx={{

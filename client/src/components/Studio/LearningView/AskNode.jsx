@@ -64,7 +64,7 @@ export default function AskNode({ data }) {
           }}>
             Ask a follow-up
           </Typography>
-          <IconButton
+          <IconButton aria-label="Cancel"
             size="small"
             onClick={() => data.onCancel?.()}
             sx={{

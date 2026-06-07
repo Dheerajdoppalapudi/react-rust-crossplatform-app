@@ -21,6 +21,7 @@ import StarOutlineIcon         from '@mui/icons-material/StarOutline'
 import StarIcon                from '@mui/icons-material/Star'
 import DriveFileRenameOutlineIcon from '@mui/icons-material/DriveFileRenameOutline'
 import DeleteOutlineIcon       from '@mui/icons-material/DeleteOutline'
+import CloseIcon               from '@mui/icons-material/Close'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { relativeTime } from '../../utils/formatTime'
 import { useAuth } from '../../contexts/AuthContext'
@@ -177,9 +178,10 @@ const ConvItem = memo(({ conv, isActive, onSelect, onRename, onStar, onDelete })
               ? (neutralHover(isDark))
               : (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)'),
           },
-          // On hover: hide time, show actions
-          '&:hover .conv-time':    { opacity: 0 },
-          '&:hover .conv-actions': { opacity: 1 },
+          // On hover/keyboard-focus: hide time, reveal actions (focus-within keeps
+          // the menu button reachable for keyboard users, not hover-only).
+          '&:hover .conv-time, &:focus-within .conv-time':       { opacity: 0 },
+          '&:hover .conv-actions, &:focus-within .conv-actions': { opacity: 1 },
           transition: 'background 0.15s',
           display: 'flex', alignItems: 'center', gap: 0.75,
         }}
@@ -704,11 +706,20 @@ const Sidebar = ({
                     },
                   }}
                 />
-                {!search && !isMobile && (
+                {search ? (
+                  <IconButton
+                    aria-label="Clear search"
+                    size="small"
+                    onClick={() => { setSearch(''); setDebouncedSearch(''); searchRef.current?.focus() }}
+                    sx={{ p: 0.2, flexShrink: 0, color: 'text.disabled', '&:hover': { color: 'text.secondary' } }}
+                  >
+                    <CloseIcon sx={{ fontSize: 13 }} />
+                  </IconButton>
+                ) : (!isMobile && (
                   <Typography sx={{ fontSize: 10, color: theme.palette.text.disabled, opacity: 0.45, flexShrink: 0, letterSpacing: '0.02em' }}>
                     {searchShortcut}
                   </Typography>
-                )}
+                ))}
               </Box>
             </Box>
           )}

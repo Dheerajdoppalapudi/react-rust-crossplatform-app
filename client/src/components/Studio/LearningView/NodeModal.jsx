@@ -246,7 +246,7 @@ export default function NodeModal({ node, onClose, onAsk }) {
             {node.prompt}
           </Typography>
         </Box>
-        <IconButton onClick={onClose} size="small" sx={{ flexShrink: 0, mt: 0.25 }}>
+        <IconButton aria-label="Close" onClick={onClose} size="small" sx={{ flexShrink: 0, mt: 0.25 }}>
           <CloseIcon sx={{ fontSize: 16 }} />
         </IconButton>
       </Box>
@@ -370,7 +370,7 @@ export default function NodeModal({ node, onClose, onAsk }) {
           />
           <Tooltip title="Ask (Enter)">
             <span>
-              <IconButton
+              <IconButton aria-label="Ask"
                 onClick={handleAsk}
                 disabled={!hasQuestion || isLoading}
                 size="small"
