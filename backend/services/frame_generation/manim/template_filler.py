@@ -7,6 +7,7 @@ import structlog
 from pathlib import Path
 
 from .beat_types import BeatPlan
+from .voiceover_setup import VOICEOVER_IMPORTS, SPEECH_SERVICE_INIT
 
 logger = structlog.get_logger(__name__)
 
@@ -33,6 +34,25 @@ def _escape(s: str) -> str:
     return s.replace("\\", "\\\\").replace('"', '\\"')
 
 
+def _escape_text(s: str) -> str:
+    """
+    Escape for a single-line Python double-quoted string literal.
+    Like _escape, but also collapses newlines/returns to spaces so multi-sentence
+    narration stays on one line inside text="...".
+    """
+    return _escape(s or "").replace("\n", " ").replace("\r", " ").strip()
+
+
+def _apply_common(tpl: str, beat: BeatPlan) -> str:
+    """Substitute the voiceover boilerplate + narration shared by all templates."""
+    return (
+        tpl
+        .replace("{VOICEOVER_IMPORTS}", VOICEOVER_IMPORTS)
+        .replace("{SPEECH_SERVICE_INIT}", SPEECH_SERVICE_INIT)
+        .replace("{NARRATION}", _escape_text(beat.narration))
+    )
+
+
 def _keyword_list_literal(keywords: list[str]) -> str:
     """Convert list of strings to Python string literals suitable for inline list."""
     if not keywords:
@@ -49,7 +69,7 @@ def _fill_concept_reveal(beat: BeatPlan) -> str:
     accent_raw = str(c.get("accent_color", "BLUE")).upper()
     accent = _COLOR_MAP.get(accent_raw, "BLUE")
 
-    tpl = _load_template("concept_reveal.py.tpl")
+    tpl = _apply_common(_load_template("concept_reveal.py.tpl"), beat)
     return (
         tpl
         .replace("{ACCENT_COLOR}", accent)
@@ -72,7 +92,7 @@ def _fill_comparison_split(beat: BeatPlan) -> str:
     def pts_literal(pts: list) -> str:
         return ", ".join(f'"{_escape(str(p)[:45])}"' for p in pts)
 
-    tpl = _load_template("comparison_split.py.tpl")
+    tpl = _apply_common(_load_template("comparison_split.py.tpl"), beat)
     return (
         tpl
         .replace("{LEFT_TITLE}", left_title)

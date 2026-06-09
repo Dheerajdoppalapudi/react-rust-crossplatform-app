@@ -23,7 +23,7 @@ VITE_API_URL            # Optional — defaults to http://localhost:8000
 
 ## Architecture Overview
 
-**Zenith** is a React 19 / Vite 7 desktop app (Tauri) for AI-powered visual lessons. The backend speaks a standard `{ status, data }` / `{ status, error }` envelope over REST + SSE.
+**Paralyte** is a React 19 / Vite 7 desktop app (Tauri) for AI-powered visual lessons. The backend speaks a standard `{ status, data }` / `{ status, error }` envelope over REST + SSE.
 
 ### Routing & App Shell
 
@@ -78,7 +78,7 @@ src/theme/animations.js Keyframe exports: pulse, fadeIn, shimmer, blink
 src/theme/styleUtils.js Neutral fill/border helpers + brand color helpers (see below)
 ```
 
-Light/dark preference is persisted in `localStorage` under key `zenith-theme`. `ColorModeContext` (created in `App.jsx`) exposes `{ mode, toggle }`. The current mode is also written to `document.documentElement.dataset.theme` for CSS variable targeting.
+Light/dark preference is persisted in `localStorage` under key `paralyte-theme` (`STORAGE_KEYS.THEME`). `ColorModeContext` (created in `App.jsx`) exposes `{ mode, toggle }`. The current mode is also written to `document.documentElement.dataset.theme` for CSS variable targeting.
 
 #### Color Rules — read carefully
 

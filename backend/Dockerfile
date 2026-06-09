@@ -8,8 +8,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Non-root user — running as root in a container is a security risk
-RUN groupadd --gid 1001 zenith \
- && useradd --uid 1001 --gid zenith --shell /bin/bash --create-home zenith
+RUN groupadd --gid 1001 paralyte \
+ && useradd --uid 1001 --gid paralyte --shell /bin/bash --create-home paralyte
 
 WORKDIR /app
 
@@ -24,10 +24,10 @@ RUN playwright install chromium --with-deps
 COPY . .
 
 # Create runtime-writable directories and hand them to the app user
-RUN mkdir -p outputs logs chromadb \
- && chown -R zenith:zenith /app
+RUN mkdir -p outputs logs \
+ && chown -R paralyte:paralyte /app
 
-USER zenith
+USER paralyte
 
 EXPOSE 8000
 

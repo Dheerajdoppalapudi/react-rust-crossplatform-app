@@ -59,15 +59,35 @@ TEACHING EMPHASIS:
 - Screen coordinates of any kind
 - Comments about what Haiku should or should not do
 
+## NARRATION IS THE SPINE OF THE VIDEO
+
+The narration is now the most important field you write. At render time the animation is
+**paced to the narration** — each sentence is spoken while its matching visual step plays, so
+the spoken script literally sets the rhythm of the video. Write it like a great teacher talking,
+not like a textbook.
+
+For EVERY beat, write `narration` as **3–5 short, self-contained sentences**, where:
+- **Each sentence maps to ONE visual step** described in the beat. Sentence order = animation
+  order. (E.g. sentence 1 introduces the curve, sentence 2 places the dot, sentence 3 moves it.)
+- Sentences are spoken aloud — conversational, warm, concrete. Read them out loud in your head.
+- Explain the *why*, not just the *what*: "We start far from the minimum, so the first step is large."
+- Build intuition; avoid jargon dumps. One new idea per sentence.
+- Do NOT just read the on-screen bullets verbatim — narration adds the connective explanation.
+- Plain spoken words only: no Markdown, no "[1]" citations, no symbols that don't read aloud
+  (write "x squared", not "x²", in narration — Unicode symbols are for ON-SCREEN text only).
+
+The `description` tells the animator WHAT to draw; the `narration` is WHAT THE LEARNER HEARS and
+sets the timing. Keep the two aligned step for step.
+
 ## CONTENT RULES FOR ALL BEATS
 
-- Math text: use Unicode only — ², √, π, ×, ÷, ±, ∞, →, ∇, ∫, ∑, Δ, ≈, ≤, ≥
-  NEVER use LaTeX notation like \frac, \sqrt, $...$
-- All text strings: max 45 characters
+- On-screen text: use Unicode math only — ², √, π, ×, ÷, ±, ∞, →, ∇, ∫, ∑, Δ, ≈, ≤, ≥
+  NEVER use LaTeX notation like \frac, \sqrt, $...$  (narration spells symbols out as words)
+- On-screen text strings: keep short, ≤ 45 characters (narration can be longer)
 - Colors to use: BLUE, GREEN, YELLOW, RED, ORANGE, TEAL, GOLD, GRAY, WHITE
 - Each beat teaches ONE new idea — no repetition across beats
-- duration_s: structural beats 9–12 s, visualization beats 12–18 s
-  Err on the longer side — animations run slowly and narration needs room to breathe
+- duration_s: a rough hint only (the narration actually sets the timing now). Use 8–12 for
+  structural beats, 12–18 for visualization beats.
 
 ## BEAT SEQUENCING RULES
 
@@ -122,7 +142,7 @@ Output ONLY valid JSON. No markdown fences, no explanation text before or after.
         "accent_color": "BLUE"
       },
       "keywords": ["gradient", "optimization", "minimum"],
-      "narration": "<3-5 sentences spoken aloud — explain what is shown, why it matters, and what the learner should notice>"
+      "narration": "<3-5 short spoken sentences, ONE per visual step, in animation order — conversational, explains what is shown and WHY it matters. Spell math as words (say 'x squared', not 'x²').>"
     },
     {
       "index": 1,
@@ -133,7 +153,7 @@ Output ONLY valid JSON. No markdown fences, no explanation text before or after.
       "description": "WHAT TO SHOW:\n  - Coordinate axes, x from -3 to 3, labeled x and L(x)\n  - Parabola f(x)=x² in BLUE — the loss curve\n  - Red dot starting at x=2.5 on the curve, labeled 'start' above\n\nANIMATION SEQUENCE:\n  1. Draw axes, then gradually draw the parabola left-to-right\n  2. Red dot and 'start' label appear at x=2.5\n  3. Red downward arrow appears next to dot, labeled '-∇L' (gradient direction)\n  4. Arrow disappears, dot smoothly slides to x=1.25 (lr=0.5 so x halves)\n  5. Repeat steps 3-4 two more times: x=1.25→0.625→0.3\n  6. KEY REVEAL: Gold star appears at x=0 (minimum), 'minimum' text above it\n\nSEMANTIC LAYOUT:\n  Axes centered on screen. Dot rides the curve. Labels above dots.\n  Star and 'minimum' label at the bottom of the parabola.\n\nTEACHING EMPHASIS:\n  The dot moves in the direction that reduces the loss — reveal the minimum.",
       "content": {},
       "keywords": ["gradient", "learning rate", "convergence"],
-      "narration": "<3-5 sentences spoken aloud — explain what is shown, why it matters, and what the learner should notice>"
+      "narration": "<3-5 short spoken sentences, ONE per visual step, in animation order — conversational, explains what is shown and WHY it matters. Spell math as words (say 'x squared', not 'x²').>"
     }
   ]
 }

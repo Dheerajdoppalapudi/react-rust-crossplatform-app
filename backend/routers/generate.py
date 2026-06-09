@@ -387,8 +387,8 @@ async def _generate_stream(p: dict):
 
             # For instant follow-ups, try ChromaDB before hitting Tavily
             if should_search and parent_session_id and research_mode == "instant":
-                cached = await asyncio.to_thread(
-                    retrieve_sources, conversation_id, message, FOLLOWUP_TOP_K_SOURCES
+                cached = await retrieve_sources(
+                    conversation_id, message, FOLLOWUP_TOP_K_SOURCES
                 )
                 if len(cached) >= 3:
                     sources      = cached
@@ -545,7 +545,7 @@ async def _generate_stream(p: dict):
 
             # Upsert ALL sources to ChromaDB (not just top-N) for richer follow-up retrieval
             if sources_all:
-                await asyncio.to_thread(upsert_sources, conversation_id, sources_all)
+                await upsert_sources(conversation_id, sources_all)
 
             # frames_meta from the video pipeline (non-None for video mode).
             # For interactive mode, interactive_service already wrote frames_meta to

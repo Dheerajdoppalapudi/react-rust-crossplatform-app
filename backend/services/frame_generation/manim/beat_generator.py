@@ -50,10 +50,17 @@ from .template_filler import fill_template
 
 logger = structlog.get_logger(__name__)
 
+from .voiceover_setup import VOICEOVER_IMPORTS, SPEECH_SERVICE_INIT
+
 _PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
+# Substitute the (static, per-deployment) voiceover boilerplate at load time so the
+# cache prefix stays stable and beats render as narrated VoiceoverScenes.
 _CODEGEN_PROMPT_TEMPLATE: str = (
-    _PROMPTS_DIR / "manim_codegen_prompt.md"
-).read_text(encoding="utf-8")
+    (_PROMPTS_DIR / "manim_codegen_prompt.md")
+    .read_text(encoding="utf-8")
+    .replace("{{VOICEOVER_IMPORTS}}", VOICEOVER_IMPORTS)
+    .replace("{{SPEECH_SERVICE_INIT}}", SPEECH_SERVICE_INIT)
+)
 
 # Static prefix for Anthropic prompt caching — everything before {{BEAT_DESCRIPTION}}
 _split_marker = "{{BEAT_DESCRIPTION}}"
@@ -124,12 +131,16 @@ def _render_beat_sync(
 # Code-gen helper (sync, called via asyncio.to_thread)
 # ---------------------------------------------------------------------------
 
-def _codegen(beat_description: str, prompt_template: str) -> str:
-    """One LLM call → raw Manim Python code string."""
-    prompt = prompt_template.replace("{{BEAT_DESCRIPTION}}", beat_description)
+def _codegen(beat_description: str, narration: str, prompt_template: str) -> str:
+    """One LLM call → raw Manim Python code string (a narrated VoiceoverScene)."""
+    prompt = (
+        prompt_template
+        .replace("{{BEAT_DESCRIPTION}}", beat_description)
+        .replace("{{NARRATION}}", narration or "")
+    )
     raw = call_llm(
         prompt,
-        2800,
+        4000,   # voiceover scenes are longer than bare scenes — avoid truncation
         "manim_codegen_prompt.md",
         _STATIC_PREFIX,
         task="beat_codegen",
@@ -204,7 +215,7 @@ async def _generate_one_beat(beat: BeatPlan, output_dir: str) -> BeatResult:
 
         # 3. Visualization beats: attempt 1
         method = "codegen"
-        code = await asyncio.to_thread(_codegen, beat.description, _CODEGEN_PROMPT_TEMPLATE)
+        code = await asyncio.to_thread(_codegen, beat.description, beat.narration, _CODEGEN_PROMPT_TEMPLATE)
 
         valid, syn_err = _is_valid_syntax(code)
         if not valid:
@@ -214,7 +225,7 @@ async def _generate_one_beat(beat: BeatPlan, output_dir: str) -> BeatResult:
                 f"⚠️ RETRY — previous attempt had a syntax error: {syn_err}\n"
                 "Write simpler code: fewer objects, shorter animation sequences, no complex string formatting.\n\n"
             ) + _CODEGEN_PROMPT_TEMPLATE
-            code = await asyncio.to_thread(_codegen, beat.description, retry_template)
+            code = await asyncio.to_thread(_codegen, beat.description, beat.narration, retry_template)
             valid, syn_err2 = _is_valid_syntax(code)
             if not valid:
                 logger.error("beat_syntax_error_attempt2", beat=beat.index, err=syn_err2)
@@ -244,7 +255,7 @@ async def _generate_one_beat(beat: BeatPlan, output_dir: str) -> BeatResult:
               "reason": error_cat, "stderr": stderr[-300:]})
 
         retry_template = _build_fallback_prompt(_CODEGEN_PROMPT_TEMPLATE, error_cat, bad_name)
-        code2 = await asyncio.to_thread(_codegen, beat.description, retry_template)
+        code2 = await asyncio.to_thread(_codegen, beat.description, beat.narration, retry_template)
 
         valid2, syn_err3 = _is_valid_syntax(code2)
         if not valid2:
@@ -297,94 +308,11 @@ class BeatGenerator:
 
 
 # ---------------------------------------------------------------------------
-# Audio: TTS + mix per beat
-# ---------------------------------------------------------------------------
-
-async def _add_audio_to_one_beat(
-    result: BeatResult,
-    audio_dir: str,
-    use_openai: bool,
-) -> str:
-    """
-    Generate TTS for one beat and mix into its MP4 via _build_mp4_clip.
-
-    Reuses the same ffmpeg path as the SVG pipeline — handles missing ffprobe
-    gracefully via fallback_duration, adds caption bar and fade transitions.
-    Returns the mixed MP4 path, or the original silent MP4 on any failure.
-    """
-    from services.video_generation.tts_service import (
-        _openai_tts_generate, _gtts_generate,
-    )
-    from services.video_generation.video_assembler import _build_video_clip
-
-    silent_mp4 = result.mp4_path
-
-    audio_path = os.path.join(audio_dir, f"beat_{result.beat_index:03d}.mp3")
-    mixed_path = os.path.join(audio_dir, f"beat_{result.beat_index:03d}_av.mp4")
-
-    # TTS (idempotent — skip if already generated)
-    if result.narration.strip() and not os.path.exists(audio_path):
-        backend = _openai_tts_generate if use_openai else _gtts_generate
-        ok = await asyncio.to_thread(backend, result.narration, audio_path)
-        if not ok:
-            logger.warning("beat_tts_failed", beat=result.beat_index)
-            audio_path = None  # type: ignore[assignment]
-
-    effective_audio = audio_path if (audio_path and os.path.exists(audio_path)) else None
-
-    try:
-        await asyncio.to_thread(
-            _build_video_clip,
-            silent_mp4,
-            effective_audio,
-            float(result.duration_s),  # fallback if ffprobe unavailable
-            result.caption,
-            mixed_path,
-        )
-        logger.info("beat_audio_done", beat=result.beat_index)
-        return mixed_path
-    except Exception as exc:
-        logger.warning("beat_mix_failed", beat=result.beat_index, error=str(exc))
-        return silent_mp4
-
-
-async def add_audio_to_beats(
-    results: list[BeatResult],
-    output_dir: str,
-    use_openai: bool = False,
-) -> list[str]:
-    """
-    Run TTS + audio mix concurrently for all beats that have an mp4 and narration.
-    Returns a list of mp4 paths (with audio where possible), in the same order
-    as the input results list (only beats with mp4_path included).
-
-    Failures are silent — each beat falls back to its original silent MP4
-    so the assembled video is never blocked by a TTS error.
-    """
-    audio_dir = os.path.join(output_dir, "audio")
-    os.makedirs(audio_dir, exist_ok=True)
-
-    successful = [r for r in results if r.mp4_path]
-    if not successful:
-        return []
-
-    mixed = await asyncio.gather(
-        *[_add_audio_to_one_beat(r, audio_dir, use_openai) for r in successful],
-        return_exceptions=True,
-    )
-
-    paths: list[str] = []
-    for r, outcome in zip(successful, mixed):
-        if isinstance(outcome, Exception):
-            logger.warning("beat_audio_exception", beat=r.beat_index, error=str(outcome))
-            paths.append(r.mp4_path)  # fallback to silent
-        else:
-            paths.append(outcome)
-    return paths
-
-
-# ---------------------------------------------------------------------------
 # ffmpeg assembly
+#
+# Note: narration audio is now embedded in each beat MP4 at render time by
+# manim-voiceover (VoiceoverScene), perfectly synced to the animation. There is
+# no separate TTS-generate-and-mix step — assembly just concatenates the beats.
 # ---------------------------------------------------------------------------
 
 async def assemble_beats(beat_mp4s: list[str], output_path: str) -> Optional[str]:
@@ -411,10 +339,10 @@ async def assemble_beats(beat_mp4s: list[str], output_path: str) -> Optional[str
         "-f", "concat",
         "-safe", "0",
         "-i", concat_list,
-        # Re-encode so mixed streams (copy vs libx264) concat cleanly.
-        # fast preset + crf 22 keeps quality high at ~2× real-time speed.
-        "-c:v", "libx264", "-preset", "fast", "-crf", "22",
-        "-c:a", "aac", "-b:a", "128k",
+        # Stream-copy: each beat clip is already encoded by _build_video_clip with
+        # identical params (libx264 yuv420p, 1920×1080, 60fps, aac 192k), so concat
+        # just muxes them — no third re-encode generation, no quality loss, fast.
+        "-c", "copy",
         "-movflags", "+faststart",
         output_path,
     ]

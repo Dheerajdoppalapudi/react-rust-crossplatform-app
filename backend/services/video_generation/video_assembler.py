@@ -25,6 +25,7 @@ Requires: ffmpeg in system PATH  (already required by MoviePy)
 
 import structlog
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -37,7 +38,14 @@ logger = structlog.get_logger(__name__)
 VIDEO_W    = 1920
 VIDEO_H    = 1080
 VIDEO_FPS  = 60    # Manim -qh renders at 1080p60; match it to avoid frame duplication
-_FADE_DUR  = 0.3   # seconds — fade-through-black between frames
+
+# Letterbox: fit content into 1920×1080 preserving its aspect ratio, padding the
+# remainder with black. Replaces a bare `scale=1920:1080`, which stretched any
+# non-16:9 source (SVG frames have variable viewBox heights) into distortion.
+_SCALE_PAD = (
+    f"scale={VIDEO_W}:{VIDEO_H}:force_original_aspect_ratio=decrease,"
+    f"pad={VIDEO_W}:{VIDEO_H}:(ow-iw)/2:(oh-ih)/2:color=black"
+)
 
 # Font candidates for Manim subtitle drawtext (same list as frame_exporter)
 _FONT_CANDIDATES = [
@@ -99,29 +107,73 @@ def _ffmpeg(args: list[str]) -> None:
         raise RuntimeError(f"ffmpeg failed (exit {result.returncode}):\n{result.stderr.strip()}")
 
 
+def _find_ffprobe() -> Optional[str]:
+    """
+    Locate a real ffprobe binary.
+
+    NOTE: imageio-ffmpeg (our usual ffmpeg source) bundles ffmpeg ONLY — there is
+    no ffprobe beside it, so the old `_FFMPEG_EXE.replace("ffmpeg","ffprobe")`
+    pointed at a non-existent file and every probe silently returned None. That is
+    what truncated narration: durations fell back to the planner's *guess* instead
+    of the real audio length. We now look for ffprobe properly and, failing that,
+    fall back to parsing `ffmpeg -i` (which we always have).
+    """
+    probe = shutil.which("ffprobe")
+    if probe:
+        return probe
+    if _FFMPEG_EXE:
+        cand = _FFMPEG_EXE.replace("ffmpeg", "ffprobe")
+        if cand != _FFMPEG_EXE and os.path.exists(cand):
+            return cand
+    return None
+
+
+_FFPROBE_EXE: Optional[str] = _find_ffprobe()
+
+
 def _probe_duration(path: str) -> Optional[float]:
     """
-    Return the media duration in seconds using ffprobe (or ffmpeg -i as fallback).
-    Returns None if the file is missing or the probe fails.
+    Return the media duration in seconds. Tries ffprobe first, then falls back to
+    parsing the `Duration:` line from `ffmpeg -i`. Returns None only if the file
+    is missing or both methods fail.
     """
-    if not _FFMPEG_EXE:
+    if not path or not os.path.exists(path):
         return None
-    # Derive ffprobe path from the ffmpeg binary location
-    ffprobe = _FFMPEG_EXE.replace("ffmpeg", "ffprobe")
-    try:
-        result = subprocess.run(
-            [
-                ffprobe, "-v", "error",
-                "-show_entries", "format=duration",
-                "-of", "default=noprint_wrappers=1:nokey=1",
-                path,
-            ],
-            capture_output=True,
-            text=True,
-        )
-        return float(result.stdout.strip())
-    except Exception:
-        return None
+
+    # 1. ffprobe (clean, machine-readable) — when a real one exists
+    if _FFPROBE_EXE:
+        try:
+            result = subprocess.run(
+                [
+                    _FFPROBE_EXE, "-v", "error",
+                    "-show_entries", "format=duration",
+                    "-of", "default=noprint_wrappers=1:nokey=1",
+                    path,
+                ],
+                capture_output=True, text=True, timeout=30,
+            )
+            val = result.stdout.strip()
+            if val:
+                return float(val)
+        except Exception:
+            pass
+
+    # 2. Fallback: parse `ffmpeg -i <file>` stderr for "Duration: HH:MM:SS.ms"
+    #    This needs no extra binary — imageio-ffmpeg's bundled ffmpeg works.
+    if _FFMPEG_EXE:
+        try:
+            result = subprocess.run(
+                [_FFMPEG_EXE, "-i", path],
+                capture_output=True, text=True, timeout=30,
+            )
+            m = re.search(r"Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)", result.stderr)
+            if m:
+                h, mnt, s = int(m.group(1)), int(m.group(2)), float(m.group(3))
+                return h * 3600 + mnt * 60 + s
+        except Exception:
+            pass
+
+    return None
 
 
 def _find_font() -> Optional[str]:
@@ -167,13 +219,9 @@ def _build_png_clip(
     If no audio: inserts a silent AAC track so the clip has the same
     stream layout as audio clips — required for -c copy concat.
     """
-    # Fade-through-black: fade in at start, fade out at end
-    fade_out_start = max(0.0, duration - _FADE_DUR)
-    vf = (
-        f"scale={VIDEO_W}:{VIDEO_H},"
-        f"fade=t=in:st=0:d={_FADE_DUR},"
-        f"fade=t=out:st={fade_out_start:.3f}:d={_FADE_DUR}"
-    )
+    # Letterbox to 1920×1080 (no aspect distortion). Hard cuts between clips —
+    # the previous per-clip fade-to-black produced a black flash on every frame.
+    vf = _SCALE_PAD
 
     if audio_path and os.path.exists(audio_path):
         _ffmpeg([
@@ -214,9 +262,9 @@ def _build_video_clip(
     """
     Build a clip from a Manim MP4 animation + optional audio.
 
-    Duration logic (audio always wins):
-      - animation shorter than audio → pad last frame with tpad filter
-      - animation longer  than audio → trim with -t
+    Duration logic — clip length = max(animation, narration) so NEITHER is cut:
+      - animation shorter than audio → freeze last frame (tpad) until narration ends
+      - animation longer  than audio → narration finishes, animation plays to its end
 
     Caption: rendered directly by ffmpeg's drawbox + drawtext filters,
     matching the subtitle bar style used by frame_exporter for PNG frames.
@@ -227,10 +275,11 @@ def _build_video_clip(
         if audio_path and os.path.exists(audio_path)
         else None
     )
-    target_dur = audio_dur or fallback_duration
+    # max() so a long narration is never truncated AND a long animation is never cut.
+    target_dur = max(video_dur, audio_dur) if audio_dur else (video_dur or fallback_duration)
 
     # ── Build video filter chain ──────────────────────────────────────────────
-    vf_parts = [f"scale={VIDEO_W}:{VIDEO_H}"]
+    vf_parts = [_SCALE_PAD]
 
     if caption:
         font       = _find_font()
@@ -246,16 +295,12 @@ def _build_video_clip(
             f":x=(w-tw)/2:y={bar_y}+(90-th)/2"
         )
 
-    # tpad must come before fade filters (pads in the time dimension first)
+    # Freeze the last animation frame to cover any remaining narration.
     if audio_dur and video_dur < audio_dur:
         freeze = round(audio_dur - video_dur, 3)
         vf_parts.append(f"tpad=stop_mode=clone:stop_duration={freeze}")
 
-    # Fade-through-black: in at start, out at end (matching PNG clip behaviour)
-    fade_out_start = max(0.0, target_dur - _FADE_DUR)
-    vf_parts.append(f"fade=t=in:st=0:d={_FADE_DUR}")
-    vf_parts.append(f"fade=t=out:st={fade_out_start:.3f}:d={_FADE_DUR}")
-
+    # Hard cuts between clips (no fade-to-black flash on every beat).
     vf = ",".join(vf_parts)
 
     if audio_path and os.path.exists(audio_path):

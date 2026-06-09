@@ -1,5 +1,5 @@
 """
-Shared pytest fixtures for the Zenith backend test suite.
+Shared pytest fixtures for the Paralyte backend test suite.
 
 Fixtures:
   db_pool   — session-scoped asyncpg pool + schema init (skips if no DATABASE_URL)

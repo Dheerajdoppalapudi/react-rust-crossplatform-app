@@ -1,4 +1,4 @@
-# Zenith — Prompt Flows by Mode
+# Paralyte — Prompt Flows by Mode
 
 Each section is one execution mode. Within each mode the prompts are shown as a chain — what feeds into each step comes from the step before it.
 

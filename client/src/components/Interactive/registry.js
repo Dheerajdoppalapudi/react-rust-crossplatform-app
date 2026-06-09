@@ -46,7 +46,7 @@ export const REGISTRY = {
     component: TableViewer,
     getCopyText: p => {
       if (!Array.isArray(p.rows) || !Array.isArray(p.columns)) return ''
-      const header = p.columns.map(c => c.label ?? c.key).join('\t')
+      const header = p.columns.map(c => c?.label ?? c?.key ?? '').join('\t')
       const rows   = p.rows.map(r => p.columns.map(c => {
         const v = r[c.key]
         return v !== null && typeof v === 'object' ? (v.text ?? '') : (v ?? '')

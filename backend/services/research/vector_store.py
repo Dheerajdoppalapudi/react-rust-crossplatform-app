@@ -1,47 +1,42 @@
 """
-ChromaDB vector store for per-conversation source embeddings.
+pgvector-backed vector store for per-conversation source embeddings.
 
 Embeds Tavily search results using OpenAI text-embedding-3-small and stores them
-in a per-conversation ChromaDB collection. Used so follow-up queries can retrieve
-semantically relevant prior sources without re-searching Tavily.
+in the shared `source_embeddings` table (PostgreSQL + the pgvector extension).
+Used so follow-up queries can retrieve semantically relevant prior sources without
+re-searching Tavily.
 
-Degrades gracefully: if ChromaDB or the OpenAI embedding API is unavailable,
-all functions return empty results and log a warning — the pipeline continues
+Why pgvector instead of the previous local ChromaDB:
+  - ChromaDB's on-disk store lives on one box and cannot be shared across multiple
+    web instances or the video worker fleet. A single Postgres table can.
+  - Reuses the existing RDS Postgres + asyncpg pool — one fewer system to operate.
+  - Cleanup on conversation delete is a trivial `DELETE WHERE conversation_id = ...`.
+
+Degrades gracefully: if the OpenAI embedding API or the DB/extension is unavailable,
+all functions no-op / return empty and log a warning — the pipeline continues
 without vector retrieval.
+
+These functions are ``async`` (asyncpg is native async). Call them directly with
+``await`` — do NOT wrap them in ``asyncio.to_thread``. Only the OpenAI embedding
+call is synchronous, and it is offloaded internally via ``asyncio.to_thread``.
 """
 
+import asyncio
 import hashlib
 import structlog
 import threading
 from typing import Optional
 
-from core.config import CHROMADB_PATH, EMBEDDING_MODEL
+from core.config import EMBEDDING_MODEL
+from core.db_async import get_async_db, get_async_db_read
 
 logger = structlog.get_logger(__name__)
 
-_client        = None
 _openai_client = None
-_client_lock   = threading.Lock()
 _openai_lock   = threading.Lock()
 
 
-# ── Lazy initialisation ───────────────────────────────────────────────────────
-
-def _get_client():
-    global _client
-    if _client is not None:
-        return _client
-    with _client_lock:
-        if _client is not None:
-            return _client
-        try:
-            import chromadb
-            CHROMADB_PATH.mkdir(parents=True, exist_ok=True)
-            _client = chromadb.PersistentClient(path=str(CHROMADB_PATH))
-        except Exception as exc:
-            logger.warning("chromadb_unavailable", error=str(exc))
-    return _client
-
+# ── OpenAI embedding client (lazy, thread-safe) ────────────────────────────────
 
 def _get_openai():
     global _openai_client
@@ -59,125 +54,150 @@ def _get_openai():
 
 
 def _embed(texts: list[str]) -> Optional[list[list[float]]]:
-    """Return embeddings for a list of texts, or None on failure."""
+    """
+    Return embeddings for a list of texts, or None on failure.
+
+    Synchronous — the OpenAI SDK call blocks, so callers must invoke this via
+    ``asyncio.to_thread(_embed, ...)`` from async code.
+    """
     oai = _get_openai()
     if not oai or not texts:
         return None
     try:
-        resp = oai.embeddings.create(
-            model=EMBEDDING_MODEL,
-            input=texts,
-        )
+        resp = oai.embeddings.create(model=EMBEDDING_MODEL, input=texts)
         return [item.embedding for item in resp.data]
     except Exception as exc:
         logger.warning("embedding_failed", error=str(exc))
         return None
 
 
-def _collection_name(conversation_id: str) -> str:
-    return f"conv_{conversation_id}"
-
-
 def _source_id(url: str) -> str:
-    """Stable document ID from URL — avoids duplicate upserts."""
+    """Stable per-URL ID — gives upsert semantics for a repeated URL in a conversation."""
     return hashlib.sha256(url.encode()).hexdigest()[:16]
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
-def upsert_sources(conversation_id: str, sources: list[dict]) -> None:
+async def upsert_sources(conversation_id: str, sources: list[dict]) -> None:
     """
-    Embed and upsert source dicts into the conversation's ChromaDB collection.
+    Embed and upsert source dicts into the shared source_embeddings table.
 
     source dicts must have at least: url, title, snippet/content.
-    Already-present URLs are updated (upsert semantics).
+    Re-seen (conversation_id, url) pairs are updated (upsert semantics).
     """
     if not sources:
-        return
-    client = _get_client()
-    if not client:
         return
 
     # Truncate to ~500 chars for embedding — semantic similarity needs only a
     # representative excerpt, not the full extracted content (which can be 7000+
-    # chars after Tavily extract and would exceed the 8192-token model limit).
+    # chars after Tavily extract and would exceed the model's token limit).
     texts = [
         f"{s.get('title', '')} {(s.get('snippet', '') or '')[:500]}"
         for s in sources
     ]
-    embeddings = _embed(texts)
+    embeddings = await asyncio.to_thread(_embed, texts)
     if not embeddings:
         return
 
+    rows = [
+        (
+            conversation_id,
+            _source_id(s["url"]),
+            s.get("url", ""),
+            s.get("title", ""),
+            (s.get("snippet", "") or "")[:500],
+            s.get("domain", ""),
+            float(s.get("score", 0.5)),
+            emb,  # encoded to pgvector by the registered asyncpg codec
+        )
+        for s, emb in zip(sources, embeddings)
+    ]
+
     try:
-        col = client.get_or_create_collection(_collection_name(conversation_id))
-        ids        = [_source_id(s["url"]) for s in sources]
-        metadatas  = [
-            {
-                "url":     s.get("url", ""),
-                "title":   s.get("title", ""),
-                "snippet": (s.get("snippet", "") or "")[:500],
-                "domain":  s.get("domain", ""),
-                "score":   float(s.get("score", 0.5)),
-            }
-            for s in sources
-        ]
-        col.upsert(ids=ids, embeddings=embeddings, metadatas=metadatas)
+        async with get_async_db() as conn:
+            await conn.executemany(
+                """
+                INSERT INTO source_embeddings
+                    (conversation_id, source_id, url, title, snippet, domain, score, embedding)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                ON CONFLICT (conversation_id, source_id) DO UPDATE SET
+                    url       = EXCLUDED.url,
+                    title     = EXCLUDED.title,
+                    snippet   = EXCLUDED.snippet,
+                    domain    = EXCLUDED.domain,
+                    score     = EXCLUDED.score,
+                    embedding = EXCLUDED.embedding
+                """,
+                rows,
+            )
         logger.info("vector_store_upsert", conv=conversation_id[:8], n=len(sources))
     except Exception as exc:
-        logger.warning("chromadb_upsert_failed", error=str(exc))
+        logger.warning("pgvector_upsert_failed", error=str(exc))
 
 
-def retrieve_sources(
+async def retrieve_sources(
     conversation_id: str,
     query: str,
     top_k: int = 8,
     distance_threshold: float = 0.5,
 ) -> list[dict]:
     """
-    Retrieve semantically relevant sources for a query from the conversation's
-    ChromaDB collection.
+    Retrieve semantically relevant sources for a query from this conversation's
+    embeddings, ordered by cosine distance (pgvector `<=>` operator).
 
     Only returns results with cosine distance < distance_threshold (0 = identical,
     1 = orthogonal). Results beyond the threshold are discarded so irrelevant
     sources from prior turns never pollute a different-topic follow-up.
 
-    Returns empty list if ChromaDB is unavailable or the collection doesn't exist.
+    Returns an empty list if embeddings are unavailable or nothing is stored yet.
     """
-    client = _get_client()
-    if not client:
-        return []
-
-    embeddings = _embed([query])
+    embeddings = await asyncio.to_thread(_embed, [query])
     if not embeddings:
         return []
+    q_emb = embeddings[0]
 
     try:
-        col = client.get_collection(_collection_name(conversation_id))
-        results = col.query(
-            query_embeddings=embeddings,
-            n_results=min(top_k, col.count()),
-            include=["metadatas", "distances"],
-        )
-        metadatas = (results.get("metadatas") or [[]])[0]
-        distances = (results.get("distances") or [[]])[0]
+        async with get_async_db_read() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT url, title, snippet, domain, score,
+                       embedding <=> $2 AS distance
+                FROM source_embeddings
+                WHERE conversation_id = $1
+                ORDER BY embedding <=> $2
+                LIMIT $3
+                """,
+                conversation_id, q_emb, top_k,
+            )
 
-        sources = []
-        for meta, dist in zip(metadatas, distances):
-            if dist > distance_threshold:
-                continue
-            sources.append({
-                "url":     meta.get("url", ""),
-                "title":   meta.get("title", ""),
-                "snippet": meta.get("snippet", ""),
-                "domain":  meta.get("domain", ""),
-                "score":   float(meta.get("score", 0.5)),
-            })
+        sources = [
+            {
+                "url":     r["url"],
+                "title":   r["title"],
+                "snippet": r["snippet"],
+                "domain":  r["domain"],
+                "score":   float(r["score"]),
+            }
+            for r in rows
+            if r["distance"] is not None and r["distance"] <= distance_threshold
+        ]
 
         logger.info("vector_store_retrieve",
                     conv=conversation_id[:8], query=query[:60],
                     found=len(sources), threshold=distance_threshold)
         return sources
     except Exception as exc:
-        logger.debug("chromadb_retrieve_skipped", error=str(exc))
+        logger.debug("pgvector_retrieve_skipped", error=str(exc))
         return []
+
+
+async def delete_conversation_embeddings(conversation_id: str) -> None:
+    """Hard-delete all embeddings for a conversation (called on conversation delete)."""
+    try:
+        async with get_async_db() as conn:
+            await conn.execute(
+                "DELETE FROM source_embeddings WHERE conversation_id = $1",
+                conversation_id,
+            )
+    except Exception as exc:
+        logger.warning("pgvector_delete_failed", conv=conversation_id[:8], error=str(exc))

@@ -181,7 +181,7 @@ export default function TableViewer({
                   </Typography>
                 </Box>
               ) : sortedRows.map((row, i) => {
-                const isHighlighted = highlightRows.includes(i)
+                const isHighlighted = (highlightRows ?? []).includes(i)
                 const isStriped     = striped && i % 2 === 1
                 return (
                   <Box

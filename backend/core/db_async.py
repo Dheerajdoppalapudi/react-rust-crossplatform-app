@@ -43,7 +43,19 @@ def _decode_jsonb(value):
     return json.loads(value)
 
 async def _init_connection(conn) -> None:
-    """Register Python ↔ PostgreSQL JSONB codec on every new pool connection."""
+    """
+    Per-connection setup, run once for every physical connection added to the pool.
+
+    1. Register the Python ↔ PostgreSQL JSONB codec.
+    2. Ensure the pgvector extension exists and register the `vector` type codec so
+       embeddings can be passed/received as plain Python float lists.
+
+    The pgvector step is wrapped in try/except so a missing extension or insufficient
+    privileges degrades to "no vector retrieval" rather than failing connection init
+    (which would take down the whole pool). `CREATE EXTENSION IF NOT EXISTS` is run
+    here — not only in init_db() — because the pool's initial connections are created
+    before init_db() runs, and register_vector requires the type to already exist.
+    """
     await conn.set_type_codec(
         "jsonb",
         encoder=_encode_jsonb,
@@ -51,6 +63,12 @@ async def _init_connection(conn) -> None:
         schema="pg_catalog",
         format="text",
     )
+    try:
+        await conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
+        from pgvector.asyncpg import register_vector
+        await register_vector(conn)
+    except Exception as exc:
+        logger.warning("pgvector_connection_init_failed", error=str(exc))
 
 async def init_pool() -> None:
     global _pool
@@ -176,6 +194,12 @@ async def soft_delete_conversation(conv_id: str, user_id: str) -> bool:
             "WHERE id = $2 AND user_id = $3 AND deleted_at IS NULL",
             _now(), conv_id, user_id,
         )
+        # Hard-delete the conversation's source embeddings — they are a regenerable
+        # cache and would otherwise accumulate forever (former ChromaDB gap).
+        if result == "UPDATE 1":
+            await conn.execute(
+                "DELETE FROM source_embeddings WHERE conversation_id = $1", conv_id
+            )
     return result == "UPDATE 1"
 
 
@@ -551,6 +575,38 @@ async def init_db() -> None:
                 ON sessions(conversation_id, turn_index, user_id)
                 WHERE conversation_id IS NOT NULL;
         """)
+
+    # pgvector source-embeddings store — created in its own statement and wrapped
+    # in try/except so an unavailable pgvector extension degrades to "no vector
+    # retrieval" instead of breaking the entire schema init above.
+    # vector(1536) matches OpenAI text-embedding-3-small. HNSW index needs pgvector
+    # >= 0.5.0 (shipped by RDS Postgres 15.4+/16); swap to IVFFlat on older versions.
+    try:
+        async with get_async_db() as conn:
+            await conn.execute("""
+                CREATE EXTENSION IF NOT EXISTS vector;
+
+                CREATE TABLE IF NOT EXISTS source_embeddings (
+                    conversation_id TEXT NOT NULL,
+                    source_id       TEXT NOT NULL,
+                    url             TEXT,
+                    title           TEXT,
+                    snippet         TEXT,
+                    domain          TEXT,
+                    score           DOUBLE PRECISION DEFAULT 0.5,
+                    embedding       vector(1536),
+                    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+                    PRIMARY KEY (conversation_id, source_id)
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_source_emb_conv
+                    ON source_embeddings(conversation_id);
+                CREATE INDEX IF NOT EXISTS idx_source_emb_vec
+                    ON source_embeddings USING hnsw (embedding vector_cosine_ops);
+            """)
+        logger.info("pgvector_store_initialised")
+    except Exception as exc:
+        logger.warning("pgvector_store_init_failed", error=str(exc))
 
     logger.info("database_initialised", backend="asyncpg")
 

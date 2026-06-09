@@ -223,7 +223,7 @@ export default function ChartViewer({
 
   const sharedAxisProps = { tick: axis, axisLine: false, tickLine: false }
 
-  const annotationDots = annotations.map((a, i) => (
+  const annotationDots = (annotations ?? []).map((a, i) => (
     <ReferenceDot
       key={`ann-${i}`}
       x={a.x} y={a.y}
@@ -251,7 +251,7 @@ export default function ChartViewer({
       }
       <RTooltip {...tt} />
       {showLegend && <Legend wrapperStyle={{ fontSize: TYPOGRAPHY.sizes.caption }} />}
-      {referenceLines.map((rl, i) => (
+      {(referenceLines ?? []).map((rl, i) => (
         <ReferenceLine
           key={`rl-${rl.axis ?? 'y'}-${rl.value ?? i}`}
           x={rl.axis === 'x' ? rl.value : undefined}

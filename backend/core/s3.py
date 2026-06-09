@@ -1,11 +1,11 @@
 """
-S3 + CloudFront helpers for Zenith media storage.
+S3 + CloudFront helpers for Paralyte media storage.
 
-Two buckets:
-  zenith-app-media   — public, served via CloudFront (frames, videos, meta)
-  zenith-app-uploads — private, accessed via presigned URLs (user uploads)
+Two buckets (names come from config: S3_MEDIA_BUCKET / S3_UPLOADS_BUCKET):
+  media bucket   — public, served via CloudFront (frames, videos, meta)
+  uploads bucket — private, accessed via presigned URLs (user uploads)
 
-Key structure (zenith-app-media):
+Key structure (media bucket):
   frames/{session_id}/{index:03d}.png    — video frame PNGs
   video/{session_id}/final.mp4           — assembled session video
   video/{session_id}/beat_{n}.mp4        — individual beat clips
@@ -90,7 +90,7 @@ def cdn_url(key: str) -> str:
 # ── Upload helpers ────────────────────────────────────────────────────────────
 
 def upload_file(local_path: str | Path, key: str, content_type: str = "application/octet-stream") -> str:
-    """Upload a local file to zenith-app-media. Returns the CloudFront URL."""
+    """Upload a local file to the media bucket. Returns the CloudFront URL."""
     _get_client().upload_file(
         str(local_path),
         S3_MEDIA_BUCKET,
@@ -103,7 +103,7 @@ def upload_file(local_path: str | Path, key: str, content_type: str = "applicati
 
 
 def upload_bytes(data: bytes, key: str, content_type: str = "application/octet-stream") -> str:
-    """Upload raw bytes to zenith-app-media. Returns the CloudFront URL."""
+    """Upload raw bytes to the media bucket. Returns the CloudFront URL."""
     _get_client().put_object(
         Body=data,
         Bucket=S3_MEDIA_BUCKET,
@@ -114,7 +114,7 @@ def upload_bytes(data: bytes, key: str, content_type: str = "application/octet-s
 
 
 def upload_user_file(local_path: str | Path, key: str, content_type: str = "application/octet-stream") -> str:
-    """Upload a user-uploaded file to the private zenith-app-uploads bucket."""
+    """Upload a user-uploaded file to the private uploads bucket."""
     _get_client().upload_file(
         str(local_path),
         S3_UPLOADS_BUCKET,
@@ -170,7 +170,7 @@ def upload_merged_video(local_path: str | Path, conversation_id: str) -> str:
 # ── Download helpers ──────────────────────────────────────────────────────────
 
 def download_text(key: str) -> Optional[str]:
-    """Download a text object from zenith-app-media. Returns None if not found."""
+    """Download a text object from the media bucket. Returns None if not found."""
     try:
         resp = _get_client().get_object(Bucket=S3_MEDIA_BUCKET, Key=key)
         return resp["Body"].read().decode()
@@ -179,7 +179,7 @@ def download_text(key: str) -> Optional[str]:
 
 
 def download_json(key: str) -> Optional[Any]:
-    """Download and parse a JSON object from zenith-app-media. Returns None if not found."""
+    """Download and parse a JSON object from the media bucket. Returns None if not found."""
     text = download_text(key)
     if text is None:
         return None

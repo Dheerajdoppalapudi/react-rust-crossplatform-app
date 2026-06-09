@@ -22,7 +22,6 @@ from core.config import (
     SVG_INTENT_TYPES,
     INTERACTIVE_CONTEXT_TURNS,
     BEAT_PIPELINE_ENABLED,
-    BEAT_TTS_BACKEND,
 )
 from core.s3 import (
     upload_frame as _s3_upload_frame,
@@ -44,7 +43,7 @@ from services.frame_generation.planner import (
 )
 from services.frame_generation.manim.manim_generator import generate_manim_frames, manim_available
 from services.frame_generation.manim import beat_planner
-from services.frame_generation.manim.beat_generator import BeatGenerator, assemble_beats, add_audio_to_beats
+from services.frame_generation.manim.beat_generator import BeatGenerator, assemble_beats
 from services.frame_generation.svg.svg_generator import generate_svg_frames, svg_available
 from services.frame_generation.slide_generator import generate_slide, generate_summary_slide
 
@@ -437,10 +436,8 @@ async def _run_beat_pipeline(
     yield {"type": "stage", "stage": "assembling", "label": "Assembling video…"}
     t_assemble = time.time()
 
-    # Mix TTS narration into each beat MP4 concurrently before assembly
-    use_openai_tts = BEAT_TTS_BACKEND == "openai"
-    mp4s = await add_audio_to_beats(successful, output_dir, use_openai=use_openai_tts)
-
+    # Beats already carry synced narration audio (manim-voiceover) — just concat them.
+    mp4s = [r.mp4_path for r in successful if r.mp4_path]
     assembled = await assemble_beats(mp4s, os.path.join(output_dir, "session_final.mp4"))
 
     _local_assembled = assembled

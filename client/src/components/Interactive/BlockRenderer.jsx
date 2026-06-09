@@ -81,11 +81,18 @@ function BlockRenderer({ turnId, title, learningObjective, blocks = [], isLoadin
 
       {blocks.map(block => {
         const inner = block.type === 'text' ? (
-          <MarkdownText content={block.content} />
+          <ErrorBoundary level="component" fallback={null}>
+            <MarkdownText content={block.content} />
+          </ErrorBoundary>
         ) : (() => {
           const Component = resolveEntity(block.entity_type)
           const meta      = getBlockMeta(block.entity_type)
-          const copyText  = meta.getCopyText ? meta.getCopyText(block.props ?? {}) : null
+          // getCopyText runs outside the per-block ErrorBoundary — guard it so a crash
+          // in one block's copy logic can't wipe out the entire turn.
+          const copyText  = (() => {
+            if (!meta.getCopyText) return null
+            try { return meta.getCopyText(block.props ?? {}) } catch { return null }
+          })()
           const noExpand  = meta.noExpand ?? false
           const label     = (block.entity_type ?? '').replace(/_/g, ' ')
           return (

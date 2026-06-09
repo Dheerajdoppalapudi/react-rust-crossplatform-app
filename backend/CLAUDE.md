@@ -1,4 +1,4 @@
-# Zenith Backend — CLAUDE.md
+# Paralyte Backend — CLAUDE.md
 
 > Read this file before touching any backend code. It gives you the full mental model.
 
@@ -6,7 +6,7 @@
 
 ## What this project is
 
-**Zenith** is an AI-powered visual learning studio. A user types a question; the system generates an educational lesson as either:
+**Paralyte** is an AI-powered visual learning studio. A user types a question; the system generates an educational lesson as either:
 - **Interactive mode** — live cited lesson blocks (text, diagrams, charts, code) streamed via SSE
 - **Video mode** — an animated educational video (SVG frames / Manim animations / Mermaid diagrams + narration)
 
@@ -111,14 +111,16 @@ backend/
 │   │   ├── search_provider.py       # Tavily search + extract (TavilyProvider singleton)
 │   │   ├── source_processor.py      # Rank, deduplicate, truncate sources
 │   │   ├── synthesiser.py           # Stream cited markdown answer via Anthropic
-│   │   ├── vector_store.py          # ChromaDB: embed + store + retrieve prior sources
+│   │   ├── vector_store.py          # pgvector: embed + store + retrieve prior sources (async)
 │   │   ├── file_extractor.py        # Extract text from uploaded PDFs/PPTXes
 │   │   └── research_service.py      # source_summary(), source_full() formatters
 │   │
-│   └── video_generation/            # Video assembly pipeline
-│       ├── tts_service.py           # Text → audio (gTTS free / OpenAI TTS paid)
+│   └── video_generation/            # Video assembly pipeline (SVG / manim-frame paths)
+│       ├── tts_service.py           # Text → audio (gTTS / OpenAI) — used by the on-demand
+│       │                            #   frame→video router path (NOT the beat pipeline)
 │       ├── frame_exporter.py        # Normalize frames → 1920×1080 PNG
-│       └── video_assembler.py       # ffmpeg: frames + audio → MP4
+│       └── video_assembler.py       # ffmpeg: frames + audio → MP4 (letterbox, hard cuts,
+│                                    #   max(anim,audio) duration; ffprobe-less duration probe)
 │
 └── tests/
     ├── conftest.py                  # Shared fixtures: tmp_db, mock_llm, mock_tavily
@@ -154,7 +156,7 @@ _search_phase() in generate.py
   ├── emit {type:'stage', stage:'reading'}
   ├── rank_and_deduplicate() → top N sources
   ├── emit {type:'source', source:{title,url,snippet,domain}} for each
-  └── upsert_sources() → ChromaDB (for follow-up retrieval)
+  └── upsert_sources() → pgvector (source_embeddings table, for follow-up retrieval)
 ```
 
 ### Phase 2A — Interactive lesson generation
@@ -181,6 +183,29 @@ run_video_pipeline_from_intent() in generation_service.py
     fallback           → planner.generate_all_frames() → slim JSON
   emit {type:'frame', index, image, caption} for each frame
 ```
+
+### Beat pipeline — narrated Manim (math intent, `BEAT_PIPELINE_ENABLED`)
+
+When `intent_type == "math"` and Manim is available, `run_video_pipeline_from_intent` routes to
+`_run_beat_pipeline` instead of the frame path above:
+
+```
+plan_beats() (planning_beats.md)  → BeatScript: structural + visualization beats, each with narration
+BeatGenerator.generate_beats()    → render every beat in parallel as a manim-voiceover VoiceoverScene
+assemble_beats()                  → ffmpeg concat (-c copy) → session_final.mp4
+```
+
+**Narration is synced at render time — there is NO separate TTS-mix step.** Each beat is a
+`VoiceoverScene`: the codegen ([manim_codegen_prompt.md]) wraps each narration sentence in
+`with self.voiceover(text=...) as tracker:` and paces animations to `tracker.duration`, so the
+rendered beat MP4 already contains synced narration audio. Structural beats use the same approach
+via the `templates/*.py.tpl` files + `template_filler.py`.
+
+- Speech backend is chosen in `voiceover_setup.py` from `BEAT_TTS_BACKEND` (`openai` → OpenAIService
+  tts-1-hd/nova, needs `OPENAI_API_KEY` in the render subprocess env; `gtts` → free fallback).
+- The render subprocess therefore makes a TTS network call — expect longer beat renders; bump
+  `BEAT_RENDER_TIMEOUT_S` if complex beats time out. `manim-voiceover` caches audio per text.
+- Optional: `brew install sox` (or apt) lets manim-voiceover trim silence for tighter pacing.
 
 ### Intent routing constants (in `core/config.py`)
 
@@ -334,6 +359,9 @@ with get_db() as conn:
 | `conversations` | `id`, `title`, `user_id`, `starred`, `deleted_at`, `merged_video_path` |
 | `sessions` | `id`, `prompt`, `conversation_id`, `turn_index`, `user_id`, `status`, `intent_type`, `render_path`, `frame_count`, `output_dir`, `sources_json`, `synthesis_text`, `stages_json`, `research_mode`, `video_path` |
 | `conversation_notes` | `conversation_id`, `user_id`, `content`, `updated_at` |
+| `source_embeddings` | `conversation_id`, `source_id` (PK), `url`, `title`, `snippet`, `domain`, `score`, `embedding vector(1536)` — pgvector store for follow-up source retrieval; rows deleted on conversation soft-delete |
+
+> **pgvector:** `init_db()` runs `CREATE EXTENSION IF NOT EXISTS vector` and creates `source_embeddings` in an isolated block (so a missing extension degrades to "no vector retrieval" instead of breaking schema init). The RDS master user must be allowed to create the extension. `embedding vector(1536)` matches `text-embedding-3-small`; HNSW index needs pgvector ≥ 0.5 (RDS PG 15.4+/16).
 
 ### Indexes
 
@@ -347,6 +375,8 @@ idx_conversations_updated_at ON conversations(updated_at DESC)
 idx_conversations_deleted    ON conversations(deleted_at) WHERE deleted_at IS NOT NULL
 idx_sessions_conv_turn_user  UNIQUE ON sessions(conversation_id, turn_index, user_id)
                               WHERE conversation_id IS NOT NULL
+idx_source_emb_conv          ON source_embeddings(conversation_id)
+idx_source_emb_vec           ON source_embeddings USING hnsw (embedding vector_cosine_ops)
 ```
 
 ### Atomic turn_index insert
@@ -450,7 +480,7 @@ text = download_text(narration_key(session_id))     # returns str or None
 
 ```python
 # Paths
-UPLOAD_DIR, OUTPUTS_DIR, CHROMADB_PATH
+UPLOAD_DIR, OUTPUTS_DIR   # (CHROMADB_PATH retained but unused — vectors live in Postgres/pgvector)
 
 # PostgreSQL
 DATABASE_URL          # full connection string
@@ -504,7 +534,7 @@ TTS_WORDS_PER_SECOND = 2.3
 |---|---|
 | `search_provider.py` | `TavilyProvider.search()` + `.extract()` — all web access flows through here. Module-level singleton `tavily`. Both methods have `asyncio.wait_for(timeout=20.0)`. |
 | `source_processor.py` | `rank_and_deduplicate()` + `truncate_content()` — filters and trims raw Tavily results |
-| `vector_store.py` | ChromaDB wrapper. `upsert_sources()` + `retrieve_sources()`. Thread-safe init (double-checked lock). Collection name = `f"conv_{conversation_id}"`. |
+| `vector_store.py` | pgvector store. `async upsert_sources()` + `async retrieve_sources()` over the `source_embeddings` table (cosine `<=>`, HNSW index). Rows scoped by `conversation_id`. Embeddings pass as Python lists via the asyncpg vector codec. Degrades to empty results if OpenAI embeddings / the extension are unavailable. **Call with `await` — do NOT wrap in `asyncio.to_thread`.** |
 | `synthesiser.py` | `stream()` — async generator yielding cited markdown tokens. Uses `asyncio.get_running_loop()` (not deprecated `get_event_loop()`). Falls back to blocking call if streaming fails. |
 | `file_extractor.py` | `extract_urls_from_text()` + `extract_text()` — pulls text from uploaded PDFs and PPTXes |
 | `research_service.py` | `source_summary()` / `source_full()` — formats source dicts for injection into prompts |
@@ -667,9 +697,10 @@ In development: coloured human-readable console.
 
 **Health check:** `GET /api/health`
 ```json
-{"status": "ok|degraded", "checks": {"db": true, "chromadb": true, "llm": true}}
+{"status": "ok|degraded", "checks": {"db": true, "vector": true, "llm": true}}
 ```
-Returns 503 only if `db` is false. chromadb/llm failures → "degraded" but still 200.
+Returns 503 only if `db` is false. `vector` checks the pgvector extension is installed;
+vector/llm failures → "degraded" but still 200.
 
 **Metrics:** `GET /metrics` — Prometheus text format.
 
@@ -684,8 +715,6 @@ Returns 503 only if `db` is false. chromadb/llm failures → "degraded" but stil
 | Base64 frames in SSE | 2–10 MB per generation over SSE | Upload to S3, emit CloudFront URLs instead |
 | Video generation blocking | Long jobs hold SSE connection open | Celery/RQ worker + job polling |
 | `time.sleep` in LLM retry | Holds thread pool threads during backoff | Replace with `asyncio.sleep` in retry loops |
-| Local ChromaDB | Cannot share across instances | Replace with Pinecone or Qdrant |
-| ChromaDB collections never cleaned | Disk fills over time | Delete collection on conversation soft-delete |
 | Per-user rate limits | `/api/generate` rate-limited by IP, not user ID | `key_func=lambda req: req.state.request_user_id` |
 | `turn_count` column missing | `list_conversations` does expensive `COUNT + GROUP BY` | Add `turn_count` column, increment in `insert_session` |
 | Cursor pagination stability | Same-second `updated_at` can skip/duplicate pages | Add `(updated_at, id)` tiebreaker cursor |
@@ -707,7 +736,7 @@ python -m pytest tests/ -v
 | `test_path_security.py` | `../../etc/passwd` blocked; symlinks blocked; valid paths allowed |
 | `test_turn_index.py` | 5 concurrent threads → unique turn_indexes (race condition proof) |
 | `test_auth.py` | JWT expiry, tamper detection, refresh rotation theft detection |
-| `test_vector_store.py` | Thread-safe init, full UUID names, graceful ChromaDB/OpenAI degradation |
+| `test_vector_store.py` | Stable source IDs; graceful no-op/empty when OpenAI embeddings unavailable (pgvector backend) |
 
 Note: `conftest.py` fixtures use SQLite for `tmp_db`. These need updating to use PostgreSQL or a mock when the test suite is next revisited.
 

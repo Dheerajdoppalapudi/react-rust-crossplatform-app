@@ -1,5 +1,5 @@
 """
-Zenith API — application entry point.
+Paralyte API — application entry point.
 
 Responsibilities of this file (and only this file):
   1. Configure logging (must happen before any other import that uses loggers)
@@ -79,7 +79,7 @@ async def lifespan(app: FastAPI):
     # CPython default of min(32, cpu+4) saturates under concurrent generation.
     loop = asyncio.get_running_loop()
     loop.set_default_executor(
-        ThreadPoolExecutor(max_workers=THREAD_POOL_MAX_WORKERS, thread_name_prefix="zenith-worker")
+        ThreadPoolExecutor(max_workers=THREAD_POOL_MAX_WORKERS, thread_name_prefix="paralyte-worker")
     )
     logger.info("thread_pool_configured", max_workers=THREAD_POOL_MAX_WORKERS)
 
@@ -95,7 +95,7 @@ async def lifespan(app: FastAPI):
         logger.error("stale_session_sweep_failed", source="startup", error=str(exc))
 
     sweep_task = asyncio.create_task(_periodic_stale_sweep(STALE_SWEEP_INTERVAL_SECS))
-    logger.info("zenith_api_started")
+    logger.info("paralyte_api_started")
     yield
     sweep_task.cancel()
     try:
@@ -103,12 +103,12 @@ async def lifespan(app: FastAPI):
     except asyncio.CancelledError:
         pass
     await close_pool()
-    logger.info("zenith_api_stopped")
+    logger.info("paralyte_api_stopped")
 
 
 # ── App ───────────────────────────────────────────────────────────────────────
 
-app = FastAPI(title="Zenith API", lifespan=lifespan)
+app = FastAPI(title="Paralyte API", lifespan=lifespan)
 
 # Attach limiter to app state so slowapi middleware can read it.
 app.state.limiter = limiter
@@ -147,13 +147,23 @@ async def security_headers_middleware(request: Request, call_next):
     response.headers["X-Frame-Options"]         = "DENY"
     response.headers["Referrer-Policy"]         = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"]      = "camera=(), microphone=(), geolocation=()"
-    response.headers["Content-Security-Policy"] = (
-        # Pure API backend — serves JSON/SSE only, no HTML pages.
-        # script-src and style-src are omitted; default-src 'none' covers them.
-        "default-src 'none'; "
-        "connect-src 'self'; "
-        "frame-ancestors 'none'"
-    )
+    if request.url.path.startswith(("/docs", "/redoc", "/openapi.json")):
+        # Swagger/ReDoc assets load from cdn.jsdelivr.net (FastAPI default).
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+            "img-src 'self' data: https://cdn.jsdelivr.net; "
+            "connect-src 'self'; "
+            "frame-ancestors 'none'"
+        )
+    else:
+        response.headers["Content-Security-Policy"] = (
+            # Pure API backend — serves JSON/SSE only, no HTML pages.
+            "default-src 'none'; "
+            "connect-src 'self'; "
+            "frame-ancestors 'none'"
+        )
     if COOKIE_SECURE:
         response.headers["Strict-Transport-Security"] = (
             "max-age=63072000; includeSubDomains; preload"
@@ -228,7 +238,7 @@ async def health_check():
     Liveness + readiness probe. Checks DB, ChromaDB, and LLM key presence.
     Returns 503 if the database is unreachable (hard dependency).
     """
-    checks: dict[str, bool] = {"db": False, "chromadb": False, "llm": False}
+    checks: dict[str, bool] = {"db": False, "vector": False, "llm": False}
 
     try:
         async with get_async_db() as conn:
@@ -238,11 +248,10 @@ async def health_check():
         logger.error("health_check_db_failed", exc_info=True)
 
     try:
-        from services.research.vector_store import _get_client
-        client = _get_client()
-        if client is not None:
-            client.heartbeat()
-            checks["chromadb"] = True
+        async with get_async_db() as conn:
+            checks["vector"] = bool(
+                await conn.fetchval("SELECT 1 FROM pg_extension WHERE extname = 'vector'")
+            )
     except Exception:
         pass
 

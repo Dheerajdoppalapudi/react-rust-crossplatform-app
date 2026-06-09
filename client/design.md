@@ -1,12 +1,12 @@
-# Zenith Design System
+# Paralyte Design System
 
-A production-grade design token system for the Zenith AI-powered visual learning studio. All values live in `src/theme/tokens.js` — change a token there and it propagates everywhere.
+A production-grade design token system for the Paralyte AI-powered visual learning studio. All values live in `src/theme/tokens.js` — change a token there and it propagates everywhere.
 
 ---
 
 ## Design Philosophy
 
-Zenith is a technical tool that should feel clean, precise, and trustworthy. The aesthetic is modern neutral SaaS — crisp white/black surfaces, warm neutral text, and a Pine-green brand color used sparingly. Inspired by Perplexity and Linear.
+Paralyte is a technical tool that should feel clean, precise, and trustworthy. The aesthetic is modern neutral SaaS — crisp white/black surfaces, warm neutral text, and a Pine-green brand color used sparingly. Inspired by Perplexity and Linear.
 
 **Principles:**
 - **Neutral-first** — buttons, active states, and interactive fills use opacity-based white/black. Nothing feels "colored" unless it's intentional.
@@ -305,7 +305,7 @@ Buttons are **neutral by default** — Perplexity/Linear style:
 
 ### Loading / Spinners
 
-- The Zenith logo spinner: `color: 'text.secondary'` — **not brand color**
+- The Paralyte logo spinner: `color: 'text.secondary'` — **not brand color**
 - `CircularProgress`: defaults to `primary` (now neutral) — fine as is
 - Stage dots / progress bars: neutral fills
 
